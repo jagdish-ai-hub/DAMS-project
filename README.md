@@ -49,8 +49,9 @@ for everything; this file is just how to run it.
 - A cashier can only touch job cards in **their own home branch** (even with multi-branch
   search on) — cross-branch Add Payment is refused, not guessed.
 - `POST /api/v1/receipts/{id}/attachments` (+ per-line) — PDF/image receipts via
-  `StorageService` (local filesystem in dev, signed URLs from `/api/v1/attachments/raw`;
-  R2 impl is stubbed behind `dams.storage.provider=r2`). Frozen once the receipt settles.
+  `StorageService`: local filesystem in dev (signed URLs from `/api/v1/attachments/raw`),
+  or Cloudflare R2 with `dams.storage.provider=r2` (`R2_ENDPOINT` / `R2_ACCESS_KEY_ID` /
+  `R2_SECRET_ACCESS_KEY` / `R2_BUCKET`). Frozen once the receipt settles.
 - `GET /api/v1/my-entries` — the cashier's own entries, today + recent, queried highlighted.
 - Frontend: New Receipt page, Add Payment modal, View Receipts modal, My Entries page;
   cashier home wired end-to-end.

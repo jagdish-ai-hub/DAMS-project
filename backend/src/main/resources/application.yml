@@ -43,6 +43,12 @@ dams:
     provider: ${DAMS_STORAGE_PROVIDER:local}
     local:
       dir: ${DAMS_STORAGE_LOCAL_DIR:${java.io.tmpdir}/dams-storage}
+    r2:
+      # Only read when provider=r2. endpoint is https://<accountid>.r2.cloudflarestorage.com
+      endpoint: ${R2_ENDPOINT:}
+      access-key-id: ${R2_ACCESS_KEY_ID:}
+      secret-access-key: ${R2_SECRET_ACCESS_KEY:}
+      bucket: ${R2_BUCKET:}
 
 logging:
   pattern:

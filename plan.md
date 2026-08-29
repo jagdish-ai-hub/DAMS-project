@@ -35,11 +35,13 @@
     `ClaimClose` exists (incl. shortfall). At pending 0 (invoice present, no claim) the open
     doc auto-settles with a SYSTEM `SETTLED` audit event and its attachments freeze. The
     claim-close-forces-settled path stays Stage 8; `JobCardService.hasClaimClose` is now real.
-  - **Attachments.** `StorageService` interface + `LocalFilesystemStorageService` (default;
-    real disk store, HMAC-signed 10-min URL served from `/api/v1/attachments/raw`, permit-all
-    — the signature is the auth). **R2 impl not built** — `dams.storage.provider=r2` is wired
-    but `R2StorageService` + the S3 SDK dependency are deferred (the offline build here can't
-    fetch the jar); the interface seam is in place so it's one new class.
+  - **Attachments.** `StorageService` interface + two backends, chosen by
+    `dams.storage.provider`: `local` (default) — `LocalFilesystemStorageService`, real disk
+    store, HMAC-signed 10-min URL served from `/api/v1/attachments/raw` (permit-all — the
+    signature is the auth); `r2` — `R2StorageService` over the AWS S3 v2 SDK
+    (url-connection-client, Netty/Apache excluded), presigned GET URLs, config via
+    `R2_ENDPOINT` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET`. R2/S3 types
+    stay inside that one class.
   - **My Entries** — `GET /api/v1/my-entries`, the caller's own receive docs newest-first with
     `today` / `queried` flags. Seed includes a QUERIED doc (Suresh, R-013) so fix-and-resubmit
     is demoable without Stage 7.
@@ -551,7 +553,7 @@ Each stage adds its own indexes for the query paths it introduces (search, my-en
 - `POST /receipts` refuses (409) when the target job card has a `ClaimClose`.
 - **Cross-branch write block** — a cashier can only create/modify receive documents for job cards in their own home branch (409, names both branches); unaffected by `multi_branch_cashier_access`. `ReceivePaymentGuard` (+ `canRecordPayment` UI hint). `ReceivePaymentGuardTest`.
 - Branch is always the job card's branch — `CreateReceiptRequest` has no branch field.
-- `StorageService` interface + `LocalFilesystemStorageService` (default; HMAC-signed URL via `/api/v1/attachments/raw`). **R2 impl deferred** (offline build can't fetch the S3 SDK) — `dams.storage.provider=r2` wired, one new class away. `attachment` rows, signed-URL retrieval, freeze-on-settle. `AttachmentServiceTest`.
+- `StorageService` — `LocalFilesystemStorageService` (default; HMAC-signed URL via `/api/v1/attachments/raw`) and `R2StorageService` (`dams.storage.provider=r2`; AWS S3 v2 SDK, presigned URLs). `attachment` rows, signed-URL retrieval, freeze-on-settle. `AttachmentServiceTest`.
 - `created_by` + `last_modified_by` on every mutation (feeds maker-checker in Stage 7).
 - `GET /api/v1/my-entries` — caller's own docs newest-first, `today` / `queried` flags. Seed has a QUERIED doc (Suresh, R-013) for the fix-and-resubmit demo.
 - `OrganizationPurgeService` extended (attachments / settlement lines / claim closes / receive docs, FK-safe). `GlobalExceptionHandler`: `DataIntegrityViolation` → 409, upload-too-large → 400.

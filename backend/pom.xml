@@ -22,11 +22,24 @@
         <jjwt.version>0.13.0</jjwt.version>
         <!-- Override Spring Boot's managed Lombok so annotation processing works on JDK 21-24 -->
         <lombok.version>1.18.46</lombok.version>
+        <aws.sdk.version>2.29.0</aws.sdk.version>
         <!-- Force UTF-8 for source + resources: the bundled Maven here otherwise defaults to
              the Windows platform charset and mangles non-ASCII in message strings. -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.encoding>UTF-8</maven.compiler.encoding>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws.sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <!-- Spring Boot -->
@@ -120,6 +133,29 @@
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>test</scope>
+        </dependency>
+
+        <!-- Cloudflare R2 (S3-compatible) — only wired when dams.storage.provider=r2.
+             The default local-filesystem backend needs none of this. The default Netty +
+             Apache HTTP clients are excluded in favour of the tiny JDK-based
+             url-connection-client (R2 usage here is a handful of sync PUT/GET/DELETE). -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>netty-nio-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>apache-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
         </dependency>
 
         <!-- Integration tests run the real Postgres migrations in a throwaway container -->
