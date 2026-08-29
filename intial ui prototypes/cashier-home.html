@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DAMS — Cashier Home</title>
+<style>
+:root{
+  --navy:#1F3864; --navy2:#2E5395; --navy3:#EAF0FB;
+  --bg:#F1F4F9; --surface:#FFFFFF; --line:#E3E7EE;
+  --ink:#1A2233; --muted:#66707F; --faint:#98A1AF;
+  --green:#1E7F4F; --green-bg:#E4F3EB;
+  --amber:#B45309; --amber-bg:#FCF0DE;
+  --red:#B91C1C; --red-bg:#FBE7E7;
+  --blue:#2563EB; --blue-bg:#E7EEFC;
+  --gray:#5B6470; --gray-bg:#EEF0F3;
+  --radius:10px;
+  --shadow:0 1px 2px rgba(16,24,40,.04),0 2px 8px rgba(16,24,40,.05);
+  --font:'Segoe UI',system-ui,-apple-system,'Helvetica Neue',Arial,sans-serif;
+  --mono:'Consolas','SF Mono',Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;font-size:14px}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:.86rem;color:var(--ink)}
+
+.topbar{background:var(--navy);color:#fff;padding:11px 24px;display:flex;align-items:center;gap:14px}
+.topbar .mark{width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.76rem;cursor:pointer}
+.topbar h1{font-size:.98rem;font-weight:700;cursor:pointer}
+.topbar .sub{font-size:.72rem;opacity:.7}
+.topbar .spacer{flex:1}
+.topbar .crumb{font-size:.78rem;opacity:.85}
+.topbar .crumb a{color:#fff;text-decoration:underline;cursor:pointer;opacity:.9}
+.topbar .who{font-size:.78rem;text-align:right;line-height:1.3}
+.topbar .who b{font-weight:600}
+.topbar .who span{opacity:.7;display:block;font-size:.7rem}
+
+.page{display:none}
+.page.on{display:block}
+
+/* ---- HOME ---- */
+.homewrap{max-width:920px;margin:0 auto;padding:48px 24px 40px}
+.searchhero{text-align:center;margin-bottom:8px}
+.searchhero h2{font-size:1.5rem;color:var(--navy);margin-bottom:6px}
+.searchhero .sub{font-size:.9rem;color:var(--muted)}
+.searchbox{position:relative;max-width:640px;margin:22px auto 0}
+.searchbox input{width:100%;border:2px solid var(--line);border-radius:12px;padding:15px 18px 15px 46px;font-size:1rem;background:var(--surface);box-shadow:var(--shadow)}
+.searchbox input:focus{outline:none;border-color:var(--navy2);box-shadow:0 0 0 4px var(--navy3)}
+.searchbox .ic{position:absolute;left:16px;top:50%;transform:translateY(-50%);color:var(--faint);font-size:1.1rem}
+.searchhint{text-align:center;font-size:.76rem;color:var(--faint);margin-top:8px}
+
+.results{max-width:640px;margin:14px auto 0;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadowlg,var(--shadow));overflow:hidden}
+.resultrow{display:flex;align-items:center;gap:12px;padding:13px 18px;border-bottom:1px solid var(--line);text-align:left;width:100%}
+.resultrow:last-child{border-bottom:0}
+.resultrow:hover{background:#FAFBFD}
+.resultrow .av{width:36px;height:36px;border-radius:9px;background:var(--navy3);color:var(--navy);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8rem;flex-shrink:0}
+.resultrow .tx{flex:1;min-width:0}
+.resultrow .nm{font-size:.92rem;font-weight:700}
+.resultrow .meta{font-size:.78rem;color:var(--muted);margin-top:1px}
+.resultrow .match{font-size:.68rem;background:var(--amber-bg);color:var(--amber);border-radius:5px;padding:1px 6px;font-weight:700;margin-left:6px}
+.resultrow .stat{text-align:right;font-size:.78rem;flex-shrink:0}
+.resultrow .stat .n{font-weight:700;font-variant-numeric:tabular-nums}
+.resultrow .stat .l{color:var(--faint);font-size:.68rem}
+.noresults{padding:24px;text-align:center;color:var(--faint);font-size:.85rem}
+
+.quickrow{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;max-width:780px;margin:34px auto 0}
+.qcard{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;text-align:left;display:flex;align-items:center;gap:13px}
+.qcard:hover{border-color:var(--navy2)}
+.qcard .ic{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.1rem;flex-shrink:0}
+.qcard.rec .ic{background:var(--green-bg);color:var(--green)}
+.qcard.exp .ic{background:var(--red-bg);color:var(--red)}
+.qcard.tod .ic{background:var(--navy3);color:var(--navy)}
+.qcard .tt{font-size:.88rem;font-weight:700}
+.qcard .sb{font-size:.74rem;color:var(--muted);margin-top:1px}
+
+.recentwrap{max-width:780px;margin:36px auto 0}
+.recentwrap h4{font-size:.76rem;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);margin-bottom:10px}
+.recentgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+@media(max-width:700px){.recentgrid{grid-template-columns:1fr}.quickrow{grid-template-columns:1fr}}
+
+/* ---- HISTORY ---- */
+.hwrap{max-width:920px;margin:0 auto;padding:22px 24px 40px}
+.custcard{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px 22px;display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+.custcard .av{width:52px;height:52px;border-radius:13px;background:var(--navy3);color:var(--navy);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.1rem;flex-shrink:0}
+.custcard .nm{font-size:1.15rem;font-weight:700}
+.custcard .meta{font-size:.82rem;color:var(--muted);margin-top:2px}
+.vchip{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:1px 8px;font-family:var(--mono);font-size:.74rem;margin-right:5px}
+.custcard .actions{margin-left:auto;display:flex;gap:8px}
+
+.statrow{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px}
+.stat .l{font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;color:var(--faint)}
+.stat .v{font-size:1.2rem;font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums}
+@media(max-width:700px){.statrow{grid-template-columns:repeat(2,1fr)}}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:16px}
+.card .hd{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.card .hd h3{font-size:.94rem;font-weight:700}
+.card .hd .sub{font-size:.76rem;color:var(--muted)}
+.card .bd{padding:6px 18px 14px}
+
+.jcrow{display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid var(--line)}
+.jcrow:last-child{border-bottom:0}
+.jcrow .jc{font-family:var(--mono);font-size:.78rem;color:var(--navy2);font-weight:700}
+.jcrow .cat{font-size:.85rem;font-weight:600;margin-top:2px}
+.jcrow .dt{font-size:.74rem;color:var(--faint)}
+.jcrow .amts{margin-left:auto;text-align:right;display:flex;gap:20px}
+.jcrow .amts .a{text-align:right}
+.jcrow .amts .a .l{font-size:.68rem;color:var(--faint);text-transform:uppercase}
+.jcrow .amts .a .v{font-weight:700;font-variant-numeric:tabular-nums;font-size:.86rem}
+.badge{display:inline-block;font-size:.68rem;font-weight:700;padding:2px 9px;border-radius:999px}
+.b-SUBMITTED{background:var(--blue-bg);color:var(--blue)}
+.b-VERIFIED{background:#E0F1F6;color:#0E7490}
+.b-APPROVED{background:var(--green-bg);color:var(--green)}
+.b-QUERIED{background:var(--amber-bg);color:var(--amber)}
+.b-CLOSED{background:#EFE7FB;color:#6B3FA0}
+
+.timeline{display:flex;flex-direction:column;gap:0}
+.trow{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px dashed var(--line);font-size:.83rem}
+.trow:last-child{border-bottom:0}
+.trow .dt{width:70px;color:var(--faint);font-size:.76rem;flex-shrink:0}
+.trow .desc{flex:1;color:var(--muted)}
+.trow .amt{font-weight:700;font-variant-numeric:tabular-nums}
+
+.btn{border:1.5px solid var(--line);background:var(--surface);border-radius:8px;padding:9px 16px;font-size:.85rem;font-weight:700;color:var(--ink)}
+.btn.pri{background:var(--navy);border-color:var(--navy);color:#fff}
+.btn.pri:hover{background:var(--navy2)}
+.btn.sm{padding:6px 11px;font-size:.78rem}
+.btn.ok{color:var(--green);border-color:#BBDCC9}.btn.ok:hover{background:var(--green-bg)}
+
+/* ---- ENTRY FORM (ported from desktop-entry.html) ---- */
+.formwrap{max-width:900px;margin:0 auto;padding:22px 24px 40px}
+.prefillnote{background:var(--navy3);border:1px solid #C9D8F2;color:var(--navy);border-radius:9px;padding:10px 14px;font-size:.82rem;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.hdrgrid{display:grid;grid-template-columns:1fr 1fr;gap:0 32px}
+.hstack{display:flex;flex-direction:column;gap:0}
+.hrow{display:grid;grid-template-columns:150px 1fr;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);gap:10px}
+.hrow:last-child{border-bottom:0}
+.hrow label{font-size:.78rem;font-weight:600;color:var(--muted)}
+.hrow label .req{color:var(--red)}
+.hrow input,.hrow select{border:1.5px solid var(--line);border-radius:7px;padding:7px 9px;width:100%;background:var(--surface)}
+.hrow input:focus,.hrow select:focus{outline:none;border-color:var(--navy2);box-shadow:0 0 0 3px var(--navy3)}
+.hrow input[readonly]{background:var(--bg);color:var(--muted);font-family:var(--mono);font-size:.8rem}
+.hrow .computed{font-weight:700;font-variant-numeric:tabular-nums;font-size:.92rem}
+.hrow .computed.zero{color:var(--faint);font-weight:400;font-style:italic;font-size:.82rem}
+.toggle2{display:flex;gap:0;border:1.5px solid var(--line);border-radius:7px;overflow:hidden;width:fit-content}
+.toggle2 button{border:0;background:var(--surface);padding:6px 14px;font-size:.8rem;font-weight:600;color:var(--muted)}
+.toggle2 button.on{background:var(--navy2);color:#fff}
+.badge-wf{display:inline-block;font-size:.68rem;font-weight:700;padding:2px 9px;border-radius:999px;text-transform:uppercase;letter-spacing:.03em}
+.wf-DRAFT{background:var(--gray-bg);color:var(--gray)}
+.wf-SUBMITTED{background:var(--blue-bg);color:var(--blue)}
+
+.linehd{display:flex;align-items:center;gap:10px;margin:22px 0 10px}
+.linehd h4{font-size:.84rem;font-weight:700;color:var(--navy)}
+.linehd .sub{font-size:.74rem;color:var(--muted)}
+table.linetab{width:100%;border-collapse:collapse}
+table.linetab th{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--faint);text-align:left;padding:7px 6px;border-bottom:1.5px solid var(--line);background:#FAFBFC}
+table.linetab td{padding:6px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.linetab td input,table.linetab td select{border:1.5px solid var(--line);border-radius:6px;padding:6px 7px;width:100%;font-size:.82rem}
+table.linetab td input:disabled{background:var(--bg);color:var(--faint)}
+.addrowbtn{border:1.5px dashed var(--line);background:var(--surface);border-radius:7px;padding:8px 14px;font-size:.8rem;font-weight:600;color:var(--navy2);margin-top:8px}
+.addrowbtn:hover{border-color:var(--navy2);background:var(--navy3)}
+.rmrow{border:0;background:none;color:var(--red);font-weight:700;font-size:.95rem;padding:4px}
+.linefoot{display:flex;justify-content:flex-end;gap:28px;padding:12px 6px 4px;border-top:2px solid var(--line);margin-top:6px}
+.linefoot .lf{text-align:right}
+.linefoot .lf .k{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+.linefoot .lf .v{font-size:1.05rem;font-weight:700;font-variant-numeric:tabular-nums}
+.linefoot .lf .v.warn{color:var(--amber)}
+.limitnote{font-size:.72rem;color:var(--amber);margin-top:3px}
+.formfoot{display:flex;justify-content:flex-end;gap:10px;padding-top:16px;margin-top:16px;border-top:1px solid var(--line)}
+
+.toast{position:fixed;bottom:20px;right:20px;background:var(--ink);color:#fff;border-radius:9px;padding:10px 16px;font-size:.82rem;box-shadow:0 6px 20px rgba(0,0,0,.25);opacity:0;transform:translateY(8px);transition:.25s;z-index:99}
+.toast.on{opacity:1;transform:none}
+
+/* ---- MODAL ---- */
+.modal-bg{position:fixed;inset:0;background:rgba(16,24,40,.5);display:none;align-items:center;justify-content:center;z-index:90;padding:20px}
+.modal-bg.on{display:flex}
+.modal{background:var(--surface);width:100%;max-width:460px;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:90vh;overflow-y:auto}
+.modal-hd{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.modal-hd h3{font-size:1.02rem}
+.modal-hd .sub{font-size:.78rem;color:var(--muted)}
+.modal-close{margin-left:auto;width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--surface);font-size:1rem;color:var(--muted)}
+.modal-bd{padding:16px 20px 20px}
+.mfield{display:flex;flex-direction:column;gap:5px;margin-bottom:13px}
+.mfield label{font-size:.78rem;font-weight:600;color:var(--muted)}
+.mfield label .req{color:var(--red)}
+.mfield input,.mfield select{border:1.5px solid var(--line);border-radius:8px;padding:9px 11px;font-size:.86rem}
+.mfield input:focus,.mfield select:focus{outline:none;border-color:var(--navy2);box-shadow:0 0 0 3px var(--navy3)}
+.balpill{background:var(--amber-bg);color:var(--amber);border-radius:8px;padding:9px 12px;font-size:.82rem;margin-bottom:14px;font-weight:600}
+.filebtn{border:1.5px dashed var(--line);border-radius:8px;padding:9px 12px;font-size:.82rem;color:var(--navy2);font-weight:600;display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--surface)}
+.filebtn:hover{border-color:var(--navy2);background:var(--navy3)}
+.filebtn input{display:none}
+.filename{font-size:.78rem;color:var(--muted);margin-top:5px}
+.mfoot{display:flex;justify-content:flex-end;gap:9px;padding-top:12px;margin-top:4px;border-top:1px solid var(--line)}
+.lineid{font-family:var(--mono);font-size:.68rem;color:var(--faint)}
+.viewrcbtn{border:0;background:none;color:var(--navy2);font-size:.72rem;font-weight:700}
+.viewrcbtn:hover{text-decoration:underline}
+.rclist{display:flex;flex-direction:column;gap:8px}
+.rcitem{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:.84rem}
+.rcitem .ic{width:28px;height:28px;border-radius:7px;background:var(--red-bg);color:var(--red);display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;flex-shrink:0}
+#fatalBox{display:none;background:#FBE7E7;border:1px solid #EBC2C2;color:#B91C1C;padding:14px 16px;margin:14px 24px;border-radius:10px;font-family:monospace;font-size:.8rem;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div id="fatalBox"></div>
+<div class="topbar">
+  <div class="mark" onclick="goHome()">DA</div>
+  <div><h1 onclick="goHome()">DAMS — Rayagada</h1><div class="sub">Cashier Home</div></div>
+  <div class="crumb" id="crumb"></div>
+  <div class="spacer"></div>
+  <div class="who"><b>Bikram Nayak</b><span>Cashier · 26 July 2026</span></div>
+</div>
+
+<!-- ============ HOME ============ -->
+<div class="page on" id="pageHome">
+  <div class="homewrap">
+    <div class="searchhero">
+      <h2>Find a customer</h2>
+      <div class="sub">Search by name, vehicle number, job card, or invoice — anything works</div>
+    </div>
+    <div class="searchbox">
+      <span class="ic">⌕</span>
+      <input id="searchInput" placeholder="e.g. Suresh Mohapatra, OD05CA4177, 4009941587…" oninput="doSearch(this.value)" autocomplete="off">
+    </div>
+    <div class="searchhint" id="searchHint">Start typing at least 2 characters</div>
+    <div class="results" id="resultsBox" style="display:none"></div>
+
+    <div class="quickrow" id="quickRow"></div>
+    <div class="recentwrap" id="recentWrap"></div>
+  </div>
+</div>
+
+<!-- ============ HISTORY ============ -->
+<div class="page" id="pageHistory">
+  <div class="hwrap" id="historyBody"></div>
+</div>
+
+<!-- ============ NEW RECEIPT ============ -->
+<div class="page" id="pageReceipt">
+  <div class="formwrap" id="receiptFormArea"></div>
+</div>
+
+<!-- ============ NEW EXPENSE ============ -->
+<div class="page" id="pageExpense">
+  <div class="formwrap" id="expenseFormArea"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="modal-bg" id="modalBg"><div class="modal" id="modalBox"></div></div>
+
+<script>
+/* ================= MASTERS (from desktop-entry.html) ================= */
+const RCATS=['Workshop','Breakdown','Advance','Spare / Counter','AdBlue Bucket','AdBlue Barrel','AMC','Warranty','Goodwill','B2B Credit','Scrap / Used Lubes / Other'];
+const RSTATUS=['Hold','AMC','CG','WIP','Warranty','Credit','Close'];
+const RMODES=[{k:'Cash',bank:false,ref:false},{k:'QR / UPI',bank:false,ref:true},{k:'Bank',bank:true,ref:true},
+ {k:'Card',bank:false,ref:false},{k:'Adv-QR',bank:false,ref:true},{k:'Adv-Cash',bank:false,ref:false},{k:'Credit (Due)',bank:false,ref:false}];
+const EMODES=['Cash','QR / UPI','Bank'];
+const ECAT_TOP=['Service','Sales','Showroom','Finance'];
+const ESUB={
+ Service:[{n:'Food (BD)',lim:500},{n:'Spare Transport',lim:1000},{n:'Taxi (JC)',lim:2000},{n:'Fuel (JC)',lim:1000},{n:'Local Purchase (JC)',lim:2000},{n:'Courier Charges',lim:500}],
+ Showroom:[{n:'Stationary',lim:1500},{n:'Misc. Office',lim:2000},{n:'Site Repair',lim:5000},{n:'Daily Wages',lim:5000}],
+ Sales:[{n:'Sales Promotion',lim:5000},{n:'RTO Expenses',lim:3000},{n:'Misc. Sales',lim:2000}],
+ Finance:[{n:'Cash Deposit',lim:null},{n:'Cash Out',lim:null}]
+};
+const ESTATUS=['Open','In Progress','Awaiting Receipt','Received Receipt','Closed','Transfer to Claim'];
+
+/* ================= CUSTOMER DIRECTORY (matches earlier demos exactly) ================= */
+const CUSTOMERS=[
+ {id:1,name:'Suresh Mohapatra',phone:'',vehicles:['OD18J4563'],jobCards:[
+   {jc:'4009690979',receiveId:'OOR-JUL26-R-013',cat:'Workshop',date:'2026-07-16',invNo:'7731122600401',invAmt:24500,status:'QUERIED',
+    lines:[{lineId:'OOR-JUL26-R-013-L1',date:'2026-07-16',mode:'Cash',amt:24000,receipt:null}],docReceipt:null}
+ ]},
+ {id:2,name:'P Simanchala Dora',phone:'',vehicles:['OD07AH6251'],jobCards:[
+   {jc:'4009550148',receiveId:'OOR-JUL26-R-012',cat:'Advance',date:'2026-07-15',invNo:'',invAmt:0,status:'APPROVED',
+    lines:[{lineId:'OOR-JUL26-R-012-L1',date:'2026-07-15',mode:'Adv-QR',amt:9000,receipt:null},
+           {lineId:'OOR-JUL26-R-012-L2',date:'2026-07-17',mode:'Adv-QR',amt:10000,receipt:null}],docReceipt:null}
+ ]},
+ {id:3,name:'Naveen Khandelwal',phone:'',vehicles:['OD02CE1071'],jobCards:[
+   {jc:'4009870505',receiveId:'OOR-JUL26-R-016',cat:'Workshop',date:'2026-07-17',invNo:'7731122600412',invAmt:8600,status:'SUBMITTED',
+    lines:[{lineId:'OOR-JUL26-R-016-L1',date:'2026-07-17',mode:'QR / UPI',amt:8600,receipt:null}],docReceipt:null}
+ ]},
+ {id:4,name:'Satya Prakash Behera',phone:'',vehicles:['OD05CG0371'],jobCards:[
+   {jc:'4009873848',receiveId:'OOR-JUL26-R-014',cat:'Workshop',date:'2026-07-16',invNo:'7731122600409',invAmt:4000,status:'VERIFIED',
+    lines:[{lineId:'OOR-JUL26-R-014-L1',date:'2026-07-16',mode:'QR / UPI',amt:4000,receipt:null}],docReceipt:null}
+ ]},
+ {id:5,name:'Sumati Sahoo',phone:'',vehicles:['OD05CA4177'],jobCards:[
+   {jc:'4009941587',receiveId:'OOR-JUL26-R-011',cat:'Workshop',date:'2026-07-14',invNo:'7731122600388',invAmt:15431,status:'APPROVED',
+    lines:[{lineId:'OOR-JUL26-R-011-L1',date:'2026-07-14',mode:'Adv-QR',amt:12298,receipt:null}],docReceipt:null}
+ ]},
+ {id:6,name:'Kalaivani Logistics Pvt Ltd',phone:'',vehicles:['TN04BC1778'],jobCards:[
+   {jc:'4009877403',receiveId:'OOB-JUL26-R-022',cat:'AMC',date:'2026-07-24',invNo:'AMC-2026-118',invAmt:23101,status:'CLOSED',
+    lines:[{lineId:'OOB-JUL26-R-022-L1',date:'2026-07-24',mode:'Bank',amt:22875,receipt:null}],docReceipt:null}
+ ]},
+ {id:7,name:'Aravind Traders',phone:'',vehicles:['AP39UM4519'],jobCards:[
+   {jc:'4009895845',receiveId:'OOJ-JUL26-R-018',cat:'B2B Credit',date:'2026-07-17',invNo:'7731162600071',invAmt:44530,status:'VERIFIED',
+    lines:[],docReceipt:null}
+ ]},
+ {id:8,name:'Maruti Bricks',phone:'',vehicles:[],jobCards:[
+   {jc:'',receiveId:'OOJ-JUL26-R-017',cat:'Spare / Counter',date:'2026-07-16',invNo:'7731162600070',invAmt:5727,status:'APPROVED',
+    lines:[{lineId:'OOJ-JUL26-R-017-L1',date:'2026-07-16',mode:'QR / UPI',amt:5727,receipt:null}],docReceipt:null}
+ ]}
+];
+let RECENT_IDS=[5,1,6]; // recently looked-up customers, most recent first
+
+let seq={R:22,E:16};
+function el(id){return document.getElementById(id);}
+function inr(n){return '₹'+Math.round(n||0).toLocaleString('en-IN');}
+function toast(m){const t=el('toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),2400);}
+function todayStr(){return '2026-07-26';}
+function initials(name){return name.split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase();}
+function custReceived(jc){return jc.lines.reduce((a,l)=>a+l.amt,0);}
+function custBalance(jc){return jc.invAmt ? Math.max(0, jc.invAmt-custReceived(jc)) : 0;}
+
+/* ================= MODAL HELPERS ================= */
+function modal(html){ el('modalBox').innerHTML=html; el('modalBg').classList.add('on'); }
+function closeModal(){ el('modalBg').classList.remove('on'); }
+document.addEventListener('click',e=>{ if(e.target.id==='modalBg') closeModal(); });
+
+/* ================= LOOKUP HELPERS ================= */
+function findJobCardByReceiveId(rid){
+ for(const c of CUSTOMERS) for(const j of c.jobCards) if(j.receiveId===rid) return {c,j};
+ return null;
+}
+function findLineById(lid){
+ for(const c of CUSTOMERS) for(const j of c.jobCards) for(const l of j.lines) if(l.lineId===lid) return {c,j,l};
+ return null;
+}
+
+/* ================= ADD PAYMENT (adds a line to the EXISTING receipt, never a new one) ================= */
+function openAddPayment(custId,jcCode){
+ const c=CUSTOMERS.find(x=>x.id===custId);
+ const j=c.jobCards.find(x=>x.jc===jcCode);
+ const bal=custBalance(j);
+ modal(`<div class="modal-hd"><div><h3>Add Payment</h3><div class="sub">${c.name} · Job ${j.jc} · <span class="lineid">${j.receiveId}</span></div></div><button class="modal-close" onclick="closeModal()">✕</button></div>
+  <div class="modal-bd">
+   <div class="balpill">Balance due: ${inr(bal)} — this will add line ${j.receiveId}-L${j.lines.length+1} to the existing receipt</div>
+   <div class="mfield"><label>Date</label><input type="date" id="apDate" value="${todayStr()}"></div>
+   <div class="mfield"><label>Settlement Mode <span class="req">*</span></label>
+    <select id="apMode" onchange="syncApFields()">${RMODES.map(m=>`<option ${m.k==='Cash'?'selected':''}>${m.k}</option>`).join('')}</select></div>
+   <div class="mfield"><label>Amount <span class="req">*</span></label><input type="number" id="apAmt" value="${bal}"></div>
+   <div class="mfield" id="apBankField" style="display:none"><label>Bank Name</label><input id="apBank"></div>
+   <div class="mfield" id="apTxnField" style="display:none"><label>Transaction ID</label><input id="apTxn"></div>
+   <div class="mfield"><label>Remark</label><input id="apRemark"></div>
+   <label class="filebtn"><span id="apFileLbl">📎 Attach Receipt (optional)</span><input type="file" accept=".pdf,image/*" onchange="apFileChosen(this)"></label>
+   <div class="mfoot"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn pri" onclick="saveAddPayment(${custId},'${jcCode}')">Add Payment</button></div>
+  </div>`);
+ window._apFile=null;
+ syncApFields();
+}
+function syncApFields(){
+ const mode=RMODES.find(m=>m.k===el('apMode').value);
+ el('apBankField').style.display = mode.bank ? 'flex' : 'none';
+ el('apTxnField').style.display = mode.ref ? 'flex' : 'none';
+}
+function apFileChosen(inputEl){
+ const f=inputEl.files[0]; if(!f) return;
+ window._apFile={name:f.name};
+ el('apFileLbl').textContent='📎 '+f.name+' (change)';
+}
+function saveAddPayment(custId,jcCode){
+ const c=CUSTOMERS.find(x=>x.id===custId);
+ const j=c.jobCards.find(x=>x.jc===jcCode);
+ const amt=+el('apAmt').value;
+ if(!amt||amt<=0){toast('Enter an amount above 0');return;}
+ const mode=el('apMode').value;
+ const lineId=`${j.receiveId}-L${j.lines.length+1}`;
+ j.lines.push({lineId,date:el('apDate').value,mode,amt,
+   bank:el('apBank')?el('apBank').value:'',txn:el('apTxn')?el('apTxn').value:'',
+   remark:el('apRemark').value,receipt:window._apFile||null});
+ toast(lineId+' added — balance updated');
+ closeModal();
+ openHistory(custId);
+}
+
+/* ================= VIEW RECEIPTS (record-level or line-level) ================= */
+function openReceiptsView(kind,id){
+ window._receiptCtx={kind,id};
+ const data = kind==='record' ? findJobCardByReceiveId(id) : findLineById(id);
+ if(!data){toast('Not found');return;}
+ const receipt = kind==='record' ? data.j.docReceipt : data.l.receipt;
+ modal(`<div class="modal-hd"><div><h3>Receipts</h3><div class="sub">${kind==='record'?'Whole receipt':'This payment'} · <span class="lineid">${id}</span></div></div><button class="modal-close" onclick="closeModal()">✕</button></div>
+  <div class="modal-bd">
+   ${receipt ? `<div class="rclist"><div class="rcitem"><span class="ic">PDF</span><span style="flex:1">${receipt.name}</span></div></div>`
+             : `<div style="color:var(--faint);font-size:.85rem;margin-bottom:6px">No receipt attached yet.</div>`}
+   <label class="filebtn" style="margin-top:14px">📎 ${receipt?'Replace receipt':'Attach Receipt (PDF or image)'}<input type="file" accept=".pdf,image/*" onchange="handleReceiptFile(this)"></label>
+  </div>`);
+}
+function handleReceiptFile(inputEl){
+ const f=inputEl.files[0]; if(!f) return;
+ const ctx=window._receiptCtx;
+ const data = ctx.kind==='record' ? findJobCardByReceiveId(ctx.id) : findLineById(ctx.id);
+ if(!data) return;
+ if(ctx.kind==='record') data.j.docReceipt={name:f.name}; else data.l.receipt={name:f.name};
+ toast(f.name+' attached to '+ctx.id);
+ closeModal();
+ if(CURRENT_PAGE==='history') openHistory(data.c.id);
+}
+
+/* ================= NAVIGATION ================= */
+let CURRENT_PAGE='home';
+function showPage(p){
+ document.querySelectorAll('.page').forEach(x=>x.classList.remove('on'));
+ el('page'+p.charAt(0).toUpperCase()+p.slice(1)).classList.add('on');
+ CURRENT_PAGE=p;
+ window.scrollTo(0,0);
+}
+function goHome(){
+ showPage('home');
+ el('crumb').innerHTML='';
+ el('searchInput').value=''; doSearch('');
+ renderQuickRow(); renderRecent();
+}
+
+/* ================= SEARCH ================= */
+function doSearch(q){
+ q=q.trim().toLowerCase();
+ const box=el('resultsBox');
+ if(q.length<2){
+  box.style.display='none';
+  el('searchHint').style.display='block';
+  el('quickRow').style.display='grid'; el('recentWrap').style.display='block';
+  return;
+ }
+ el('searchHint').style.display='none';
+ el('quickRow').style.display='none'; el('recentWrap').style.display='none';
+ const results=[];
+ CUSTOMERS.forEach(c=>{
+  let matchField=null;
+  if(c.name.toLowerCase().includes(q)) matchField='Name';
+  else if(c.vehicles.some(v=>v.toLowerCase().includes(q))) matchField='Vehicle';
+  else if(c.jobCards.some(j=>j.jc && j.jc.toLowerCase().includes(q))) matchField='Job Card';
+  else if(c.jobCards.some(j=>j.invNo && j.invNo.toLowerCase().includes(q))) matchField='Invoice';
+  if(matchField) results.push({c,matchField});
+ });
+ box.style.display='block';
+ if(!results.length){ box.innerHTML='<div class="noresults">No customer, vehicle, or job card matches "'+q+'"</div>'; return; }
+ box.innerHTML=results.map(({c,matchField})=>{
+  const totalOut=c.jobCards.reduce((a,j)=>a+custBalance(j),0);
+  return `<button type="button" class="resultrow" onclick="openHistory(${c.id})">
+   <div class="av">${initials(c.name)}</div>
+   <div class="tx"><div class="nm">${c.name}<span class="match">${matchField} match</span></div>
+    <div class="meta">${c.vehicles.join(', ')||'No vehicle on file'} · ${c.jobCards.length} job card${c.jobCards.length===1?'':'s'}</div></div>
+   <div class="stat"><div class="n" style="color:${totalOut>0?'var(--amber)':'var(--green)'}">${totalOut>0?inr(totalOut):'Clear'}</div><div class="l">${totalOut>0?'outstanding':'no balance'}</div></div>
+  </button>`;
+ }).join('');
+}
+
+/* ================= HOME: quick actions + recent ================= */
+function renderQuickRow(){
+ el('quickRow').innerHTML=`
+  <button type="button" class="qcard rec" onclick="openReceipt(null,null)"><div class="ic">+</div><div><div class="tt">New Receipt</div><div class="sb">Start a fresh entry</div></div></button>
+  <button type="button" class="qcard exp" onclick="openExpense(null,null)"><div class="ic">−</div><div><div class="tt">New Expense</div><div class="sb">Petty cash, fuel, taxi…</div></div></button>
+  <button type="button" class="qcard tod" onclick="toast('Today\\'s Entries list — same as before')"><div class="ic">☰</div><div><div class="tt">Today's Entries</div><div class="sb">Review what you've entered</div></div></button>`;
+}
+function renderRecent(){
+ const items=RECENT_IDS.map(id=>CUSTOMERS.find(c=>c.id===id)).filter(Boolean);
+ if(!items.length){ el('recentWrap').innerHTML=''; return; }
+ el('recentWrap').innerHTML=`<h4>Recently Looked Up</h4><div class="recentgrid">${items.map(c=>{
+  const totalOut=c.jobCards.reduce((a,j)=>a+custBalance(j),0);
+  return `<button type="button" class="resultrow" style="border:1px solid var(--line);border-radius:10px" onclick="openHistory(${c.id})">
+   <div class="av">${initials(c.name)}</div>
+   <div class="tx"><div class="nm">${c.name}</div><div class="meta">${c.vehicles.join(', ')||'—'}</div></div>
+   <div class="stat"><div class="n" style="color:${totalOut>0?'var(--amber)':'var(--green)'}">${totalOut>0?inr(totalOut):'Clear'}</div></div>
+  </button>`;
+ }).join('')}</div>`;
+}
+
+/* ================= CUSTOMER HISTORY ================= */
+function openHistory(custId){
+ const c=CUSTOMERS.find(x=>x.id===custId);
+ RECENT_IDS=RECENT_IDS.filter(id=>id!==custId); RECENT_IDS.unshift(custId);
+ RECENT_IDS=RECENT_IDS.slice(0,5);
+
+ const totalInv=c.jobCards.reduce((a,j)=>a+(j.invAmt||0),0);
+ const totalRecv=c.jobCards.reduce((a,j)=>a+custReceived(j),0);
+ const totalOut=c.jobCards.reduce((a,j)=>a+custBalance(j),0);
+
+ const timelineRows=[];
+ c.jobCards.forEach(j=>j.lines.forEach(l=>timelineRows.push({lineId:l.lineId,date:l.date,desc:`${j.cat}${j.jc?' · JC '+j.jc:''}`,amt:l.amt,mode:l.mode,receipt:l.receipt})));
+ timelineRows.sort((a,b)=>a.date<b.date?1:-1);
+
+ el('crumb').innerHTML=`<a onclick="goHome()">Home</a> / ${c.name}`;
+ el('historyBody').innerHTML=`
+  <div class="custcard">
+   <div class="av" style="width:52px;height:52px;font-size:1.1rem">${initials(c.name)}</div>
+   <div><div class="nm">${c.name}</div><div class="meta">${c.vehicles.map(v=>`<span class="vchip">${v}</span>`).join('')||'No vehicle on file'}</div></div>
+   <div class="actions">
+    <button class="btn ok" onclick="openReceipt(${c.id},null)">＋ New Receipt</button>
+    <button class="btn" onclick="openExpense(${c.id},null)">＋ New Expense</button>
+   </div>
+  </div>
+
+  <div class="statrow">
+   <div class="stat"><div class="l">Job Cards</div><div class="v">${c.jobCards.length}</div></div>
+   <div class="stat"><div class="l">Total Invoiced</div><div class="v">${inr(totalInv)}</div></div>
+   <div class="stat"><div class="l">Total Received</div><div class="v" style="color:var(--green)">${inr(totalRecv)}</div></div>
+   <div class="stat"><div class="l">Outstanding</div><div class="v" style="color:${totalOut>0?'var(--amber)':'var(--muted)'}">${inr(totalOut)}</div></div>
+  </div>
+
+  <div class="card">
+   <div class="hd"><h3>Job Cards</h3><span class="sub">click "Add Payment" to settle an open balance — adds a line to the existing receipt, never a new one</span></div>
+   <div class="bd">${c.jobCards.map(j=>{
+     const recv=custReceived(j), bal=j.status==='CLOSED' ? 0 : custBalance(j);
+     const canPay = bal>0 && j.status!=='CLOSED';
+     return `<div class="jcrow">
+      <div><div class="jc">${j.jc||'No job card · counter sale'}</div><div class="cat">${j.cat} · <span class="lineid">${j.receiveId}</span></div><div class="dt">${j.date.slice(8)}-Jul-2026${j.invNo?' · Inv '+j.invNo:''}</div></div>
+      <div class="amts">
+       <div class="a"><div class="l">Invoice</div><div class="v">${j.invAmt?inr(j.invAmt):'—'}</div></div>
+       <div class="a"><div class="l">Received</div><div class="v" style="color:var(--green)">${inr(recv)}</div></div>
+       <div class="a"><div class="l">Balance</div><div class="v" style="color:${bal>0?'var(--amber)':'var(--muted)'}">${j.status==='CLOSED'?'Settled':(j.invAmt?inr(bal):'—')}</div></div>
+      </div>
+      <span class="badge b-${j.status}">${j.status}</span>
+      <button class="viewrcbtn" onclick="openReceiptsView('record','${j.receiveId}')">View Receipts</button>
+      ${canPay?`<button class="btn sm ok" onclick="openAddPayment(${c.id},'${j.jc}')">Add Payment</button>`:''}
+     </div>`;
+   }).join('')}</div>
+  </div>
+
+  ${timelineRows.length?`<div class="card"><div class="hd"><h3>Payment Timeline</h3></div><div class="bd"><div class="timeline">
+   ${timelineRows.map(t=>`<div class="trow"><span class="dt">${t.date.slice(8)}-Jul</span><span class="desc">${t.desc} · ${t.mode} · <span class="lineid">${t.lineId}</span></span><span class="amt" style="color:var(--green)">${inr(t.amt)}</span> <button class="viewrcbtn" onclick="openReceiptsView('line','${t.lineId}')">View</button></div>`).join('')}
+  </div></div></div>`:''}
+ `;
+ showPage('history');
+}
+
+/* ================= NEW RECEIPT (ported from desktop-entry.html) ================= */
+let R=freshReceive();
+function freshReceive(prefill){
+ prefill=prefill||{};
+ return {custId:prefill.custId||null, cust:prefill.cust||'', veh:prefill.veh||'', jc:prefill.jc||'',
+  inv:prefill.inv||'', cat:prefill.cat||RCATS[0], invAmt:prefill.invAmt||'', dateEntry:todayStr(),
+  status:RSTATUS[0], b2b:false, gst:'', lines:[freshRLine()], wf:'DRAFT', prefillNote:prefill.note||null};
+}
+function freshRLine(){ return {date:todayStr(),mode:'Cash',amt:'',bank:'',txn:'',remark:''}; }
+
+function openReceipt(custId,jcCode){
+ if(custId===null){ R=freshReceive(); }
+ else{
+  const c=CUSTOMERS.find(x=>x.id===custId);
+  if(jcCode){
+   const j=c.jobCards.find(x=>x.jc===jcCode);
+   R=freshReceive({custId,cust:c.name,veh:c.vehicles[0]||'',jc:j.jc,inv:j.invNo,invAmt:j.invAmt,cat:j.cat,
+    note:`Adding a payment against ${c.name}'s existing job card ${j.jc} — Customer, Vehicle, Job Card and Invoice Amount are pre-filled. Just add the new settlement line below.`});
+  } else {
+   R=freshReceive({custId,cust:c.name,veh:c.vehicles[0]||'',
+    note:`Starting a new receipt for ${c.name} — Customer is pre-filled from their record.`});
+  }
+ }
+ el('crumb').innerHTML = custId ? `<a onclick="goHome()">Home</a> / <a onclick="openHistory(${custId})">${CUSTOMERS.find(x=>x.id===custId).name}</a> / New Receipt` : `<a onclick="goHome()">Home</a> / New Receipt`;
+ renderReceiptForm();
+ showPage('receipt');
+}
+
+function renderReceiptForm(){
+ const totalReceived = R.lines.reduce((a,l)=>a+(+l.amt||0),0);
+ const pending = R.invAmt ? Math.max(0, +R.invAmt - totalReceived) : 0;
+ const pendingDisplay = R.invAmt ? inr(pending) : 'Zero <span style="font-size:.72rem">(no invoice yet)</span>';
+ el('receiptFormArea').innerHTML=`
+ ${R.prefillNote?`<div class="prefillnote">ℹ ${R.prefillNote}</div>`:''}
+ <div class="card">
+  <div class="hd"><h3>Receive Entry</h3><span class="sub">customer receipt — one record per job / cause</span><span style="flex:1"></span>
+   <span class="badge-wf wf-${R.wf}">${R.wf}</span></div>
+  <div class="bd">
+   <div class="hdrgrid">
+    <div class="hstack">
+     <div class="hrow"><label>Customer Name <span class="req">*</span></label>
+      <select id="rCust" onchange="R.cust=this.value">
+       <option value="">Select…</option>${CUSTOMERS.map(c=>`<option ${R.cust===c.name?'selected':''}>${c.name}</option>`).join('')}
+       <option value="__new">+ Add new customer…</option></select></div>
+     <div class="hrow"><label>Vehicle #</label><input id="rVeh" value="${R.veh}" oninput="R.veh=this.value" placeholder="OD05CA4177"></div>
+     <div class="hrow"><label>Job Card / PO / SO</label><input id="rJc" value="${R.jc}" oninput="R.jc=this.value" placeholder="4009941587" ${R.prefillNote&&R.jc?'style="background:var(--navy3)"':''}></div>
+     <div class="hrow"><label>Invoice #</label><input id="rInv" value="${R.inv}" oninput="R.inv=this.value" placeholder="7731122600388"></div>
+     <div class="hrow"><label>Tran. Category</label><select id="rCat" onchange="R.cat=this.value">${RCATS.map(c=>`<option ${R.cat===c?'selected':''}>${c}</option>`).join('')}</select></div>
+     <div class="hrow"><label>Invoice Amount</label><input id="rInvAmt" type="number" value="${R.invAmt}" oninput="R.invAmt=this.value;syncReceive()" placeholder="Total Amount"></div>
+    </div>
+    <div class="hstack">
+     <div class="hrow"><label>Date of Entry</label><input type="date" id="rDate" value="${R.dateEntry}" onchange="R.dateEntry=this.value"></div>
+     <div class="hrow"><label>Pending Amount</label><span class="computed ${R.invAmt?'':'zero'}" id="rPending">${pendingDisplay}</span></div>
+     <div class="hrow"><label>Status</label><select id="rStatus" onchange="R.status=this.value">${RSTATUS.map(s=>`<option ${R.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+     <div class="hrow"><label>Transaction Type</label>
+      <div class="toggle2"><button type="button" class="${!R.b2b?'on':''}" onclick="setB2B(false)">B2C</button><button type="button" class="${R.b2b?'on':''}" onclick="setB2B(true)">B2B</button></div></div>
+     <div class="hrow" id="gstRow" style="display:${R.b2b?'grid':'none'}"><label>GST# <span class="req">*</span></label><input id="rGst" value="${R.gst}" oninput="R.gst=this.value" placeholder="21ABCDE1234F1Z5"></div>
+     <div class="hrow"><label>DAMS-Receive-ID</label><input readonly value="${!R.saved?'assigned on save':'OOR-JUL26-R-0'+seq.R}"></div>
+    </div>
+   </div>
+
+   <div class="linehd"><h4>Settlement Lines</h4><span class="sub">one row per payment received against this job / cause</span></div>
+   <table class="linetab"><thead><tr><th style="width:118px">Date</th><th style="width:130px">Settlement Mode</th><th style="width:120px">Receive Amount</th><th>Bank Name</th><th>Transaction ID</th><th>Remarks</th><th style="width:30px"></th></tr></thead>
+    <tbody id="rLinesBody">${R.lines.map((l,i)=>rLineRow(l,i)).join('')}</tbody></table>
+   <button type="button" class="addrowbtn" onclick="addRLine()">＋ Add settlement row</button>
+
+   <div class="linefoot">
+    <div class="lf"><div class="k">Total Received</div><div class="v" style="color:var(--green)" id="rTotalRecv">${inr(totalReceived)}</div></div>
+    <div class="lf"><div class="k">Pending</div><div class="v ${pending>0?'warn':''}" id="rPendingFoot">${R.invAmt?inr(pending):'—'}</div></div>
+   </div>
+   <div class="formfoot"><button class="btn" onclick="cancelReceipt()">Cancel</button><button class="btn" onclick="submitReceipt(false)">Save Draft</button><button class="btn pri" onclick="submitReceipt(true)">Submit</button></div>
+  </div>
+ </div>`;
+}
+function rLineRow(l,i){
+ const m=RMODES.find(x=>x.k===l.mode);
+ return `<tr>
+  <td><input type="date" value="${l.date}" onchange="updRLine(${i},'date',this.value)"></td>
+  <td><select onchange="updRLine(${i},'mode',this.value)">${RMODES.map(m2=>`<option ${l.mode===m2.k?'selected':''}>${m2.k}</option>`).join('')}</select></td>
+  <td><input type="number" value="${l.amt}" oninput="updRLine(${i},'amt',this.value)" style="text-align:right"></td>
+  <td><input value="${l.bank}" oninput="updRLine(${i},'bank',this.value)" ${m.bank?'':'disabled'} placeholder="${m.bank?'e.g. SBI':'—'}"></td>
+  <td><input value="${l.txn}" oninput="updRLine(${i},'txn',this.value)" ${m.ref?'':'disabled'} placeholder="${m.ref?'UPI / bank ref':'—'}"></td>
+  <td><input value="${l.remark}" oninput="updRLine(${i},'remark',this.value)"></td>
+  <td>${R.lines.length>1?`<button type="button" class="rmrow" onclick="rmRLine(${i})">×</button>`:''}</td>
+ </tr>`;
+}
+function addRLine(){ R.lines.push(freshRLine()); renderReceiptForm(); }
+function rmRLine(i){ R.lines.splice(i,1); renderReceiptForm(); }
+function updRLine(i,f,v){ R.lines[i][f]=v; if(f==='mode') renderReceiptForm(); else syncReceive(); }
+function setB2B(v){ R.b2b=v; renderReceiptForm(); }
+function syncReceive(){
+ const totalReceived = R.lines.reduce((a,l)=>a+(+l.amt||0),0);
+ const pending = R.invAmt ? Math.max(0, +R.invAmt - totalReceived) : 0;
+ el('rTotalRecv').textContent = inr(totalReceived);
+ el('rPendingFoot').innerHTML = R.invAmt ? inr(pending) : '—';
+ el('rPendingFoot').className = 'v ' + (pending>0?'warn':'');
+ const pb=el('rPending'); if(pb){ pb.innerHTML = R.invAmt ? inr(pending) : 'Zero <span style="font-size:.72rem">(no invoice yet)</span>'; pb.className='computed '+(R.invAmt?'':'zero'); }
+}
+function cancelReceipt(){ goHome(); }
+function submitReceipt(submit){
+ const cust=R.cust; const amt=R.lines.reduce((a,l)=>a+(+l.amt||0),0);
+ if(!cust){toast('Customer Name is required');return;}
+ if(R.b2b && !R.gst.trim()){toast('GST# is mandatory for B2B');return;}
+ if(!amt){toast('Add at least one settlement row with an amount');return;}
+ seq.R++;
+ const doc=`OOR-JUL26-R-0${seq.R}`;
+ toast(submit?doc+' submitted for checking':doc+' saved as draft');
+ goHome();
+}
+
+/* ================= NEW EXPENSE (ported from desktop-entry.html, with Remark fix) ================= */
+let E=freshExpense();
+function freshExpense(prefill){
+ prefill=prefill||{};
+ return {recv:'', jc:prefill.jc||'', cat:ECAT_TOP[0], dateInc:todayStr(), status:ESTATUS[0],
+  lines:[freshELine()], wf:'DRAFT', prefillNote:prefill.note||null};
+}
+function freshELine(){ return {date:todayStr(),mode:'Cash',sub:ESUB[ECAT_TOP[0]][0].n,amt:'',bank:'',txn:'',remark:''}; }
+
+function openExpense(custId,jcCode){
+ if(custId===null){ E=freshExpense(); }
+ else{
+  const c=CUSTOMERS.find(x=>x.id===custId);
+  const jc = jcCode || (c.jobCards[0] ? c.jobCards[0].jc : '');
+  E=freshExpense({jc, note:`Job ID pre-filled from ${c.name}'s job card. Expenses are billed to a vendor/receiver — pick who this payment actually went to below.`});
+ }
+ el('crumb').innerHTML = custId ? `<a onclick="goHome()">Home</a> / <a onclick="openHistory(${custId})">${CUSTOMERS.find(x=>x.id===custId).name}</a> / New Expense` : `<a onclick="goHome()">Home</a> / New Expense`;
+ renderExpenseForm();
+ showPage('expense');
+}
+
+function renderExpenseForm(){
+ const total = E.lines.reduce((a,l)=>a+(+l.amt||0),0);
+ el('expenseFormArea').innerHTML=`
+ ${E.prefillNote?`<div class="prefillnote">ℹ ${E.prefillNote}</div>`:''}
+ <div class="card">
+  <div class="hd"><h3>Expense Entry</h3><span class="sub">petty cash — one record per vendor / cause</span><span style="flex:1"></span>
+   <span class="badge-wf wf-${E.wf}">${E.wf}</span></div>
+  <div class="bd">
+   <div class="hdrgrid">
+    <div class="hstack">
+     <div class="hrow"><label>Receiver Name <span class="req">*</span></label><input id="eRecv" value="${E.recv}" oninput="E.recv=this.value" placeholder="Vendor / payee name"></div>
+     <div class="hrow"><label>Job ID / PO / SO <span style="color:var(--faint);font-weight:400">(optional)</span></label><input id="eJc" value="${E.jc}" oninput="E.jc=this.value" placeholder="4009870505" ${E.prefillNote&&E.jc?'style="background:var(--navy3)"':''}></div>
+     <div class="hrow"><label>Expenses Category</label><select id="eCat" onchange="setECat(this.value)">${ECAT_TOP.map(c=>`<option ${E.cat===c?'selected':''}>${c}</option>`).join('')}</select></div>
+     <div class="hrow"><label>DAMS-Expenses-ID</label><input readonly value="${!E.saved?'assigned on save':'OOR-JUL26-E-0'+seq.E}"></div>
+     <div class="hrow"><label>Total Expenses</label><span class="computed" id="eTotalHdr">${inr(total)}</span></div>
+    </div>
+    <div class="hstack">
+     <div class="hrow"><label>Date of Inception</label><input type="date" id="eDate" value="${E.dateInc}" onchange="E.dateInc=this.value"></div>
+     <div class="hrow"><label>Status</label><select id="eStatus" onchange="E.status=this.value">${ESTATUS.map(s=>`<option ${E.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+    </div>
+   </div>
+
+   <div class="linehd"><h4>Expense Lines</h4><span class="sub">one row per payment made to this receiver</span></div>
+   <table class="linetab"><thead><tr><th style="width:112px">Date</th><th style="width:150px">Sub-category</th><th style="width:105px">Amount</th><th style="width:120px">Payment Mode</th><th>Bank Name</th><th>Transaction ID</th><th>Remark</th><th style="width:30px"></th></tr></thead>
+    <tbody id="eLinesBody">${E.lines.map((l,i)=>eLineRow(l,i)).join('')}</tbody></table>
+   <button type="button" class="addrowbtn" onclick="addELine()">＋ Add expense row</button>
+   <div id="eLimitNote"></div>
+
+   <div class="linefoot"><div class="lf"><div class="k">Total Expenses</div><div class="v" style="color:var(--red)" id="eTotalFoot">${inr(total)}</div></div></div>
+   <div class="formfoot"><button class="btn" onclick="cancelExpense()">Cancel</button><button class="btn" onclick="submitExpense(false)">Save Draft</button><button class="btn pri" onclick="submitExpense(true)">Submit</button></div>
+  </div>
+ </div>`;
+ syncExpenseLimit();
+}
+function eLineRow(l,i){
+ const subs=ESUB[E.cat];
+ return `<tr>
+  <td><input type="date" value="${l.date}" onchange="updELine(${i},'date',this.value)"></td>
+  <td><select onchange="updELine(${i},'sub',this.value)">${subs.map(s=>`<option ${l.sub===s.n?'selected':''}>${s.n}</option>`).join('')}</select></td>
+  <td><input type="number" value="${l.amt}" oninput="updELine(${i},'amt',this.value)" style="text-align:right"></td>
+  <td><select onchange="updELine(${i},'mode',this.value)">${EMODES.map(m2=>`<option ${l.mode===m2?'selected':''}>${m2}</option>`).join('')}</select></td>
+  <td><input value="${l.bank}" oninput="updELine(${i},'bank',this.value)" ${l.mode==='Bank'?'':'disabled'} placeholder="${l.mode==='Bank'?'e.g. SBI':'—'}"></td>
+  <td><input value="${l.txn}" oninput="updELine(${i},'txn',this.value)" ${l.mode!=='Cash'?'':'disabled'} placeholder="${l.mode!=='Cash'?'ref no.':'—'}"></td>
+  <td><input value="${l.remark}" oninput="updELine(${i},'remark',this.value)"></td>
+  <td>${E.lines.length>1?`<button type="button" class="rmrow" onclick="rmELine(${i})">×</button>`:''}</td>
+ </tr>`;
+}
+function addELine(){ E.lines.push(freshELine()); renderExpenseForm(); }
+function rmELine(i){ E.lines.splice(i,1); renderExpenseForm(); }
+function updELine(i,f,v){ E.lines[i][f]=v; if(f==='mode') renderExpenseForm(); else syncExpense(); }
+function setECat(v){ E.cat=v; E.lines.forEach(l=>l.sub=ESUB[v][0].n); renderExpenseForm(); }
+function syncExpense(){
+ const total = E.lines.reduce((a,l)=>a+(+l.amt||0),0);
+ el('eTotalHdr').textContent=inr(total);
+ el('eTotalFoot').textContent=inr(total);
+ syncExpenseLimit();
+}
+function syncExpenseLimit(){
+ const notes=[];
+ E.lines.forEach(l=>{
+   const sc=ESUB[E.cat].find(s=>s.n===l.sub);
+   if(sc && sc.lim && +l.amt>sc.lim) notes.push(`${l.sub} (${inr(l.amt)}) is above its ${inr(sc.lim)} limit — will need Finance Manager approval.`);
+ });
+ const box=el('eLimitNote'); if(!box) return;
+ box.innerHTML = notes.map(n=>`<div class="limitnote">⚠ ${n}</div>`).join('');
+}
+function cancelExpense(){ goHome(); }
+function submitExpense(submit){
+ const recv=E.recv; const amt=E.lines.reduce((a,l)=>a+(+l.amt||0),0);
+ if(!recv){toast('Receiver Name is required');return;}
+ if(!amt){toast('Add at least one expense row with an amount');return;}
+ seq.E++;
+ const doc=`OOR-JUL26-E-0${seq.E}`;
+ toast(submit?doc+' submitted for checking':doc+' saved as draft');
+ goHome();
+}
+
+/* ================= ERROR HARDENING ================= */
+window.onerror=function(msg,src,line,col,err){
+ const box=el('fatalBox');
+ box.style.display='block';
+ box.textContent='Something failed to load:\n'+msg+'\n(line '+line+', col '+col+')'+(err&&err.stack?'\n\n'+err.stack:'');
+ return false;
+};
+try{ renderQuickRow(); renderRecent(); }catch(err){
+ const box=el('fatalBox'); box.style.display='block';
+ box.textContent='Something failed to load:\n'+(err&&err.message)+'\n\n'+(err&&err.stack||'');
+}
+</script>
+</body>
+</html>

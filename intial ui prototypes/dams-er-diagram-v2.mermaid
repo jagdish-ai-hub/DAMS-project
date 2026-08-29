@@ -1,0 +1,106 @@
+erDiagram
+    ORGANIZATION ||--o{ BRANCH : owns
+    ORGANIZATION ||--o{ USER : "employs (except Super Admin)"
+    ORGANIZATION ||--o{ CUSTOMER : has
+    BRANCH ||--o{ JOB_CARD : "opened at"
+    CUSTOMER ||--o{ VEHICLE : owns
+    CUSTOMER ||--o{ JOB_CARD : "customer on"
+    VEHICLE ||--o{ JOB_CARD : "serviced under"
+    JOB_CARD ||--o{ RECEIVE_DOCUMENT : "has (0..n over time)"
+    JOB_CARD ||--o{ EXPENSE_DOCUMENT : "has (0..n over time)"
+    RECEIVE_DOCUMENT ||--o{ SETTLEMENT_LINE : contains
+    EXPENSE_DOCUMENT ||--o{ EXPENSE_LINE : contains
+    RECEIVER ||--o{ EXPENSE_DOCUMENT : "paid to"
+    USER ||--o{ RECEIVE_DOCUMENT : "created by"
+    USER ||--o{ SETTLEMENT_LINE : "overridden by (nullable)"
+    SETTLEMENT_LINE ||--o{ ATTACHMENT : "receipts (0..n)"
+    EXPENSE_LINE ||--o{ ATTACHMENT : "receipts (0..n)"
+    RECEIVE_DOCUMENT ||--o{ ATTACHMENT : "receipts (0..n, doc-level)"
+
+    ORGANIZATION {
+        uuid org_id PK
+        string name
+        string status "Active/Suspended"
+    }
+    BRANCH {
+        uuid branch_id PK
+        uuid org_id FK
+        string code "e.g. OOR — unique per org, not globally"
+        string name
+    }
+    USER {
+        uuid user_id PK
+        uuid org_id FK "null for SUPER_ADMIN"
+        string name
+        string role "SUPER_ADMIN/OWNER/FM/ACCOUNTANT/CASHIER"
+        uuid branch_id FK "nullable, or multi/all per role"
+    }
+    CUSTOMER {
+        uuid customer_id PK
+        uuid org_id FK
+        string name
+        string phone
+    }
+    VEHICLE {
+        string vehicle_no PK "normalized"
+        uuid customer_id FK
+    }
+    JOB_CARD {
+        uuid job_card_id PK "DAMS internal"
+        uuid org_id FK
+        uuid branch_id FK
+        string dbm_id "external, nullable"
+        string vehicle_no FK "nullable"
+        uuid customer_id FK
+        string category
+        string status "Hold/AMC/CG/WIP/Warranty/Credit/Close"
+    }
+    RECEIVE_DOCUMENT {
+        uuid pk_id PK "surrogate key"
+        string receive_id "OOR-JUL26-R-021, unique per org only"
+        uuid org_id FK
+        uuid job_card_id FK "nullable"
+        string invoice_no
+        decimal invoice_amount
+        string workflow_status "Draft/Submitted/Verified/Approved/Rejected"
+        bool is_b2b
+    }
+    SETTLEMENT_LINE {
+        uuid line_pk PK
+        string line_id "receive_id-L1, -L2..."
+        uuid receive_doc_id FK
+        date txn_date
+        string mode
+        decimal amount
+        decimal original_amount "nullable, if overridden"
+        string override_reason "nullable"
+    }
+    EXPENSE_DOCUMENT {
+        uuid pk_id PK
+        string expense_id "OOR-JUL26-E-014, unique per org only"
+        uuid org_id FK
+        uuid job_card_id FK "nullable"
+        uuid receiver_id FK
+        string workflow_status
+        string business_status "Open/In Progress/.../Closed/Transfer to Claim"
+    }
+    EXPENSE_LINE {
+        uuid line_pk PK
+        string line_id
+        uuid expense_doc_id FK
+        date txn_date
+        string sub_category
+        decimal amount
+    }
+    RECEIVER {
+        uuid receiver_id PK
+        uuid org_id FK
+        string name
+    }
+    ATTACHMENT {
+        uuid attachment_id PK
+        string r2_object_key
+        string filename
+        uuid uploaded_by FK
+        timestamp uploaded_at
+    }

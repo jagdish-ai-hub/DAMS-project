@@ -1,0 +1,195 @@
+package com.dams.attachment.service;
+
+import com.dams.attachment.dto.AttachmentResponse;
+import com.dams.attachment.dto.SignedUrlResponse;
+import com.dams.attachment.entity.Attachment;
+import com.dams.attachment.entity.ParentType;
+import com.dams.attachment.repository.AttachmentRepository;
+import com.dams.attachment.storage.StorageService;
+import com.dams.common.exception.DamsException;
+import com.dams.common.security.BranchScope;
+import com.dams.config.TenantContext;
+import com.dams.receive.entity.ReceiveDocument;
+import com.dams.receive.entity.SettlementLine;
+import com.dams.receive.entity.WorkflowStatus;
+import com.dams.receive.repository.ReceiveDocumentRepository;
+import com.dams.receive.repository.SettlementLineRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * Uploads, lists, signs and deletes attachments. The bytes live in {@link StorageService};
+ * this class owns the {@code attachment} rows and the rules around them:
+ *
+ *   - only PDF / image, max {@value #MAX_BYTES} bytes;
+ *   - no uploads once the owning receive document is settled or rejected (its history is done);
+ *   - frozen attachments (set when a document is settled / approved / closed) cannot be deleted.
+ *
+ * Expense parents ({@code EXPENSE_DOCUMENT} / {@code EXPENSE_LINE}) are rejected until Stage 5.
+ */
+@Service
+public class AttachmentService {
+
+    private static final Logger log = LoggerFactory.getLogger(AttachmentService.class);
+    private static final long MAX_BYTES = 10L * 1024 * 1024;
+    private static final Set<String> ALLOWED_EXACT = Set.of("application/pdf");
+
+    private final AttachmentRepository attachmentRepo;
+    private final ReceiveDocumentRepository receiveDocumentRepo;
+    private final SettlementLineRepository settlementLineRepo;
+    private final StorageService storage;
+    private final BranchScope branchScope;
+
+    public AttachmentService(AttachmentRepository attachmentRepo,
+                             ReceiveDocumentRepository receiveDocumentRepo,
+                             SettlementLineRepository settlementLineRepo,
+                             StorageService storage,
+                             BranchScope branchScope) {
+        this.attachmentRepo = attachmentRepo;
+        this.receiveDocumentRepo = receiveDocumentRepo;
+        this.settlementLineRepo = settlementLineRepo;
+        this.storage = storage;
+        this.branchScope = branchScope;
+    }
+
+    @Transactional
+    public AttachmentResponse upload(ParentType parentType, Long parentId, MultipartFile file) {
+        Long orgId = TenantContext.requireOrgId();
+        ReceiveDocument owningDoc = resolveOwningReceiveDocument(orgId, parentType, parentId);
+
+        if (owningDoc.isSettled() || owningDoc.getWorkflowStatus() == WorkflowStatus.REJECTED) {
+            throw DamsException.conflict(
+                "Document " + describe(owningDoc) + " is closed — its receipts are frozen and cannot be changed");
+        }
+        validate(file);
+
+        byte[] content = readBytes(file);
+        String keyHint = "org/" + orgId + "/" + parentType.name().toLowerCase() + "/" + parentId;
+        String objectKey = storage.put(keyHint, file.getContentType(), content);
+
+        Attachment a = new Attachment();
+        a.setOrgId(orgId);
+        a.setParentType(parentType);
+        a.setParentId(parentId);
+        a.setObjectKey(objectKey);
+        a.setFilename(safeFilename(file.getOriginalFilename()));
+        a.setContentType(file.getContentType());
+        a.setSizeBytes(content.length);
+        a.setUploadedBy(branchScope.currentUserId());
+        a = attachmentRepo.save(a);
+
+        log.info("Attachment uploaded: orgId={} {} #{} attachmentId={} bytes={}",
+            orgId, parentType, parentId, a.getId(), content.length);
+        return AttachmentResponse.of(a);
+    }
+
+    @Transactional(readOnly = true)
+    public List<AttachmentResponse> list(ParentType parentType, Long parentId) {
+        Long orgId = TenantContext.requireOrgId();
+        resolveOwningReceiveDocument(orgId, parentType, parentId); // authorises + 404s
+        return attachmentRepo.findByOrgIdAndParentTypeAndParentIdOrderByUploadedAtAsc(orgId, parentType, parentId)
+            .stream().map(AttachmentResponse::of).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public SignedUrlResponse signedUrl(Long attachmentId) {
+        Long orgId = TenantContext.requireOrgId();
+        Attachment a = attachmentRepo.findByIdAndOrgId(attachmentId, orgId)
+            .orElseThrow(() -> DamsException.notFound("Attachment", attachmentId));
+        return new SignedUrlResponse(
+            storage.signedUrl(a.getObjectKey(), a.getFilename(), a.getContentType()),
+            a.getFilename(), a.getContentType());
+    }
+
+    @Transactional
+    public void delete(Long attachmentId) {
+        Long orgId = TenantContext.requireOrgId();
+        Attachment a = attachmentRepo.findByIdAndOrgId(attachmentId, orgId)
+            .orElseThrow(() -> DamsException.notFound("Attachment", attachmentId));
+        if (a.isFrozen()) {
+            throw DamsException.conflict("Attachment '" + a.getFilename()
+                + "' is frozen (its document is approved or closed) and cannot be deleted");
+        }
+        storage.delete(a.getObjectKey());
+        attachmentRepo.delete(a);
+        log.info("Attachment deleted: orgId={} attachmentId={}", orgId, attachmentId);
+    }
+
+    /**
+     * Freeze every attachment on a receive document and its lines. Called when the document
+     * settles (this stage) and, later, on approve / claim-close.
+     */
+    @Transactional
+    public void freezeReceiveDocument(Long orgId, Long receiveDocumentId, List<Long> settlementLineIds) {
+        freeze(orgId, ParentType.RECEIVE_DOCUMENT, List.of(receiveDocumentId));
+        if (!settlementLineIds.isEmpty()) {
+            freeze(orgId, ParentType.SETTLEMENT_LINE, settlementLineIds);
+        }
+    }
+
+    private void freeze(Long orgId, ParentType type, List<Long> parentIds) {
+        List<Attachment> rows = attachmentRepo.findByOrgIdAndParentTypeAndParentIdIn(orgId, type, parentIds);
+        for (Attachment a : rows) {
+            a.setFrozen(true);
+        }
+        attachmentRepo.saveAll(rows);
+    }
+
+    // --- helpers ---
+
+    private ReceiveDocument resolveOwningReceiveDocument(Long orgId, ParentType parentType, Long parentId) {
+        return switch (parentType) {
+            case RECEIVE_DOCUMENT -> receiveDocumentRepo.findByIdAndOrgId(parentId, orgId)
+                .orElseThrow(() -> DamsException.notFound("Receive document", parentId));
+            case SETTLEMENT_LINE -> {
+                SettlementLine line = settlementLineRepo.findByIdAndOrgId(parentId, orgId)
+                    .orElseThrow(() -> DamsException.notFound("Settlement line", parentId));
+                yield receiveDocumentRepo.findByIdAndOrgId(line.getReceiveDocumentId(), orgId)
+                    .orElseThrow(() -> DamsException.notFound("Receive document", line.getReceiveDocumentId()));
+            }
+            case EXPENSE_DOCUMENT, EXPENSE_LINE ->
+                throw DamsException.badRequest("Expense attachments arrive in Stage 5");
+        };
+    }
+
+    private void validate(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw DamsException.badRequest("No file was uploaded");
+        }
+        if (file.getSize() > MAX_BYTES) {
+            throw DamsException.badRequest("Attachment is larger than the 10 MB limit");
+        }
+        String type = file.getContentType();
+        boolean ok = type != null && (ALLOWED_EXACT.contains(type) || type.startsWith("image/"));
+        if (!ok) {
+            throw DamsException.badRequest("Only PDF or image files can be attached (got " + type + ")");
+        }
+    }
+
+    private static byte[] readBytes(MultipartFile file) {
+        try {
+            return file.getBytes();
+        } catch (IOException e) {
+            throw DamsException.badRequest("Could not read the uploaded file: " + e.getMessage());
+        }
+    }
+
+    private static String safeFilename(String original) {
+        if (original == null || original.isBlank()) {
+            return "attachment";
+        }
+        String base = original.substring(original.replace('\\', '/').lastIndexOf('/') + 1);
+        return base.length() > 200 ? base.substring(base.length() - 200) : base;
+    }
+
+    private static String describe(ReceiveDocument doc) {
+        return doc.getDocumentNo() != null ? doc.getDocumentNo() : "#" + doc.getId();
+    }
+}

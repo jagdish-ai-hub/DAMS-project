@@ -1,0 +1,28 @@
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Backend (Maven)
+backend/target/
+*.class
+
+# Frontend (Node)
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+npm-debug.log*
+
+# IDE / OS
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Agent / IDE tooling scaffolding (not project code)
+.agents/
+.kiro/
+.claude/
+
+# Logs
+*.log

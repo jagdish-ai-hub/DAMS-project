@@ -1,0 +1,9 @@
+# Local dev profile. Database is the same shared Neon instance (test phase) — the
+# connection is supplied via SPRING_DATASOURCE_URL (see application.yml).
+spring:
+  jpa:
+    show-sql: false
+
+dams:
+  cors:
+    allowed-origins: "http://localhost:5173"

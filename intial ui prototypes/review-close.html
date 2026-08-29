@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DAMS — Review & Claims (Accountant · Finance Manager)</title>
+<style>
+:root{
+  --navy:#1F3864; --navy2:#2E5395; --navy3:#EAF0FB;
+  --bg:#F1F4F9; --surface:#FFFFFF; --line:#E3E7EE;
+  --ink:#1A2233; --muted:#66707F; --faint:#98A1AF;
+  --green:#1E7F4F; --green-bg:#E4F3EB;
+  --amber:#B45309; --amber-bg:#FCF0DE;
+  --red:#B91C1C; --red-bg:#FBE7E7;
+  --blue:#2563EB; --blue-bg:#E7EEFC;
+  --purple:#6B3FA0; --purple-bg:#EFE7FB;
+  --gray:#5B6470; --gray-bg:#EEF0F3;
+  --radius:10px;
+  --shadow:0 1px 2px rgba(16,24,40,.04),0 2px 8px rgba(16,24,40,.05);
+  --font:'Segoe UI',system-ui,-apple-system,'Helvetica Neue',Arial,sans-serif;
+  --mono:'Consolas','SF Mono',Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;font-size:14px}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:.85rem;color:var(--ink)}
+
+.topbar{background:var(--navy);color:#fff;padding:11px 24px;display:flex;align-items:center;gap:14px}
+.topbar .mark{width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.76rem}
+.topbar h1{font-size:.98rem;font-weight:700}
+.topbar .sub{font-size:.72rem;opacity:.7}
+.topbar .spacer{flex:1}
+.roleseg{display:flex;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:9px;padding:3px;gap:2px}
+.roleseg button{border:0;background:none;color:rgba(255,255,255,.8);padding:7px 14px;border-radius:7px;font-size:.8rem;font-weight:600}
+.roleseg button.on{background:#fff;color:var(--navy)}
+
+.shell{display:grid;grid-template-columns:380px 1fr;gap:0;height:calc(100vh - 53px)}
+.qpane{background:var(--surface);border-right:1px solid var(--line);overflow-y:auto;display:flex;flex-direction:column}
+.qsection{padding:14px 16px 6px}
+.qsection h4{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:700}
+.qsection .cnt{background:var(--amber-bg);color:var(--amber);border-radius:999px;font-size:.66rem;font-weight:700;padding:1px 7px;margin-left:6px}
+.qitem{display:flex;flex-direction:column;gap:4px;padding:12px 16px;border-bottom:1px solid var(--line);border-left:3px solid transparent;cursor:pointer}
+.qitem:hover{background:#FAFBFD}
+.qitem.sel{background:var(--navy3);border-left-color:var(--navy)}
+.qitem .top{display:flex;align-items:center;gap:7px}
+.qitem .doc{font-family:var(--mono);font-size:.7rem;color:var(--navy2);font-weight:700}
+.qitem .age{margin-left:auto;font-size:.68rem;color:var(--faint)}
+.qitem .age.old{color:var(--amber);font-weight:700}
+.qitem .nm{font-size:.86rem;font-weight:600}
+.qitem .meta{font-size:.74rem;color:var(--muted)}
+.qitem .amt{font-weight:700;font-variant-numeric:tabular-nums}
+.qitem .flags{display:flex;gap:5px;margin-top:2px}
+.tag{font-size:.62rem;font-weight:700;padding:1px 6px;border-radius:5px;text-transform:uppercase;letter-spacing:.02em}
+.tag-ov{background:var(--amber-bg);color:var(--amber)}
+.tag-final{background:var(--purple-bg);color:var(--purple)}
+.tag-claim{background:var(--teal-bg,#E0F1F6);color:#0E7490}
+
+.dpane{overflow-y:auto;padding:22px 28px}
+.dempty{display:flex;align-items:center;justify-content:center;height:100%;color:var(--faint);font-size:.9rem;text-align:center;flex-direction:column;gap:8px}
+
+.ov-head{margin-bottom:18px}
+.ov-head h2{font-size:1.2rem;color:var(--navy)}
+.ov-head .sub{font-size:.82rem;color:var(--muted);margin-top:2px}
+.ov-stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}
+.ov-stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px;border-top:3px solid var(--navy2)}
+.ov-stat.amber{border-top-color:var(--amber)}
+.ov-stat.purple{border-top-color:#6B3FA0}
+.ov-stat .l{font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
+.ov-stat .v{font-size:1.5rem;font-weight:700;margin-top:5px;font-variant-numeric:tabular-nums}
+.ov-stat .s{font-size:.78rem;color:var(--faint);margin-top:2px}
+.ov-branchrow{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line);font-size:.84rem}
+.ov-branchrow:last-child{border-bottom:0}
+.ov-branchrow .nm{width:90px;font-weight:600;color:var(--muted)}
+.ov-branchrow .tr{flex:1;background:var(--bg);border-radius:5px;height:12px;overflow:hidden}
+.ov-branchrow .fl{height:100%;background:var(--navy2);border-radius:5px}
+.ov-branchrow .n{width:36px;text-align:right;font-weight:700}
+.ov-preview{display:flex;flex-direction:column}
+.ov-prow{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line);text-align:left;width:100%}
+.ov-prow:last-child{border-bottom:0}
+.ov-prow:hover{background:#FAFBFD}
+.ov-prow .nm{font-size:.86rem;font-weight:700;flex:1}
+.ov-prow .doc{font-family:var(--mono);font-size:.72rem;color:var(--navy2)}
+.ov-prow .age{font-size:.74rem;color:var(--amber);font-weight:600}
+.ov-prow .amt{font-weight:700;font-variant-numeric:tabular-nums}
+.ov-hint{text-align:center;font-size:.82rem;color:var(--faint);margin-top:22px;padding-top:16px;border-top:1px dashed var(--line)}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:16px}
+.card .hd{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.card .hd h3{font-size:.95rem;font-weight:700}
+.card .hd .sub{font-size:.76rem;color:var(--muted)}
+.card .bd{padding:18px}
+
+.kvgrid{display:grid;grid-template-columns:1fr 1fr;gap:0 28px}
+.kv{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed var(--line);gap:10px}
+.kv:last-child{border-bottom:0}
+.kv .k{font-size:.76rem;color:var(--muted)}
+.kv .v{font-size:.84rem;font-weight:600;text-align:right}
+.badge{display:inline-block;font-size:.68rem;font-weight:700;padding:2px 9px;border-radius:999px;text-transform:uppercase;letter-spacing:.02em}
+.b-SUBMITTED{background:var(--blue-bg);color:var(--blue)}
+.b-VERIFIED{background:#E0F1F6;color:#0E7490}
+.b-APPROVED{background:var(--green-bg);color:var(--green)}
+.b-CLOSED{background:var(--purple-bg);color:var(--purple)}
+.b-OPEN{background:var(--amber-bg);color:var(--amber)}
+
+table.linetab{width:100%;border-collapse:collapse;margin-top:4px}
+table.linetab th{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--faint);text-align:left;padding:7px 6px;border-bottom:1.5px solid var(--line)}
+table.linetab td{padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top;font-size:.84rem}
+table.linetab td.num{text-align:right;font-variant-numeric:tabular-nums}
+.origval{text-decoration:line-through;color:var(--faint);font-size:.78rem;margin-right:6px}
+.newval{font-weight:700;color:var(--amber)}
+.ovnote{font-size:.7rem;color:var(--amber);margin-top:2px}
+.editbtn{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:2px 7px;font-size:.7rem;color:var(--navy2);font-weight:600;margin-left:6px}
+.editbtn:hover{background:var(--navy3)}
+.editbox{display:flex;gap:6px;align-items:center;margin-top:6px;background:var(--amber-bg);border:1px solid #EAD3AE;border-radius:8px;padding:8px}
+.editbox input{border:1.5px solid var(--line);border-radius:6px;padding:5px 8px;font-size:.8rem}
+.editbox input.reason{flex:1}
+.editbox input.amt{width:100px}
+
+.linefoot{display:flex;justify-content:flex-end;gap:26px;padding-top:12px;margin-top:8px;border-top:2px solid var(--line)}
+.lf{text-align:right}
+.lf .k{font-size:.7rem;color:var(--muted);text-transform:uppercase}
+.lf .v{font-size:1rem;font-weight:700;font-variant-numeric:tabular-nums}
+
+.hist{border-left:2px solid var(--line);margin-left:6px;padding-left:14px;display:flex;flex-direction:column;gap:10px}
+.hist .ev{font-size:.8rem;position:relative}
+.hist .ev::before{content:'';position:absolute;left:-19px;top:4px;width:7px;height:7px;border-radius:50%;background:var(--navy2)}
+.hist .who{font-weight:600}
+.hist .tm{font-size:.7rem;color:var(--faint)}
+
+.actionbar{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+.btn{border:1.5px solid var(--line);background:var(--surface);border-radius:8px;padding:9px 16px;font-size:.85rem;font-weight:700;color:var(--ink)}
+.btn.pri{background:var(--navy);border-color:var(--navy);color:#fff}
+.btn.pri:hover{background:var(--navy2)}
+.btn.ok{color:var(--green);border-color:#BBDCC9}.btn.ok:hover{background:var(--green-bg)}
+.btn.qr{color:var(--amber);border-color:#EAD3AE}.btn.qr:hover{background:var(--amber-bg)}
+.btn.no{color:var(--red);border-color:#EBC2C2}.btn.no:hover{background:var(--red-bg)}
+.btn.claim{color:var(--purple);border-color:#D9C7EF}.btn.claim:hover{background:var(--purple-bg)}
+.btn[disabled]{opacity:.4;pointer-events:none}
+
+.inlinebox{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:12px;margin-top:10px;display:none}
+.inlinebox.show{display:block}
+.inlinebox textarea,.inlinebox input{width:100%;border:1.5px solid var(--line);border-radius:7px;padding:8px 10px;margin-top:6px}
+.inlinebox .lbl{font-size:.78rem;font-weight:600;color:var(--muted)}
+.inlinebox .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+
+.claimbanner{background:linear-gradient(120deg,var(--purple-bg),#F5EFFB);border:1px solid #D9C7EF;border-radius:10px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:14px}
+.claimbanner .days{font-size:1.4rem;font-weight:700;color:var(--purple)}
+.claimbanner .lbl{font-size:.74rem;color:var(--muted)}
+
+.closedlist{display:flex;flex-direction:column;gap:0}
+.closeditem{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:.82rem}
+.closeditem:last-child{border-bottom:0}
+.closeditem .nm{font-weight:600;flex:1}
+.closeditem .amt{font-weight:700;font-variant-numeric:tabular-nums}
+
+.toast{position:fixed;bottom:20px;right:20px;background:var(--ink);color:#fff;border-radius:9px;padding:10px 16px;font-size:.82rem;box-shadow:0 6px 20px rgba(0,0,0,.25);opacity:0;transform:translateY(8px);transition:.25s;z-index:99}
+.toast.on{opacity:1;transform:none}
+#fatalBox{display:none;background:#FBE7E7;border:1px solid #EBC2C2;color:#B91C1C;padding:14px 16px;margin:14px 24px;border-radius:10px;font-family:monospace;font-size:.8rem;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div id="fatalBox"></div>
+<div class="topbar">
+  <div class="mark">DA</div>
+  <div><h1 id="brandTitle">DAMS — Review Queue</h1><div class="sub" id="brandSub">Sunita Padhi · Accountant</div></div>
+  <div class="spacer"></div>
+  <div class="roleseg">
+    <button id="typeReceipt" class="on" onclick="setType('receipt')">Receipts</button>
+    <button id="typeExpense" onclick="setType('expense')">Expenses</button>
+  </div>
+  <div class="roleseg">
+    <button id="roleAcc" class="on" onclick="setRole('acc')">Accountant</button>
+    <button id="roleFm" onclick="setRole('fm')">Finance Manager</button>
+  </div>
+</div>
+
+<div class="shell">
+  <div class="qpane" id="qpane"></div>
+  <div class="dpane" id="dpane"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================= DATA ================= */
+const ME={acc:'Sunita Padhi',fm:'Rakesh Mishra'};
+const CLAIM_STATUSES=['Warranty','AMC','CG']; // scoped per stated assumption — flag if CG shouldn't be here
+
+let RECORDS=[
+ {id:1,type:'receipt',doc:'OOR-JUL26-R-016',br:'OOR',cust:'Naveen Khandelwal',cat:'Workshop',jc:'4009870505',invAmt:8600,status:'Hold',wf:'SUBMITTED',isClaim:false,closed:false,
+  lines:[{date:'2026-07-26',mode:'QR / UPI',amt:8600,bank:'',txn:'248155816370',remark:''}],
+  hist:[{who:'Bikram Nayak',what:'Created & submitted',tm:'26 Jul, 10:12'}]},
+
+ {id:2,type:'receipt',doc:'OOB-JUL26-R-022',br:'OOB',cust:'Kalaivani Logistics Pvt Ltd',cat:'AMC',jc:'4009877403',invAmt:23101,status:'AMC',wf:'SUBMITTED',isClaim:true,closed:false,openedOn:'2026-07-24',
+  lines:[{date:'2026-07-24',mode:'Bank',amt:23101,bank:'HDFC',txn:'HDFCH01003001122',remark:'AMC settlement NEFT'}],
+  hist:[{who:'Cashier (OOB)',what:'Created & submitted',tm:'24 Jul, 09:20'}]},
+
+ {id:3,type:'receipt',doc:'OOJ-JUL26-R-018',br:'OOJ',cust:'Aravind Traders',cat:'B2B Credit',jc:'4009895845',invAmt:44530,status:'Credit',wf:'VERIFIED',isClaim:false,closed:false,
+  lines:[{date:'2026-07-17',mode:'Credit (Due)',amt:0,bank:'',txn:'',remark:'Credit invoice — no cash at billing'}],
+  hist:[{who:'Cashier (OOJ)',what:'Created & submitted',tm:'17 Jul'},{who:'Sunita Padhi',what:'Verified',tm:'17 Jul, 11:22'}]},
+
+ {id:4,type:'receipt',doc:'OOJ-JUL26-R-019',br:'OOJ',cust:'Eicher (VE Commercial) — Warranty Claim WCL-88322',cat:'Warranty',jc:'4009902214',invAmt:6200,status:'Warranty',wf:'APPROVED',isClaim:true,closed:false,openedOn:'2026-07-15',
+  lines:[],
+  hist:[{who:'Cashier (OOJ)',what:'Claim raised — submitted to Eicher, no cash yet',tm:'15 Jul'},{who:'Sunita Padhi',what:'Verified',tm:'16 Jul'},{who:'Rakesh Mishra',what:'Approved',tm:'16 Jul'}]},
+
+ {id:6,type:'receipt',doc:'OOB-JUL26-R-020',br:'OOB',cust:'Eicher (VE Commercial) — Warranty',cat:'Warranty',jc:'4009834621',invAmt:18750,status:'Close',wf:'APPROVED',isClaim:true,closed:true,openedOn:'2026-07-10',
+  finalAmt:18750,finalOverridden:false,
+  lines:[{date:'2026-07-16',mode:'Bank',amt:18750,bank:'HDFC',txn:'NEFT2216640',remark:''}],
+  hist:[{who:'Cashier (OOB)',what:'Created & submitted',tm:'16 Jul'},{who:'Sunita Padhi',what:'Verified',tm:'16 Jul'},{who:'Rakesh Mishra',what:'Approved',tm:'16 Jul'},{who:'Rakesh Mishra',what:'Closed claim — paid in full as invoiced',tm:'16 Jul, 5:40 PM'}]},
+
+ {id:7,type:'receipt',doc:'OOR-JUL26-R-009',br:'OOR',cust:'XYZ Transport & Co — AMC',cat:'AMC',jc:'4009712233',invAmt:13000,status:'Close',wf:'APPROVED',isClaim:true,closed:true,openedOn:'2026-07-01',
+  finalAmt:12400,finalOverridden:true,finalReason:'Eicher partial settlement — remaining ₹600 written off',
+  lines:[{date:'2026-07-05',mode:'Bank',amt:12400,bank:'SBI',txn:'NEFT991002',remark:''}],
+  hist:[{who:'Cashier (OOR)',what:'Created & submitted',tm:'5 Jul'},{who:'Sunita Padhi',what:'Verified',tm:'6 Jul'},{who:'Rakesh Mishra',what:'Approved',tm:'6 Jul'},{who:'Rakesh Mishra',what:'Closed claim — accepted ₹12,400, ₹600 written off (Eicher partial settlement)',tm:'10 Jul'}]},
+
+ {id:101,type:'expense',doc:'OOR-JUL26-E-014',br:'OOR',recv:'Local Taxi Stand',jc:'4009870505',cat:'Service',dateInc:'2026-07-26',status:'Open',wf:'SUBMITTED',isClaim:false,closed:false,
+  lines:[{date:'2026-07-26',sub:'Taxi (JC)',amt:1000,mode:'Cash',bank:'',txn:'',remark:'Taxi advance for BD attend'}],
+  hist:[{who:'Bikram Nayak',what:'Created & submitted',tm:'26 Jul, 09:52'}]},
+
+ {id:102,type:'expense',doc:'OOR-JUL26-E-015',br:'OOR',recv:'Mela Committee (Sales Promo)',jc:'',cat:'Sales',dateInc:'2026-07-26',status:'Open',wf:'SUBMITTED',isClaim:false,closed:false,overLimit:true,limitAmt:5000,
+  lines:[{date:'2026-07-26',sub:'Sales Promotion',amt:7800,mode:'Cash',bank:'',txn:'',remark:'Banner printing for mela camp'}],
+  hist:[{who:'Bikram Nayak',what:'Created & submitted — above category limit',tm:'26 Jul, 10:30'}]},
+
+ {id:103,type:'expense',doc:'OOB-JUL26-E-011',br:'OOB',recv:'Cuttack Spares Transport',jc:'9800536016',cat:'Service',dateInc:'2026-07-24',status:'Open',wf:'VERIFIED',isClaim:false,closed:false,
+  lines:[{date:'2026-07-24',sub:'Spare Transport',amt:200,mode:'Cash',bank:'',txn:'',remark:'Parts from Cuttack, coolie charge'}],
+  hist:[{who:'Cashier (OOB)',what:'Created & submitted',tm:'24 Jul'},{who:'Sunita Padhi',what:'Verified',tm:'24 Jul'}]}
+];
+
+let ROLE='acc';
+let TYPE='receipt';
+let selectedId=null;
+let openLineEdit=null;   // {recordId,lineIdx}
+let openBox=null;        // {recordId,type:'query'|'reject'|'close'}
+
+function el(id){return document.getElementById(id);}
+function inr(n){return '₹'+Math.round(n||0).toLocaleString('en-IN');}
+function toast(m){const t=el('toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),2600);}
+function lineTotal(r){return r.lines.reduce((a,l)=>a+(+l.amt||0),0);}
+function daysOpen(dateStr){
+ const a=new Date(dateStr+'T00:00:00'), b=new Date('2026-07-26T00:00:00');
+ return Math.round((b-a)/86400000);
+}
+
+/* ================= ROLE / SELECTION ================= */
+function setType(t){
+ TYPE=t; selectedId=null; openLineEdit=null; openBox=null;
+ el('typeReceipt').classList.toggle('on',t==='receipt');
+ el('typeExpense').classList.toggle('on',t==='expense');
+ renderQueue(); renderDetail();
+}
+function setRole(r){
+ ROLE=r; selectedId=null; openLineEdit=null; openBox=null;
+ el('roleAcc').classList.toggle('on',r==='acc');
+ el('roleFm').classList.toggle('on',r==='fm');
+ el('brandTitle').textContent = r==='acc' ? 'DAMS — Review Queue' : 'DAMS — Approvals & Claims';
+ el('brandSub').textContent = r==='acc' ? 'Sunita Padhi · Accountant' : 'Rakesh Mishra · Finance Manager';
+ renderQueue(); renderDetail();
+}
+function selectRecord(id){ selectedId=id; openLineEdit=null; openBox=null; renderDetail(); renderQueue(); }
+
+/* ================= QUEUE PANE ================= */
+function queueGroups(){
+ const inType = r => r.type===TYPE;
+ if(ROLE==='acc'){
+  return [
+   {title:'Awaiting Your Review', items: RECORDS.filter(r=>inType(r) && r.wf==='SUBMITTED')}
+  ];
+ }
+ if(TYPE==='expense'){
+  return [
+   {title:'Awaiting Final Approval', items: RECORDS.filter(r=>inType(r) && r.wf==='VERIFIED')}
+  ];
+ }
+ return [
+  {title:'Awaiting Final Approval', items: RECORDS.filter(r=>inType(r) && r.wf==='VERIFIED')},
+  {title:'Open Warranty / AMC / CG Claims', items: RECORDS.filter(r=>inType(r) && r.isClaim && r.wf==='APPROVED' && !r.closed)},
+  {title:'Recently Closed', items: RECORDS.filter(r=>inType(r) && r.closed), plain:true}
+ ];
+}
+function renderQueue(){
+ const groups=queueGroups();
+ el('qpane').innerHTML = groups.map(g=>{
+  if(!g.items.length) return `<div class="qsection"><h4>${g.title} <span class="cnt">0</span></h4></div>`;
+  return `<div class="qsection"><h4>${g.title} <span class="cnt">${g.items.length}</span></h4></div>`
+   + g.items.map(r=>qItemHtml(r,g.plain)).join('');
+ }).join('');
+}
+function qItemHtml(r,plain){
+ const amt = r.closed ? r.finalAmt : (r.lines.length? lineTotal(r) : (r.invAmt||0));
+ const name = r.type==='receipt' ? r.cust : r.recv;
+ const hasOverride = r.lines.some(l=>l.origAmt!==undefined) || r.finalOverridden;
+ const overLimitNow = r.overLimit && lineTotal(r) > r.limitAmt;
+ return `<div class="qitem ${selectedId===r.id?'sel':''}" onclick="selectRecord(${r.id})">
+  <div class="top"><span class="doc">${r.doc}</span><span class="age">${r.br}</span></div>
+  <div class="nm">${name}</div>
+  <div class="meta">${r.cat} · <span class="amt">${inr(amt)}</span></div>
+  <div class="flags">
+   ${hasOverride?'<span class="tag tag-ov">Overridden</span>':''}
+   ${r.closed && hasOverride?'<span class="tag tag-final">Final</span>':''}
+   ${r.isClaim && !r.closed?'<span class="tag tag-claim">Claim</span>':''}
+   ${overLimitNow?'<span class="tag" style="background:var(--amber-bg);color:var(--amber)">Above Limit</span>':''}
+  </div>
+ </div>`;
+}
+
+/* ================= DETAIL PANE ================= */
+function recAmt(r){ return r.closed ? r.finalAmt : (r.lines.length ? lineTotal(r) : (r.invAmt||0)); }
+function branchBreakdown(items){
+ const counts={}; items.forEach(r=>counts[r.br]=(counts[r.br]||0)+1);
+ const max=Math.max(...Object.values(counts),1);
+ return Object.entries(counts).map(([br,n])=>`<div class="ov-branchrow"><span class="nm">${br}</span><span class="tr"><span class="fl" style="width:${Math.round(n/max*100)}%"></span></span><span class="n">${n}</span></div>`).join('');
+}
+function previewList(items,limit){
+ return items.slice(0,limit||4).map(r=>{
+  const name = r.type==='receipt' ? r.cust : r.recv;
+  return `<button type="button" class="ov-prow" onclick="selectRecord(${r.id})">
+   <span class="doc">${r.doc}</span><span class="nm">${name}</span><span class="amt">${inr(recAmt(r))}</span>
+  </button>`;
+ }).join('');
+}
+
+function renderOverview(){
+ const typeLabel = TYPE==='receipt' ? 'Receipts' : 'Expenses';
+ const roleLabel = ROLE==='acc' ? 'Accountant' : 'Finance Manager';
+ const meName = ROLE==='acc' ? ME.acc : ME.fm;
+
+ if(ROLE==='acc'){
+  const pending = RECORDS.filter(r=>r.type===TYPE && r.wf==='SUBMITTED');
+  const totalVal = pending.reduce((a,r)=>a+recAmt(r),0);
+  return `
+   <div class="ov-head"><h2>${roleLabel} Overview</h2><div class="sub">Reviewing ${typeLabel.toLowerCase()} · ${meName}</div></div>
+   <div class="ov-stat-row">
+    <div class="ov-stat"><div class="l">Awaiting Your Review</div><div class="v">${pending.length}</div><div class="s">item${pending.length===1?'':'s'}</div></div>
+    <div class="ov-stat amber"><div class="l">Total Value Pending</div><div class="v">${inr(totalVal)}</div><div class="s">across all branches</div></div>
+   </div>
+   ${pending.length?`<div class="card"><div class="hd"><h3>By Branch</h3></div><div class="bd">${branchBreakdown(pending)}</div></div>
+   <div class="card" style="margin-top:16px"><div class="hd"><h3>Needs Your Attention</h3><span class="sub">click to open</span></div><div class="bd"><div class="ov-preview">${previewList(pending)}</div></div></div>`
+   :`<div class="card"><div class="bd" style="text-align:center;color:var(--faint);font-size:.85rem">Nothing waiting on you right now — the ${typeLabel.toLowerCase()} queue is clear.</div></div>`}
+   <div class="ov-hint">Select any item from the list on the left to review it in detail.</div>`;
+ }
+
+ // FM
+ const awaiting = RECORDS.filter(r=>r.type===TYPE && r.wf==='VERIFIED');
+ const totalVal = awaiting.reduce((a,r)=>a+recAmt(r),0);
+ let claimsBlock='';
+ if(TYPE==='receipt'){
+  const openClaims = RECORDS.filter(r=>r.isClaim && r.wf==='APPROVED' && !r.closed);
+  const openClaimsVal = openClaims.reduce((a,r)=>a+recAmt(r),0);
+  const closedCount = RECORDS.filter(r=>r.type==='receipt' && r.closed).length;
+  claimsBlock = `
+   <div class="ov-stat purple"><div class="l">Open Claims</div><div class="v">${openClaims.length}</div><div class="s">${inr(openClaimsVal)} outstanding</div></div>
+   <div class="ov-stat"><div class="l">Recently Closed</div><div class="v">${closedCount}</div><div class="s">this period</div></div>`;
+ }
+ return `
+  <div class="ov-head"><h2>${roleLabel} Overview</h2><div class="sub">Reviewing ${typeLabel.toLowerCase()} · ${meName}</div></div>
+  <div class="ov-stat-row">
+   <div class="ov-stat"><div class="l">Awaiting Final Approval</div><div class="v">${awaiting.length}</div><div class="s">${inr(totalVal)} total</div></div>
+   ${claimsBlock}
+  </div>
+  ${awaiting.length?`<div class="card"><div class="hd"><h3>By Branch</h3></div><div class="bd">${branchBreakdown(awaiting)}</div></div>
+  <div class="card" style="margin-top:16px"><div class="hd"><h3>Needs Your Approval</h3><span class="sub">click to open</span></div><div class="bd"><div class="ov-preview">${previewList(awaiting)}</div></div></div>`
+  :`<div class="card"><div class="bd" style="text-align:center;color:var(--faint);font-size:.85rem">Nothing awaiting your approval right now.</div></div>`}
+  <div class="ov-hint">Select any item from the list on the left to review it in detail.</div>`;
+}
+
+function renderDetail(){
+ if(!selectedId){
+  el('dpane').innerHTML = renderOverview();
+  return;
+ }
+ const r=RECORDS.find(x=>x.id===selectedId);
+ const total=lineTotal(r);
+ const pending = (r.type==='receipt' && r.invAmt) ? Math.max(0, r.invAmt-total) : null;
+ const wfBadge = r.closed ? `<span class="badge b-CLOSED">Closed</span>` : `<span class="badge b-${r.wf}">${r.wf}</span>`;
+ const name = r.type==='receipt' ? r.cust : r.recv;
+ const overLimitNow = r.overLimit && total > r.limitAmt;
+
+ let claimBanner='';
+ if(r.type==='receipt' && r.isClaim && r.wf==='APPROVED' && !r.closed){
+  const d = daysOpen(r.openedOn||r.lines[0]?.date||'2026-07-15');
+  claimBanner = `<div class="claimbanner"><div class="days">${d}d</div><div><div class="lbl">days this claim has been open</div><div class="lbl">${r.lines.length?inr(total)+' received so far of '+inr(r.invAmt):'No payment received yet'}</div></div></div>`;
+ }
+
+ const headerFields = r.type==='receipt' ? `
+     <div class="kv"><span class="k">Category</span><span class="v">${r.cat}</span></div>
+     <div class="kv"><span class="k">Job Card</span><span class="v">${r.jc||'—'}</span></div>
+     <div class="kv"><span class="k">Branch</span><span class="v">${r.br}</span></div>
+     <div class="kv"><span class="k">Invoice Amount</span><span class="v">${inr(r.invAmt)}</span></div>` : `
+     <div class="kv"><span class="k">Expenses Category</span><span class="v">${r.cat}</span></div>
+     <div class="kv"><span class="k">Job ID / PO / SO</span><span class="v">${r.jc||'—'}</span></div>
+     <div class="kv"><span class="k">Branch</span><span class="v">${r.br}</span></div>
+     <div class="kv"><span class="k">Date of Inception</span><span class="v">${r.dateInc.slice(8)}-Jul</span></div>`;
+
+ const linesTitle = r.type==='receipt' ? 'Settlement Lines' : 'Expense Lines';
+ const emptyLinesMsg = r.type==='receipt' ? 'No payment received against this claim yet.' : 'No expense lines yet.';
+ const linesHtml = r.lines.length ? (r.type==='receipt' ? receiptLinesTableHtml(r) : expenseLinesTableHtml(r)) : `<div style="color:var(--faint);font-size:.84rem">${emptyLinesMsg}</div>`;
+ const totalLabel = r.type==='receipt' ? 'Total Received' : 'Total Expenses';
+ const totalColor = r.type==='receipt' ? 'var(--green)' : 'var(--red)';
+
+ el('dpane').innerHTML = `
+  <div class="card">
+   <div class="hd"><h3>${name}</h3><span class="sub">${r.doc}</span><span class="spacer" style="flex:1"></span>${wfBadge} <span class="badge" style="background:var(--gray-bg);color:var(--gray)">${r.status}</span></div>
+   <div class="bd">
+    ${claimBanner}
+    <div class="kvgrid">${headerFields}
+    </div>
+    ${overLimitNow?`<div class="ovnote" style="margin-top:10px">⚠ Above the ${inr(r.limitAmt)} limit for this category — requires Finance Manager approval.</div>`:''}
+   </div>
+  </div>
+
+  <div class="card">
+   <div class="hd"><h3>${linesTitle}</h3><span class="sub">${r.lines.length} line${r.lines.length===1?'':'s'}</span></div>
+   <div class="bd">
+    ${linesHtml}
+    <div class="linefoot">
+     <div class="lf"><div class="k">${totalLabel}</div><div class="v" style="color:${totalColor}">${inr(total)}</div></div>
+     ${pending!==null?`<div class="lf"><div class="k">Pending</div><div class="v" style="color:${pending>0?'var(--amber)':'var(--muted)'}">${inr(pending)}</div></div>`:''}
+    </div>
+    ${r.closed ? closedSummaryHtml(r) : ''}
+   </div>
+  </div>
+
+  <div class="card">
+   <div class="hd"><h3>History</h3></div>
+   <div class="bd"><div class="hist">${r.hist.map(h=>`<div class="ev"><span class="who">${h.who}</span> — ${h.what}<div class="tm">${h.tm}</div></div>`).join('')}</div></div>
+  </div>
+
+  ${actionBarHtml(r,total)}
+ `;
+}
+
+function receiptLinesTableHtml(r){
+ return `<table class="linetab"><thead><tr><th>Date</th><th>Mode</th><th class="num">Amount</th><th>Bank</th><th>Txn ID</th><th>Remark</th></tr></thead><tbody>
+  ${r.lines.map((l,i)=>{
+   const canEdit = ROLE==='acc' && r.wf==='SUBMITTED';
+   const editing = openLineEdit && openLineEdit.recordId===r.id && openLineEdit.lineIdx===i;
+   const amtCell = l.origAmt!==undefined
+     ? `<span class="origval">${inr(l.origAmt)}</span><span class="newval">${inr(l.amt)}</span>`
+     : inr(l.amt);
+   return `<tr>
+    <td>${l.date.slice(8)}-Jul</td><td>${l.mode}</td>
+    <td class="num">${amtCell}${canEdit?`<button type="button" class="editbtn" onclick="toggleLineEdit(${r.id},${i})">${editing?'Cancel':'Override'}</button>`:''}
+     ${l.origAmt!==undefined?`<div class="ovnote">Overridden by ${l.overriddenBy} · ${l.overrideReason}</div>`:''}
+     ${editing?`<div class="editbox"><input class="amt" type="number" id="editAmt_${i}" value="${l.amt}"><input class="reason" id="editReason_${i}" placeholder="Reason for override (required)"><button class="btn sm ok" style="padding:5px 10px;font-size:.76rem" onclick="saveLineOverride(${r.id},${i})">Save</button></div>`:''}
+    </td>
+    <td>${l.bank||'—'}</td><td style="font-family:var(--mono);font-size:.76rem">${l.txn||'—'}</td><td>${l.remark||'—'}</td>
+   </tr>`;
+  }).join('')}
+ </tbody></table>`;
+}
+
+function expenseLinesTableHtml(r){
+ return `<table class="linetab"><thead><tr><th>Date</th><th>Sub-category</th><th class="num">Amount</th><th>Mode</th><th>Bank</th><th>Txn ID</th><th>Remark</th></tr></thead><tbody>
+  ${r.lines.map((l,i)=>{
+   const canEdit = ROLE==='acc' && r.wf==='SUBMITTED';
+   const editing = openLineEdit && openLineEdit.recordId===r.id && openLineEdit.lineIdx===i;
+   const amtCell = l.origAmt!==undefined
+     ? `<span class="origval">${inr(l.origAmt)}</span><span class="newval">${inr(l.amt)}</span>`
+     : inr(l.amt);
+   return `<tr>
+    <td>${l.date.slice(8)}-Jul</td><td>${l.sub}</td>
+    <td class="num">${amtCell}${canEdit?`<button type="button" class="editbtn" onclick="toggleLineEdit(${r.id},${i})">${editing?'Cancel':'Override'}</button>`:''}
+     ${l.origAmt!==undefined?`<div class="ovnote">Overridden by ${l.overriddenBy} · ${l.overrideReason}</div>`:''}
+     ${editing?`<div class="editbox"><input class="amt" type="number" id="editAmt_${i}" value="${l.amt}"><input class="reason" id="editReason_${i}" placeholder="Reason for override (required)"><button class="btn sm ok" style="padding:5px 10px;font-size:.76rem" onclick="saveLineOverride(${r.id},${i})">Save</button></div>`:''}
+    </td>
+    <td>${l.mode}</td><td>${l.bank||'—'}</td><td style="font-family:var(--mono);font-size:.76rem">${l.txn||'—'}</td><td>${l.remark||'—'}</td>
+   </tr>`;
+  }).join('')}
+ </tbody></table>`;
+}
+
+function closedSummaryHtml(r){
+ const lineOverridden = r.lines.some(l=>l.origAmt!==undefined);
+ let note;
+ if(r.finalOverridden){
+   note = `<div class="ovnote">Overridden · Final — ${r.finalReason}</div>`;
+ } else if(lineOverridden){
+   const reasons = r.lines.filter(l=>l.origAmt!==undefined).map(l=>`${l.overriddenBy}: ${l.overrideReason}`).join('; ');
+   note = `<div class="ovnote">Includes an accountant override, accepted as final — ${reasons}</div>`;
+ } else {
+   note = `<div style="font-size:.76rem;color:var(--faint);margin-top:4px">Paid in full as invoiced, no override.</div>`;
+ }
+ return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+  <div class="kv"><span class="k">Final Amount (locked)</span><span class="v" style="font-size:1rem">${inr(r.finalAmt)}</span></div>
+  ${note}
+ </div>`;
+}
+
+/* ================= ACTION BAR ================= */
+function actionBarHtml(r,total){
+ if(r.closed){
+  return `<div class="card"><div class="bd" style="color:var(--faint);font-size:.84rem;text-align:center">This claim is closed and locked. No further changes possible.</div></div>`;
+ }
+ if(ROLE==='acc' && r.wf==='SUBMITTED'){
+  return `<div class="card"><div class="bd">
+   ${boxHtml(r,'query')}${boxHtml(r,'reject')}
+   <div class="actionbar">
+    <button class="btn qr" onclick="toggleBox(${r.id},'query')">Query</button>
+    <button class="btn no" onclick="toggleBox(${r.id},'reject')">Reject</button>
+    <button class="btn ok pri" onclick="doVerify(${r.id})">Verify</button>
+   </div></div></div>`;
+ }
+ if(ROLE==='fm' && r.wf==='VERIFIED'){
+  return `<div class="card"><div class="bd">
+   ${boxHtml(r,'query')}${boxHtml(r,'reject')}
+   <div class="actionbar">
+    <button class="btn qr" onclick="toggleBox(${r.id},'query')">Query</button>
+    <button class="btn no" onclick="toggleBox(${r.id},'reject')">Reject</button>
+    <button class="btn pri" onclick="doApprove(${r.id})">Approve</button>
+   </div></div></div>`;
+ }
+ if(ROLE==='fm' && r.isClaim && r.wf==='APPROVED' && !r.closed){
+  return `<div class="card"><div class="bd">
+   ${boxHtml(r,'close',total)}
+   <div class="actionbar"><button class="btn claim pri" onclick="toggleBox(${r.id},'close')">Close Claim</button></div>
+   </div></div>`;
+ }
+ return `<div class="card"><div class="bd" style="color:var(--faint);font-size:.84rem;text-align:center">No action needed from you right now.</div></div>`;
+}
+
+function boxHtml(r,type,total){
+ const show = openBox && openBox.recordId===r.id && openBox.type===type;
+ if(type==='query'){
+  return `<div class="inlinebox ${show?'show':''}"><div class="lbl">Question for the cashier <span style="color:var(--red)">*</span></div>
+   <textarea id="qryText" rows="2" placeholder="e.g. Amount doesn't match the invoice…"></textarea>
+   <div class="actions"><button class="btn" onclick="toggleBox(${r.id},'query')">Cancel</button><button class="btn qr" onclick="confirmQuery(${r.id})">Send Query</button></div></div>`;
+ }
+ if(type==='reject'){
+  return `<div class="inlinebox ${show?'show':''}"><div class="lbl">Reason for rejection <span style="color:var(--red)">*</span></div>
+   <textarea id="rejText" rows="2"></textarea>
+   <div class="actions"><button class="btn" onclick="toggleBox(${r.id},'reject')">Cancel</button><button class="btn no" onclick="confirmReject(${r.id})">Reject</button></div></div>`;
+ }
+ if(type==='close'){
+  return `<div class="inlinebox ${show?'show':''}"><div class="lbl">Final Amount</div>
+   <input type="number" id="closeAmt" value="${total}">
+   <div class="lbl" style="margin-top:8px">Reason <span style="color:var(--faint);font-weight:400">(required only if different from ${inr(total)})</span></div>
+   <textarea id="closeReason" rows="2" placeholder="e.g. Eicher paid partial claim, remaining written off"></textarea>
+   <div class="actions"><button class="btn" onclick="toggleBox(${r.id},'close')">Cancel</button><button class="btn claim" onclick="confirmCloseClaim(${r.id},${total})">Confirm & Close</button></div></div>`;
+ }
+ return '';
+}
+function toggleBox(id,type){
+ openBox = (openBox && openBox.recordId===id && openBox.type===type) ? null : {recordId:id,type};
+ renderDetail();
+}
+function toggleLineEdit(id,idx){
+ openLineEdit = (openLineEdit && openLineEdit.recordId===id && openLineEdit.lineIdx===idx) ? null : {recordId:id,lineIdx:idx};
+ renderDetail();
+}
+
+/* ================= ACTIONS ================= */
+function saveLineOverride(id,idx){
+ const r=RECORDS.find(x=>x.id===id); const l=r.lines[idx];
+ const newAmt=+el('editAmt_'+idx).value; const reason=el('editReason_'+idx).value.trim();
+ if(!newAmt||newAmt<=0){toast('Enter a valid amount');return;}
+ if(newAmt!==l.amt){
+  if(!reason){toast('A reason is required to override the amount');return;}
+  if(l.origAmt===undefined) l.origAmt=l.amt;
+  l.amt=newAmt; l.overriddenBy=ME.acc; l.overrideReason=reason;
+  const label = r.type==='receipt' ? 'settlement' : 'expense';
+  r.hist.push({who:ME.acc,what:`Overrode ${label} amount: ${inr(l.origAmt)} → ${inr(newAmt)} — ${reason}`,tm:'26 Jul, now'});
+  toast('Amount overridden — will show on this record permanently');
+ }
+ openLineEdit=null; renderDetail();
+}
+function doVerify(id){
+ const r=RECORDS.find(x=>x.id===id);
+ r.wf='VERIFIED';
+ r.hist.push({who:ME.acc,what:'Verified',tm:'26 Jul, now'});
+ toast(r.doc+' verified — moved to Finance Manager');
+ selectedId=null; renderQueue(); renderDetail();
+}
+function doApprove(id){
+ const r=RECORDS.find(x=>x.id===id);
+ r.wf='APPROVED';
+ r.hist.push({who:ME.fm,what:'Approved',tm:'26 Jul, now'});
+ toast(r.doc+' approved'+(r.isClaim?' — now on the open claims list':''));
+ selectedId=null; renderQueue(); renderDetail();
+}
+function confirmQuery(id){
+ const v=el('qryText').value.trim(); if(!v){toast('Please type the question');return;}
+ const r=RECORDS.find(x=>x.id===id);
+ r.wf='SUBMITTED';
+ r.hist.push({who:ROLE==='acc'?ME.acc:ME.fm,what:'Query raised: '+v,tm:'26 Jul, now'});
+ toast('Query sent back to the cashier'); openBox=null; selectedId=null; renderQueue(); renderDetail();
+}
+function confirmReject(id){
+ const v=el('rejText').value.trim(); if(!v){toast('A reason is required');return;}
+ const r=RECORDS.find(x=>x.id===id);
+ r.wf='REJECTED';
+ r.hist.push({who:ROLE==='acc'?ME.acc:ME.fm,what:'Rejected: '+v,tm:'26 Jul, now'});
+ toast(r.doc+' rejected'); openBox=null; selectedId=null; renderQueue(); renderDetail();
+}
+function confirmCloseClaim(id,computedTotal){
+ const r=RECORDS.find(x=>x.id===id);
+ const finalAmt=+el('closeAmt').value;
+ const reason=el('closeReason').value.trim();
+ if(!finalAmt&&finalAmt!==0){toast('Enter a final amount');return;}
+ const overridden = finalAmt!==computedTotal;
+ if(overridden && !reason){toast('A reason is required since the final amount differs from what was received');return;}
+ r.closed=true; r.status='Close'; r.finalAmt=finalAmt; r.finalOverridden=overridden; if(overridden) r.finalReason=reason;
+ r.hist.push({who:ME.fm,what:overridden?`Closed claim — Final ${inr(finalAmt)} (overridden: ${reason})`:`Closed claim — Final ${inr(finalAmt)}, as received`,tm:'26 Jul, now'});
+ toast(r.doc+' closed — locked'+(overridden?' (overridden final)':''));
+ openBox=null; renderQueue(); renderDetail();
+}
+
+/* ================= ERROR HARDENING ================= */
+window.onerror=function(msg,src,line,col,err){
+ const box=el('fatalBox');
+ box.style.display='block';
+ box.textContent='Something failed to load:\n'+msg+'\n(line '+line+', col '+col+')'+(err&&err.stack?'\n\n'+err.stack:'');
+ return false;
+};
+try{ renderQueue(); renderDetail(); }catch(err){
+ const box=el('fatalBox'); box.style.display='block';
+ box.textContent='Something failed to load:\n'+(err&&err.message)+'\n\n'+(err&&err.stack||'');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+/* Design system — CSS variables match mockups exactly */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --navy:     #1F3864;
+    --navy2:    #2E5395;
+    --navy3:    #EAF0FB;
+    --bg:       #F1F4F9;
+    --surface:  #FFFFFF;
+    --line:     #E3E7EE;
+    --ink:      #1A2233;
+    --muted:    #66707F;
+    --faint:    #98A1AF;
+    --green:    #1E7F4F;
+    --green-bg: #E4F3EB;
+    --amber:    #B45309;
+    --amber-bg: #FCF0DE;
+    --red:      #B91C1C;
+    --red-bg:   #FBE7E7;
+    --blue:     #2563EB;
+    --blue-bg:  #E7EEFC;
+    --gray:     #5B6470;
+    --gray-bg:  #EEF0F3;
+    --radius:   10px;
+    --shadow:   0 1px 2px rgba(16,24,40,.04), 0 2px 8px rgba(16,24,40,.05);
+    --font:     'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    font-size: 14px;
+  }
+
+  button {
+    font-family: inherit;
+    cursor: pointer;
+  }
+
+  input, select, textarea {
+    font-family: inherit;
+    font-size: 0.86rem;
+    color: var(--ink);
+  }
+}

@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DAMS — Owner Dashboard</title>
+<style>
+:root{
+  --navy:#1F3864; --navy2:#2E5395; --navy3:#EAF0FB;
+  --bg:#F1F4F9; --surface:#FFFFFF; --line:#E3E7EE;
+  --ink:#1A2233; --muted:#66707F; --faint:#98A1AF;
+  --green:#1E7F4F; --green-bg:#E4F3EB;
+  --amber:#B45309; --amber-bg:#FCF0DE;
+  --red:#B91C1C; --red-bg:#FBE7E7;
+  --teal:#0E7490; --teal-bg:#E0F1F6;
+  --gold:#B7862A;
+  --radius:14px;
+  --shadow:0 1px 2px rgba(16,24,40,.04),0 4px 16px rgba(16,24,40,.06);
+  --shadowlg:0 4px 10px rgba(16,24,40,.05),0 12px 32px rgba(16,24,40,.09);
+  --font:'Segoe UI',system-ui,-apple-system,'Helvetica Neue',Arial,sans-serif;
+  --mono:'Consolas','SF Mono',Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer}
+
+/* ================= HEADER ================= */
+.hdr{background:linear-gradient(120deg,var(--navy) 0%,#152848 100%);color:#fff;padding:20px 26px 26px}
+.hdr-top{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.hdr .mark{width:40px;height:40px;border-radius:11px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.92rem}
+.hdr h1{font-size:1.22rem;font-weight:700}
+.hdr .grp{font-size:.76rem;opacity:.75;margin-top:1px}
+.hdr .preview-pill{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:3px 11px;font-size:.68rem;letter-spacing:.05em;text-transform:uppercase;font-weight:600}
+.hdr-spacer{margin-left:auto}
+.owner-chip{display:flex;align-items:center;gap:9px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:5px 14px 5px 5px}
+.owner-chip .av{width:26px;height:26px;border-radius:50%;background:#fff;color:var(--navy);display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700}
+.owner-chip span{font-size:.8rem;font-weight:600}
+
+.hdr-controls{display:flex;align-items:center;gap:12px;margin-top:18px;flex-wrap:wrap}
+.seg{display:flex;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:3px;gap:2px}
+.seg button{border:0;background:none;color:rgba(255,255,255,.8);padding:7px 14px;border-radius:8px;font-size:.82rem;font-weight:600}
+.seg button.on{background:#fff;color:var(--navy)}
+.period-note{font-size:.78rem;color:rgba(255,255,255,.65)}
+
+/* ================= LAYOUT ================= */
+.wrap{max-width:1180px;margin:0 auto;padding:22px 22px 60px}
+.grid2{display:grid;grid-template-columns:1.55fr 1fr;gap:16px}
+.grid2b{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:880px){.grid2,.grid2b{grid-template-columns:1fr}}
+
+/* ================= CARD ================= */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.card .hd{padding:15px 19px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.card .hd h3{font-size:.98rem;font-weight:700}
+.card .hd .sub{font-size:.76rem;color:var(--muted)}
+.card .bd{padding:18px 19px}
+
+/* ================= KPI STAT ROW ================= */
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:-38px 0 18px}
+@media(max-width:880px){.kpi-row{grid-template-columns:repeat(2,1fr)}}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadowlg);padding:17px 19px;text-align:left;border-top:3px solid transparent;opacity:0;animation:riseIn .45s ease forwards}
+.kpi:nth-child(1){animation-delay:.02s}.kpi:nth-child(2){animation-delay:.08s}.kpi:nth-child(3){animation-delay:.14s}.kpi:nth-child(4){animation-delay:.2s}
+@keyframes riseIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+button.kpi{transition:transform .12s, box-shadow .12s}
+button.kpi:hover{transform:translateY(-2px);box-shadow:0 6px 14px rgba(16,24,40,.07),0 16px 36px rgba(16,24,40,.1)}
+.kpi.c-green{border-top-color:var(--green)} .kpi.c-red{border-top-color:var(--red)}
+.kpi.c-navy{border-top-color:var(--navy2)} .kpi.c-amber{border-top-color:var(--amber)}
+.kpi .lb{font-size:.74rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.kpi .vl{font-size:1.62rem;font-weight:700;margin-top:5px;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.kpi .sb{font-size:.76rem;color:var(--faint);margin-top:3px}
+.kpi .sb b{color:var(--muted)}
+.kpi .tap{font-size:.68rem;color:var(--navy2);font-weight:700;margin-top:6px;opacity:0;transition:.15s}
+button.kpi:hover .tap{opacity:1}
+
+/* ================= SVG TREND CHART ================= */
+.trendwrap{position:relative}
+.trend-meta{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+.trend-meta .big{font-size:1.5rem;font-weight:700}
+.trend-meta .lbl{font-size:.78rem;color:var(--muted)}
+svg.chart{width:100%;height:auto;display:block;overflow:visible}
+.axis-x{display:flex;margin-top:4px}
+.axis-x span{flex:1;text-align:center;font-size:.68rem;color:var(--faint)}
+
+/* ================= DONUT ================= */
+.donut-row{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.legend{display:flex;flex-direction:column;gap:10px;flex:1;min-width:150px}
+.leg-item{display:flex;align-items:center;gap:9px;font-size:.85rem}
+.leg-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.leg-item .nm{flex:1;color:var(--muted)}
+.leg-item .amt{font-weight:700;font-variant-numeric:tabular-nums}
+.leg-item .pct{color:var(--faint);font-size:.76rem;width:38px;text-align:right}
+
+/* ================= HORIZONTAL BARS ================= */
+.hbar-row{display:flex;align-items:center;gap:10px;margin-bottom:11px}
+.hbar-row:last-child{margin-bottom:0}
+.hbar-row .nm{width:92px;font-size:.82rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
+.hbar-row .tr{flex:1;background:var(--bg);border-radius:6px;height:16px;overflow:hidden}
+.hbar-row .fl{height:100%;background:linear-gradient(90deg,var(--navy2),var(--navy));border-radius:6px;width:0;transition:width .6s cubic-bezier(.2,.8,.3,1)}
+.hbar-row .v{width:82px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700;font-size:.83rem;flex-shrink:0}
+
+/* ================= BRANCH COMPARISON ================= */
+.btable{width:100%;border-collapse:collapse}
+.btable th{font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+.btable th.num,.btable td.num{text-align:right}
+.btable td{padding:12px 10px;border-bottom:1px solid var(--line);font-size:.87rem}
+.btable tr:last-child td{border-bottom:0}
+.btable tr.branchrow{cursor:pointer;transition:.12s}
+.btable tr.branchrow:hover{background:#FAFBFD}
+.btable tr.sel{background:var(--navy3)}
+.btable .bname{font-weight:700;display:flex;align-items:center;gap:8px}
+.btable .bdot{width:8px;height:8px;border-radius:50%}
+.amt-num{font-variant-numeric:tabular-nums;font-weight:600}
+.chip-status{display:inline-flex;align-items:center;gap:5px;font-size:.74rem;font-weight:700;padding:3px 9px;border-radius:999px}
+.chip-clean{background:var(--green-bg);color:var(--green)}
+.chip-warn{background:var(--amber-bg);color:var(--amber)}
+
+/* ================= OUTSTANDING ================= */
+.out-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px dashed var(--line);cursor:pointer}
+.out-row:last-child{border-bottom:0}
+.out-row:hover .out-name{color:var(--navy2)}
+.out-row .ic{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8rem;flex-shrink:0}
+.out-b2b .ic{background:var(--teal-bg);color:var(--teal)}
+.out-jc .ic{background:var(--amber-bg);color:var(--amber)}
+.out-wty .ic{background:#EFE7FB;color:#6B3FA0}
+.out-row .tx{flex:1;min-width:0}
+.out-name{font-size:.87rem;font-weight:600;transition:.12s}
+.out-sub{font-size:.76rem;color:var(--faint);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.out-row .amt{font-weight:700;font-variant-numeric:tabular-nums;font-size:.92rem;white-space:nowrap}
+.out-total{display:flex;justify-content:space-between;padding-top:12px;margin-top:4px;border-top:2px solid var(--line);font-size:.9rem}
+.out-total b{font-size:1.05rem}
+
+/* ================= ACTIVITY FEED ================= */
+.feed{display:flex;flex-direction:column;gap:0}
+.fitem{display:flex;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+.fitem:last-child{border-bottom:0}
+.fitem .dot{width:8px;height:8px;border-radius:50%;margin-top:6px;flex-shrink:0}
+.fitem .tx{flex:1;font-size:.85rem;line-height:1.4}
+.fitem .tx b{font-weight:600}
+.fitem .meta{font-size:.74rem;color:var(--faint);margin-top:2px}
+.fitem .amt{font-weight:700;color:var(--ink)}
+
+/* ================= MODAL ================= */
+.modal-bg{position:fixed;inset:0;background:rgba(16,24,40,.5);display:none;align-items:flex-start;justify-content:center;z-index:80;padding:0;overflow-y:auto}
+.modal-bg.on{display:flex}
+.modal{background:var(--surface);width:100%;max-width:640px;margin:0 auto;min-height:100vh;padding:0}
+@media(min-width:700px){.modal-bg{align-items:center;padding:24px}.modal{border-radius:16px;min-height:0;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)}}
+.modal-hd{position:sticky;top:0;background:var(--surface);padding:18px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;z-index:2}
+.modal-hd h3{font-size:1.05rem}
+.modal-hd .sub{font-size:.78rem;color:var(--muted)}
+.modal-close{margin-left:auto;width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--surface);font-size:1.1rem;color:var(--muted)}
+.modal-bd{padding:6px 22px 24px}
+table.mtable{width:100%;border-collapse:collapse;font-size:.85rem}
+table.mtable th{font-size:.68rem;text-transform:uppercase;color:var(--faint);text-align:left;padding:9px 8px;border-bottom:1px solid var(--line)}
+table.mtable td{padding:10px 8px;border-bottom:1px solid var(--line)}
+table.mtable td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.mbadge{font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:999px}
+.mb-a{background:var(--green-bg);color:var(--green)} .mb-v{background:var(--teal-bg);color:var(--teal)}
+.mb-s{background:#E7EEFC;color:#2563EB} .mb-q{background:var(--amber-bg);color:var(--amber)}
+
+#fatalBox{display:none;background:#FBE7E7;border:1px solid #EBC2C2;color:#B91C1C;padding:14px 16px;margin:14px;border-radius:10px;font-family:monospace;font-size:.8rem;white-space:pre-wrap}
+.footnote{text-align:center;font-size:.76rem;color:var(--faint);margin-top:10px}
+
+/* ================= TABS + PAGES ================= */
+.tabbar{background:var(--surface);border-bottom:1px solid var(--line);padding:0 26px;display:flex;gap:4px}
+.tabbtn{border:0;background:none;padding:13px 18px;font-size:.86rem;font-weight:600;color:var(--muted);border-bottom:2.5px solid transparent;margin-bottom:-1px}
+.tabbtn.on{color:var(--navy);border-bottom-color:var(--navy)}
+.tabbtn:hover{color:var(--navy2)}
+.page{display:none}
+.page.on{display:block}
+
+/* ================= TEAM & BRANCHES ================= */
+.adminwrap{max-width:1000px;margin:0 auto;padding:22px 22px 60px}
+.adminstat{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+@media(max-width:760px){.adminstat{grid-template-columns:repeat(2,1fr)}}
+.astat{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px}
+.astat .l{font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;color:var(--faint)}
+.astat .v{font-size:1.25rem;font-weight:700;margin-top:3px}
+
+table.atable{width:100%;border-collapse:collapse;font-size:.87rem}
+table.atable th{font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
+table.atable td{padding:11px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.atable tr:last-child td{border-bottom:0}
+.rolebadge{display:inline-block;font-size:.7rem;font-weight:700;padding:3px 10px;border-radius:999px}
+.rb-CASHIER{background:var(--blue-bg);color:var(--blue)}
+.rb-ACCOUNTANT{background:var(--teal-bg);color:var(--teal)}
+.rb-FM{background:#EFE7FB;color:#6B3FA0}
+.rb-OWNER{background:var(--green-bg);color:var(--green)}
+.rb-ADMIN{background:var(--gray-bg);color:var(--gray)}
+.branchchip{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:1px 8px;font-size:.76rem;margin-right:4px}
+.statustoggle{border:1.5px solid var(--line);border-radius:999px;padding:3px 11px;font-size:.72rem;font-weight:700;background:var(--surface)}
+.statustoggle.active{color:var(--green);border-color:#BBDCC9;background:var(--green-bg)}
+.statustoggle.inactive{color:var(--faint);border-color:var(--line)}
+.avchip{width:30px;height:30px;border-radius:8px;background:var(--navy3);color:var(--navy);display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:.72rem;margin-right:9px;vertical-align:middle}
+.linkbtn2{border:0;background:none;color:var(--navy2);font-weight:700;font-size:.78rem}
+.linkbtn2:hover{text-decoration:underline}
+
+/* ---- modal form fields ---- */
+.mfield{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.mfield label{font-size:.78rem;font-weight:600;color:var(--muted)}
+.mfield label .req{color:var(--red)}
+.mfield input,.mfield select{border:1.5px solid var(--line);border-radius:8px;padding:9px 11px;background:var(--surface);font-size:.86rem}
+.mfield input:focus,.mfield select:focus{outline:none;border-color:var(--navy2);box-shadow:0 0 0 3px var(--navy3)}
+.roleoptrow{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.roleopt{border:1.5px solid var(--line);border-radius:8px;padding:9px 10px;font-size:.82rem;font-weight:600;color:var(--ink);text-align:left}
+.roleopt.on{background:var(--navy3);border-color:var(--navy2);color:var(--navy)}
+.branchcheck{display:flex;align-items:center;gap:8px;padding:7px 0;font-size:.85rem}
+.branchcheck input{width:16px;height:16px}
+.allbranchnote{background:var(--bg);border:1px dashed var(--line);border-radius:8px;padding:10px 12px;font-size:.8rem;color:var(--muted)}
+.mfoot{display:flex;justify-content:flex-end;gap:10px;padding-top:14px;margin-top:6px;border-top:1px solid var(--line)}
+.mbtn{border:1.5px solid var(--line);background:var(--surface);border-radius:8px;padding:9px 16px;font-size:.85rem;font-weight:700;color:var(--ink)}
+.mbtn.pri{background:var(--navy);border-color:var(--navy);color:#fff}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--ink);color:#fff;border-radius:9px;padding:10px 16px;font-size:.82rem;box-shadow:0 6px 20px rgba(0,0,0,.25);opacity:0;transform:translateY(8px);transition:.25s;z-index:99;pointer-events:none}
+.toast.on{opacity:1;transform:none}
+</style>
+</head>
+<body>
+<div id="fatalBox"></div>
+<div class="hdr">
+  <div class="hdr-top">
+    <div class="mark">DA</div>
+    <div><h1>DAMS Owner Dashboard</h1><div class="grp">Eicher Truck Dealership Group · Jeypore · Berhampur · Rayagada</div></div>
+    <span class="preview-pill">Preview · Sample Data</span>
+    <div class="hdr-spacer"></div>
+    <div class="owner-chip"><div class="av">OS</div><span>Owner</span></div>
+  </div>
+  <div class="hdr-controls">
+    <div class="seg" id="branchSeg"></div>
+    <div class="seg" id="periodSeg"></div>
+    <div class="period-note" id="periodNote"></div>
+  </div>
+</div>
+
+<div class="tabbar">
+  <button class="tabbtn on" id="tabDash" onclick="setTab('dashboard')">Dashboard</button>
+  <button class="tabbtn" id="tabTeam" onclick="setTab('team')">Team & Branches</button>
+</div>
+
+<div class="page on" id="pageDashboard">
+<div class="wrap">
+  <div class="kpi-row" id="kpiRow"></div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="hd"><h3>Collections Trend</h3><span class="sub">last 14 days</span></div>
+      <div class="bd">
+        <div class="trendwrap">
+          <div class="trend-meta"><div><div class="big" id="trendBig"></div><div class="lbl" id="trendLbl">today so far</div></div></div>
+          <div id="trendChart"></div>
+          <div class="axis-x" id="trendAxis"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="hd"><h3>Collections by Mode</h3><span class="sub" id="donutSub">month to date</span></div>
+      <div class="bd">
+        <div class="donut-row">
+          <div id="donutChart"></div>
+          <div class="legend" id="donutLegend"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="hd"><h3>Branch Comparison</h3><span class="sub">tap a branch to filter everything above</span></div>
+    <div class="bd" style="overflow-x:auto">
+      <table class="btable">
+        <thead><tr><th>Branch</th><th class="num">Collections MTD</th><th class="num">Expenses MTD</th><th class="num">Cash in Hand</th><th>Last Closed</th><th class="num">Pending</th></tr></thead>
+        <tbody id="branchTbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid2b" style="margin-top:16px">
+    <div class="card">
+      <div class="hd"><h3>Expenses by Department</h3><span class="sub">month to date</span></div>
+      <div class="bd" id="deptBars"></div>
+    </div>
+    <div class="card">
+      <div class="hd"><h3>Money Still to Come</h3><span class="sub">tap a row for details</span></div>
+      <div class="bd" id="outstandingBd"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="hd"><h3>Recent Activity</h3><span class="sub">live workflow feed</span></div>
+    <div class="bd"><div class="feed" id="activityFeed"></div></div>
+  </div>
+
+  <div class="footnote">All figures are sample data for design review · Rayagada · Berhampur · Jeypore</div>
+</div>
+</div>
+
+<div class="page" id="pageTeam">
+<div class="adminwrap">
+  <div class="adminstat" id="adminStatRow"></div>
+
+  <div class="card">
+    <div class="hd"><h3>Branches</h3><span class="sub" id="branchCountSub"></span><span class="hdr-spacer" style="flex:1"></span>
+     <button class="mbtn pri" onclick="openBranchModal()">＋ Add Branch</button></div>
+    <div class="bd" style="overflow-x:auto">
+     <table class="atable"><thead><tr><th>Branch</th><th>Code</th><th class="num">Users Assigned</th><th>Status</th><th></th></tr></thead>
+      <tbody id="branchAdminTbody"></tbody></table>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="hd"><h3>Users</h3><span class="sub" id="userCountSub"></span><span class="hdr-spacer" style="flex:1"></span>
+     <button class="mbtn pri" onclick="openUserModal(null)">＋ Add User</button></div>
+    <div class="bd" style="overflow-x:auto">
+     <table class="atable"><thead><tr><th>User</th><th>Role</th><th>Branch Access</th><th>Status</th><th></th></tr></thead>
+      <tbody id="userAdminTbody"></tbody></table>
+    </div>
+  </div>
+  <div class="footnote">Deactivating a user keeps their history intact — it does not delete past entries.</div>
+</div>
+</div>
+
+<div class="modal-bg" id="modalBg"><div class="modal" id="modalBox"></div></div>
+<div class="toast" id="toastBox"></div>
+
+<script>
+/* ================= DATA ================= */
+const BR=[
+ {id:'OOJ',name:'Jeypore',color:'#B7862A'},
+ {id:'OOB',name:'Berhampur',color:'#0E7490'},
+ {id:'OOR',name:'Rayagada',color:'#2E5395'}
+];
+const MTD=[
+ {id:'OOJ',col:355000,exp:38500,cash:11260,lastClosed:'20 Jul',variance:'1-day gap',clean:false,pending:2,
+   trend:[11200,9800,14500,12100,16800,10900,15200,13600,17900,14200,19500,15800,12600,13200],
+   mode:{Cash:71000,'QR / UPI':189000,Bank:95000}, dept:{Service:22400,Sales:12100,Showroom:5200,Finance:1500},
+   today:{col:13200,exp:4100}},
+ {id:'OOB',col:612000,exp:58200,cash:8420,lastClosed:'22 Jul',variance:'Clean',clean:true,pending:1,
+   trend:[19500,26800,22100,31500,28900,24200,33800,20100,29500,35200,26800,32100,28400,24500],
+   mode:{Cash:96000,'QR / UPI':210000,Bank:306000}, dept:{Service:31000,Sales:16800,Showroom:8900,Finance:1500},
+   today:{col:24500,exp:6200}},
+ {id:'OOR',col:486000,exp:64500,cash:16139,lastClosed:'21 Jul',variance:'₹100 explained',clean:false,pending:3,
+   trend:[16800,14200,21000,17500,23000,19800,26500,15900,22100,24800,19200,27500,21800,18600],
+   mode:{Cash:138000,'QR / UPI':254000,Bank:94000}, dept:{Service:38200,Sales:14100,Showroom:9700,Finance:2500},
+   today:{col:18600,exp:8800}}
+];
+const TRENDLBL=['9','10','11','12','13','14','15','16','17','18','19','20','21','22'];
+const OUTSTANDING=[
+ {type:'b2b',name:'Aravind Traders',sub:'AP39UM4519 · Jeypore · Credit Invoice',amt:44530,doc:'OOJ-JUL26-R-018',br:'OOJ'},
+ {type:'jc',name:'Sumati Sahoo',sub:'OD05CA4177 · Rayagada · Job 4009941587',amt:3133,inv:15431,rec:12298,br:'OOR'},
+ {type:'jc',name:'Manoj Transport & Co',sub:'Berhampur · Job 9800536016',amt:2200,inv:9600,rec:7400,br:'OOB'},
+ {type:'jc',name:'Suresh Mohapatra',sub:'OD18J4563 · Rayagada · Job 4009690979 · Queried',amt:500,inv:24500,rec:24000,br:'OOR'},
+ {type:'wty',name:'Warranty claim WCL-88322',sub:'Jeypore · Submitted to Eicher, awaiting reimbursement',amt:6200,br:'OOJ'}
+];
+const ACTIVITY=[
+ {who:'Rakesh Mishra',what:'approved',doc:'OOB-JUL26-R-021',desc:'AMC receipt',amt:23101,tm:'10:05 AM',br:'OOB',c:'var(--green)'},
+ {who:'Sunita Padhi',what:'verified',doc:'OOJ-JUL26-R-018',desc:'B2B credit — Aravind Traders',amt:44530,tm:'11:22 AM',br:'OOJ',c:'var(--teal)'},
+ {who:'Sunita Padhi',what:'queried',doc:'OOR-JUL26-R-013',desc:'₹500 short of invoice amount',amt:24000,tm:'Yesterday, 3:34 PM',br:'OOR',c:'var(--amber)'},
+ {who:'Bikram Nayak',what:'submitted',doc:'OOR-JUL26-R-016',desc:'Workshop receipt',amt:8600,tm:'10:12 AM',br:'OOR',c:'#2563EB'},
+ {who:'Rakesh Mishra',what:'approved',doc:'OOJ-JUL26-E-009',desc:'Daily wages',amt:1600,tm:'Yesterday',br:'OOJ',c:'var(--green)'},
+ {who:'Cashier (OOR)',what:'closed cash for',doc:'21 Jul',desc:'₹100 variance — explained',amt:null,tm:'Yesterday, 8:10 PM',br:'OOR',c:'var(--amber)'},
+ {who:'System',what:'flagged',doc:'Jeypore cash',desc:'not closed since 20 Jul',amt:null,tm:'Today',br:'OOJ',c:'var(--red)'}
+];
+
+let state={branch:'ALL',period:'mtd'};
+function el(id){return document.getElementById(id);}
+function inr(n){return '₹'+Math.round(n).toLocaleString('en-IN');}
+function toast(m){const t=el('toastBox');if(!t)return;t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),2600);}
+function branchName(id){return id==='ALL'?'All branches':BR.find(b=>b.id===id).name;}
+
+/* ================= TABS ================= */
+function setTab(t){
+ el('tabDash').classList.toggle('on',t==='dashboard');
+ el('tabTeam').classList.toggle('on',t==='team');
+ el('pageDashboard').classList.toggle('on',t==='dashboard');
+ el('pageTeam').classList.toggle('on',t==='team');
+ if(t==='team') renderAdmin();
+ window.scrollTo(0,0);
+}
+
+/* ================= TEAM & BRANCHES — DATA ================= */
+const ROLES=[
+ {k:'CASHIER',label:'Cashier',branchMode:'single'},
+ {k:'ACCOUNTANT',label:'Accountant',branchMode:'multi'},
+ {k:'FM',label:'Finance Manager',branchMode:'all'},
+ {k:'OWNER',label:'Owner',branchMode:'all'},
+ {k:'ADMIN',label:'Admin',branchMode:'all'}
+];
+function roleInfo(k){ return ROLES.find(r=>r.k===k); }
+
+let BRANCHES=[
+ {id:'OOJ',name:'Jeypore',code:'OOJ',status:'Active'},
+ {id:'OOB',name:'Berhampur',code:'OOB',status:'Active'},
+ {id:'OOR',name:'Rayagada',code:'OOR',status:'Active'}
+];
+let USERS=[
+ {id:1,name:'Bikram Nayak',phone:'',role:'CASHIER',branches:['OOR'],status:'Active'},
+ {id:2,name:'Sunita Padhi',phone:'',role:'ACCOUNTANT',branches:['OOJ','OOB','OOR'],status:'Active'},
+ {id:3,name:'Rakesh Mishra',phone:'',role:'FM',branches:'ALL',status:'Active'},
+ {id:4,name:'Owner',phone:'',role:'OWNER',branches:'ALL',status:'Active'},
+ {id:5,name:'Admin',phone:'',role:'ADMIN',branches:'ALL',status:'Active'}
+];
+let editingUserId=null;
+let editingBranchId=null;
+
+function initials(name){return name.split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase();}
+function usersOnBranch(bid){ return USERS.filter(u=>u.branches==='ALL' || (Array.isArray(u.branches)&&u.branches.includes(bid))).length; }
+function branchLabel(u){ return u.branches==='ALL' ? 'All Branches' : u.branches.map(b=>BRANCHES.find(x=>x.id===b)?.code||b).join(', '); }
+
+/* ================= AGGREGATION ================= */
+function activeBranches(){ return state.branch==='ALL' ? MTD : MTD.filter(b=>b.id===state.branch); }
+function sumField(list,f){ return list.reduce((a,b)=>a+b[f],0); }
+function periodCol(b){ return state.period==='today' ? b.today.col : b.col; }
+function periodExp(b){ return state.period==='today' ? b.today.exp : b.exp; }
+function totals(){
+ const list=activeBranches();
+ const col=list.reduce((a,b)=>a+periodCol(b),0);
+ const exp=list.reduce((a,b)=>a+periodExp(b),0);
+ const cash=list.reduce((a,b)=>a+b.cash,0);
+ const pending=list.reduce((a,b)=>a+b.pending,0);
+ return {col,exp,net:col-exp,cash,pending};
+}
+function trendSeries(){
+ const list=activeBranches();
+ const days=14;
+ const arr=new Array(days).fill(0);
+ list.forEach(b=>b.trend.forEach((v,i)=>arr[i]+=v));
+ return arr;
+}
+function modeTotals(){
+ const list=activeBranches();
+ const out={'Cash':0,'QR / UPI':0,'Bank':0};
+ list.forEach(b=>Object.entries(b.mode).forEach(([k,v])=>out[k]+=v));
+ return out;
+}
+function deptTotals(){
+ const list=activeBranches();
+ const out={Service:0,Sales:0,Showroom:0,Finance:0};
+ list.forEach(b=>Object.entries(b.dept).forEach(([k,v])=>out[k]+=v));
+ return out;
+}
+function outstandingFiltered(){
+ return state.branch==='ALL' ? OUTSTANDING : OUTSTANDING.filter(o=>o.br===state.branch);
+}
+function activityFiltered(){
+ return state.branch==='ALL' ? ACTIVITY : ACTIVITY.filter(a=>a.br===state.branch);
+}
+
+/* ================= CONTROLS ================= */
+function renderControls(){
+ el('branchSeg').innerHTML = `<button class="${state.branch==='ALL'?'on':''}" onclick="setBranch('ALL')">All Branches</button>`
+   + BR.map(b=>`<button class="${state.branch===b.id?'on':''}" onclick="setBranch('${b.id}')">${b.name}</button>`).join('');
+ el('periodSeg').innerHTML = ['today','mtd'].map(p=>`<button class="${state.period===p?'on':''}" onclick="setPeriod('${p}')">${p==='today'?'Today':'Month to Date'}</button>`).join('');
+ el('periodNote').textContent = state.period==='today' ? '22 July 2026' : '1–22 July 2026 (22 days)';
+}
+function setBranch(b){ state.branch=b; renderAll(); }
+function setPeriod(p){ state.period=p; renderAll(); }
+
+/* ================= KPI ROW (with count-up) ================= */
+let countTimers=[];
+function countUp(elm,to,prefix){
+ const dur=650, start=performance.now(), from=0;
+ function step(now){
+   const t=Math.min(1,(now-start)/dur);
+   const eased=1-Math.pow(1-t,3);
+   elm.textContent=prefix+Math.round(from+(to-from)*eased).toLocaleString('en-IN');
+   if(t<1) requestAnimationFrame(step);
+ }
+ requestAnimationFrame(step);
+}
+function renderKpis(){
+ const t=totals();
+ const pname=state.period==='today'?'today':'this month';
+ el('kpiRow').innerHTML=`
+  <button class="kpi c-green" onclick="openModal('col')">
+    <div class="lb">Collections</div><div class="vl" id="kCol">₹0</div>
+    <div class="sb">${branchName(state.branch)} · ${pname}</div><div class="tap">Tap to view →</div></button>
+  <button class="kpi c-red" onclick="openModal('exp')">
+    <div class="lb">Expenses</div><div class="vl" id="kExp">₹0</div>
+    <div class="sb">excl. bank deposits</div><div class="tap">Tap to view →</div></button>
+  <div class="kpi c-navy">
+    <div class="lb">Cash in Hand</div><div class="vl" id="kCash">₹0</div>
+    <div class="sb" id="kCashSub">—</div></div>
+  <button class="kpi c-amber" onclick="openModal('pending')">
+    <div class="lb">Pending Approvals</div><div class="vl" id="kPend">0</div>
+    <div class="sb">oldest ~7 hrs</div><div class="tap">Tap to view →</div></button>`;
+ countTimers.forEach(clearTimeout);
+ countUp(el('kCol'),t.col,'₹');
+ countUp(el('kExp'),t.exp,'₹');
+ countUp(el('kCash'),t.cash,'₹');
+ countUp(el('kPend'),t.pending,'');
+ el('kCashSub').innerHTML = state.branch==='ALL'
+   ? `across ${MTD.length} branches`
+   : `last closed <b>${MTD.find(b=>b.id===state.branch).lastClosed}</b>`;
+}
+
+/* ================= SVG TREND (AREA) CHART ================= */
+function renderTrend(){
+ const data=trendSeries();
+ const max=Math.max(...data)*1.15, min=0;
+ const w=560,h=150,pad=6;
+ const stepX=(w-pad*2)/(data.length-1);
+ const pts=data.map((v,i)=>{
+   const x=pad+i*stepX;
+   const y=pad+(h-pad*2)*(1-(v-min)/(max-min));
+   return [x,y];
+ });
+ const lineD=pts.map((p,i)=>(i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+ const areaD=lineD+` L${pts[pts.length-1][0].toFixed(1)},${h-pad} L${pts[0][0].toFixed(1)},${h-pad} Z`;
+ const last=pts[pts.length-1];
+ el('trendChart').innerHTML=`
+  <svg class="chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+   <defs><linearGradient id="tg" x1="0" y1="0" x2="0" y2="1">
+     <stop offset="0%" stop-color="#2E5395" stop-opacity="0.28"/>
+     <stop offset="100%" stop-color="#2E5395" stop-opacity="0.02"/>
+   </linearGradient></defs>
+   <path d="${areaD}" fill="url(#tg)" stroke="none"/>
+   <path d="${lineD}" fill="none" stroke="#2E5395" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+   <circle cx="${last[0]}" cy="${last[1]}" r="4.5" fill="#1F3864" stroke="#fff" stroke-width="2"/>
+  </svg>`;
+ el('trendAxis').innerHTML = TRENDLBL.map(l=>`<span>${l}</span>`).join('');
+ const t=totals();
+ el('trendBig').textContent = inr(state.period==='today'?t.col:data[data.length-1]);
+ el('trendLbl').textContent = `${branchName(state.branch)} · today's collection`;
+}
+
+/* ================= DONUT (settlement mode) ================= */
+function renderDonut(){
+ const m=modeTotals();
+ const total=Object.values(m).reduce((a,b)=>a+b,0)||1;
+ const colors={'Cash':'#2E5395','QR / UPI':'#1E7F4F','Bank':'#B45309'};
+ const r=52,cx=64,cy=64,circ=2*Math.PI*r;
+ let offset=0;
+ const segs=Object.entries(m).map(([k,v])=>{
+   const frac=v/total, dash=frac*circ;
+   const seg=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${colors[k]}" stroke-width="16"
+     stroke-dasharray="${dash.toFixed(2)} ${(circ-dash).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}"
+     transform="rotate(-90 ${cx} ${cy})"/>`;
+   offset+=dash;
+   return seg;
+ }).join('');
+ el('donutChart').innerHTML=`<svg width="128" height="128" viewBox="0 0 128 128">${segs}
+   <circle cx="${cx}" cy="${cy}" r="34" fill="#fff"/>
+   <text x="${cx}" y="${cy-3}" text-anchor="middle" font-size="9" fill="#98A1AF" font-family="inherit">TOTAL</text>
+   <text x="${cx}" y="${cy+11}" text-anchor="middle" font-size="11" font-weight="700" fill="#1A2233" font-family="inherit">${(total/1000).toFixed(0)}k</text>
+  </svg>`;
+ el('donutLegend').innerHTML = Object.entries(m).map(([k,v])=>`
+   <div class="leg-item"><span class="leg-dot" style="background:${colors[k]}"></span><span class="nm">${k}</span><span class="amt">${inr(v)}</span><span class="pct">${Math.round(v/total*100)}%</span></div>`).join('');
+ el('donutSub').textContent = state.period==='today' ? "today's mode split" : 'month to date';
+}
+
+/* ================= DEPARTMENT BARS ================= */
+function renderDept(){
+ const d=deptTotals();
+ const max=Math.max(...Object.values(d),1);
+ el('deptBars').innerHTML = Object.entries(d).map(([k,v])=>`
+   <div class="hbar-row"><span class="nm">${k}</span><span class="tr"><span class="fl" data-w="${Math.round(v/max*100)}"></span></span><span class="v">${inr(v)}</span></div>`).join('');
+ requestAnimationFrame(()=>{document.querySelectorAll('#deptBars .fl').forEach(b=>b.style.width=b.dataset.w+'%');});
+}
+
+/* ================= BRANCH TABLE ================= */
+function renderBranchTable(){
+ el('branchTbody').innerHTML = MTD.map(b=>{
+   const meta=BR.find(x=>x.id===b.id);
+   const sel = state.branch===b.id;
+   return `<tr class="branchrow ${sel?'sel':''}" onclick="setBranch('${b.id}')">
+    <td class="bname"><span class="bdot" style="background:${meta.color}"></span>${meta.name}</td>
+    <td class="num amt-num">${inr(b.col)}</td>
+    <td class="num amt-num">${inr(b.exp)}</td>
+    <td class="num amt-num">${inr(b.cash)}</td>
+    <td>${b.lastClosed} ${b.clean?`<span class="chip-status chip-clean">Clean</span>`:`<span class="chip-status chip-warn">${b.variance}</span>`}</td>
+    <td class="num amt-num">${b.pending}</td>
+   </tr>`;
+ }).join('');
+}
+
+/* ================= OUTSTANDING ================= */
+function renderOutstanding(){
+ const list=outstandingFiltered();
+ const total=list.reduce((a,o)=>a+o.amt,0);
+ if(!list.length){ el('outstandingBd').innerHTML='<div style="text-align:center;color:var(--faint);padding:20px;font-size:.85rem">Nothing outstanding for this branch.</div>'; return; }
+ const icon={b2b:'B2B',jc:'JC',wty:'WTY'};
+ const cls={b2b:'out-b2b',jc:'out-jc',wty:'out-wty'};
+ el('outstandingBd').innerHTML = list.map((o,i)=>`
+   <div class="out-row" onclick="openOutstanding(${i})">
+    <div class="ic ${cls[o.type]}">${icon[o.type]}</div>
+    <div class="tx"><div class="out-name">${o.name}</div><div class="out-sub">${o.sub}</div></div>
+    <div class="amt">${inr(o.amt)}</div>
+   </div>`).join('') + `<div class="out-total"><span>Total money still to come</span><b>${inr(total)}</b></div>`;
+}
+function openOutstanding(i){
+ const list=outstandingFiltered();const o=list[i];
+ let body='';
+ if(o.type==='jc'){
+  body=`<div class="rvbig-like" style="background:var(--navy3);border-radius:12px;padding:16px 18px;margin-bottom:14px">
+    <div style="font-size:.78rem;color:var(--navy2);font-weight:600">JOB CARD BALANCE</div>
+    <div style="font-size:1.5rem;font-weight:700;color:var(--navy);margin-top:2px">${inr(o.amt)}</div>
+   </div>
+   <table class="mtable"><tbody>
+    <tr><td>Invoice Amount</td><td class="num">${inr(o.inv)}</td></tr>
+    <tr><td>Received So Far</td><td class="num">${inr(o.rec)}</td></tr>
+    <tr><td><b>Balance Due</b></td><td class="num"><b>${inr(o.amt)}</b></td></tr>
+   </tbody></table>
+   <div class="footnote" style="text-align:left;margin-top:14px">${o.sub}</div>`;
+ } else if(o.type==='b2b'){
+  body=`<table class="mtable"><tbody>
+    <tr><td>Customer</td><td class="num">${o.name}</td></tr>
+    <tr><td>Receipt Doc</td><td class="num" style="font-family:var(--mono);font-size:.8rem">${o.doc}</td></tr>
+    <tr><td><b>Full Amount Due</b></td><td class="num"><b>${inr(o.amt)}</b></td></tr>
+   </tbody></table><div class="footnote" style="text-align:left;margin-top:14px">${o.sub}. Credit terms — no cash collected at time of invoice.</div>`;
+ } else {
+  body=`<table class="mtable"><tbody>
+    <tr><td>Claim</td><td class="num">${o.name}</td></tr>
+    <tr><td><b>Reimbursement Amount</b></td><td class="num"><b>${inr(o.amt)}</b></td></tr>
+   </tbody></table><div class="footnote" style="text-align:left;margin-top:14px">${o.sub}</div>`;
+ }
+ modal(`<div class="modal-hd"><div><h3>${o.name}</h3><div class="sub">${branchName(o.br)}</div></div><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-bd">${body}</div>`);
+}
+
+/* ================= ACTIVITY FEED ================= */
+function renderActivity(){
+ const list=activityFiltered();
+ if(!list.length){ el('activityFeed').innerHTML='<div style="text-align:center;color:var(--faint);padding:20px;font-size:.85rem">No recent activity for this branch.</div>'; return; }
+ el('activityFeed').innerHTML = list.map(a=>`
+   <div class="fitem"><span class="dot" style="background:${a.c}"></span>
+    <div class="tx"><b>${a.who}</b> ${a.what} <span style="font-family:var(--mono);font-size:.78rem;color:var(--navy2)">${a.doc}</span> — ${a.desc}${a.amt?` <span class="amt">${inr(a.amt)}</span>`:''}
+     <div class="meta">${a.tm} · ${branchName(a.br)}</div></div>
+   </div>`).join('');
+}
+
+/* ================= KPI DRILL-DOWN MODALS ================= */
+const SAMPLE_RECEIPTS={
+ OOR:[['OOR-JUL26-R-016','Naveen Khandelwal','Workshop',8600,'VERIFIED'],['OOR-JUL26-R-015','P Simanchala Dora','Advance',10000,'SUBMITTED'],['OOR-JUL26-R-014','Satya Prakash Behera','Workshop',4000,'VERIFIED'],['OOR-JUL26-R-013','Suresh Mohapatra','Workshop',24000,'QUERIED'],['OOR-JUL26-R-012','P Simanchala Dora','Advance',9000,'APPROVED']],
+ OOB:[['OOB-JUL26-R-021','Kalaivani Logistics','AMC',23101,'APPROVED'],['OOB-JUL26-R-020','Eicher (VE Commercial)','Warranty',18750,'APPROVED']],
+ OOJ:[['OOJ-JUL26-R-018','Aravind Traders','B2B Credit',44530,'VERIFIED'],['OOJ-JUL26-R-017','Maruti Bricks','Spare / Counter',5727,'APPROVED']]
+};
+const SAMPLE_EXPENSES={
+ OOR:[['OOR-JUL26-E-015','Sales Promotion','Banner printing for mela camp',7800,'SUBMITTED'],['OOR-JUL26-E-014','Taxi (JC)','Taxi advance for BD attend',1000,'SUBMITTED'],['OOR-JUL26-E-013','Food (BD)','Fooding 2 mechanics',300,'APPROVED'],['OOR-JUL26-E-012','Cash Deposit','Deposited to SBI current a/c',20000,'APPROVED']],
+ OOB:[['OOB-JUL26-E-011','Spare Transport','Parts from Cuttack, coolie charge',200,'VERIFIED']],
+ OOJ:[['OOJ-JUL26-E-009','Daily Wages','Helper wages — 2 days',1600,'APPROVED']]
+};
+const BADGE_CLS={APPROVED:'mb-a',VERIFIED:'mb-v',SUBMITTED:'mb-s',QUERIED:'mb-q'};
+
+function drillList(map){
+ const brs = state.branch==='ALL' ? BR.map(b=>b.id) : [state.branch];
+ let rows=[];
+ brs.forEach(id=>(map[id]||[]).forEach(r=>rows.push([id,...r])));
+ return rows;
+}
+function openModal(which){
+ const t=totals();
+ if(which==='col'){
+  const rows=drillList(SAMPLE_RECEIPTS);
+  modal(`<div class="modal-hd"><div><h3>Collections — ${inr(t.col)}</h3><div class="sub">${branchName(state.branch)} · ${state.period==='today'?'today':'month to date'} (sample entries shown)</div></div><button class="modal-close" onclick="closeModal()">✕</button></div>
+   <div class="modal-bd"><table class="mtable"><thead><tr><th>Doc</th><th>Customer</th><th>Category</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody>
+   ${rows.map(r=>`<tr><td style="font-family:var(--mono);font-size:.78rem">${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td class="num">${inr(r[4])}</td><td><span class="mbadge ${BADGE_CLS[r[5]]}">${r[5]}</span></td></tr>`).join('')}
+   </tbody></table></div>`);
+ } else if(which==='exp'){
+  const rows=drillList(SAMPLE_EXPENSES);
+  modal(`<div class="modal-hd"><div><h3>Expenses — ${inr(t.exp)}</h3><div class="sub">${branchName(state.branch)} · ${state.period==='today'?'today':'month to date'} (sample entries shown)</div></div><button class="modal-close" onclick="closeModal()">✕</button></div>
+   <div class="modal-bd"><table class="mtable"><thead><tr><th>Doc</th><th>Category</th><th>Purpose</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody>
+   ${rows.map(r=>`<tr><td style="font-family:var(--mono);font-size:.78rem">${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td class="num">${inr(r[4])}</td><td><span class="mbadge ${BADGE_CLS[r[5]]}">${r[5]}</span></td></tr>`).join('')}
+   </tbody></table></div>`);
+ } else if(which==='pending'){
+  const list=activityFiltered().filter(a=>['submitted','verified'].some(w=>a.what.includes(w))||a.what==='queried');
+  modal(`<div class="modal-hd"><div><h3>Pending Approvals — ${t.pending}</h3><div class="sub">${branchName(state.branch)}</div></div><button class="modal-close" onclick="closeModal()">✕</button></div>
+   <div class="modal-bd"><div class="feed">${(list.length?list:ACTIVITY).map(a=>`<div class="fitem"><span class="dot" style="background:${a.c}"></span><div class="tx"><b>${a.who}</b> ${a.what} <span style="font-family:var(--mono);font-size:.78rem;color:var(--navy2)">${a.doc}</span> — ${a.desc}${a.amt?` <span class="amt">${inr(a.amt)}</span>`:''}<div class="meta">${a.tm} · ${branchName(a.br)}</div></div></div>`).join('')}</div></div>`);
+ }
+}
+function modal(html){ el('modalBox').innerHTML=html; el('modalBg').classList.add('on'); }
+function closeModal(){ el('modalBg').classList.remove('on'); }
+document.addEventListener('click',e=>{ if(e.target.id==='modalBg') closeModal(); });
+
+/* ================= TEAM & BRANCHES — RENDER ================= */
+function renderAdmin(){
+ const activeUsers=USERS.filter(u=>u.status==='Active').length;
+ const byRole={};
+ USERS.filter(u=>u.status==='Active').forEach(u=>byRole[u.role]=(byRole[u.role]||0)+1);
+ el('adminStatRow').innerHTML=`
+  <div class="astat"><div class="l">Branches</div><div class="v">${BRANCHES.length}</div></div>
+  <div class="astat"><div class="l">Active Users</div><div class="v">${activeUsers}</div></div>
+  <div class="astat"><div class="l">Cashiers</div><div class="v">${byRole['CASHIER']||0}</div></div>
+  <div class="astat"><div class="l">Accountants</div><div class="v">${byRole['ACCOUNTANT']||0}</div></div>`;
+ el('branchCountSub').textContent=BRANCHES.length+' branches';
+ el('userCountSub').textContent=USERS.length+' users total';
+
+ el('branchAdminTbody').innerHTML=BRANCHES.map(b=>`<tr>
+   <td style="font-weight:600">${b.name}</td>
+   <td style="font-family:var(--mono);font-size:.8rem">${b.code}</td>
+   <td class="num">${usersOnBranch(b.id)}</td>
+   <td><span class="statustoggle ${b.status==='Active'?'active':'inactive'}">${b.status}</span></td>
+   <td><button class="linkbtn2" onclick="openBranchModal('${b.id}')">Edit</button></td>
+  </tr>`).join('');
+
+ el('userAdminTbody').innerHTML=USERS.map(u=>`<tr>
+   <td><span class="avchip">${initials(u.name)}</span>${u.name}</td>
+   <td><span class="rolebadge rb-${u.role}">${roleInfo(u.role).label}</span></td>
+   <td>${u.branches==='ALL'?'<span class="branchchip">All Branches</span>':u.branches.map(b=>`<span class="branchchip">${BRANCHES.find(x=>x.id===b)?.code||b}</span>`).join('')}</td>
+   <td><button class="statustoggle ${u.status==='Active'?'active':'inactive'}" onclick="toggleUserStatus(${u.id})">${u.status}</button></td>
+   <td><button class="linkbtn2" onclick="openUserModal(${u.id})">Edit</button></td>
+  </tr>`).join('');
+}
+function toggleUserStatus(id){
+ const u=USERS.find(x=>x.id===id);
+ u.status = u.status==='Active' ? 'Inactive' : 'Active';
+ toast(`${u.name} is now ${u.status}`);
+ renderAdmin();
+}
+
+/* ---- Add / Edit Branch ---- */
+function openBranchModal(id){
+ editingBranchId=id||null;
+ const b = id ? BRANCHES.find(x=>x.id===id) : {name:'',code:'',status:'Active'};
+ modal(`<div class="modal-hd"><div><h3>${id?'Edit Branch':'Add Branch'}</h3><div class="sub">${id?b.name:'New branch location'}</div></div><button class="modal-close" onclick="closeModal()">✕</button></div>
+  <div class="modal-bd">
+   <div class="mfield"><label>Branch Name <span class="req">*</span></label><input id="mBranchName" value="${b.name}" placeholder="e.g. Koraput"></div>
+   <div class="mfield"><label>Branch Code <span class="req">*</span></label><input id="mBranchCode" value="${b.code}" placeholder="e.g. OOK" maxlength="4" style="text-transform:uppercase"></div>
+   <div class="mfield" style="margin-bottom:0"><label>Status</label>
+    <div class="toggle2" id="mBranchStatusToggle">
+     <button type="button" class="${b.status==='Active'?'on':''}" onclick="setBranchModalStatus('Active')">Active</button>
+     <button type="button" class="${b.status==='Inactive'?'on':''}" onclick="setBranchModalStatus('Inactive')">Inactive</button>
+    </div></div>
+   <div class="mfoot"><button class="mbtn" onclick="closeModal()">Cancel</button><button class="mbtn pri" onclick="saveBranch()">${id?'Save Changes':'Add Branch'}</button></div>
+  </div>`);
+ window._branchModalStatus = b.status;
+}
+function setBranchModalStatus(s){
+ window._branchModalStatus=s;
+ document.querySelectorAll('#mBranchStatusToggle button').forEach((btn,i)=>btn.classList.toggle('on', (i===0&&s==='Active')||(i===1&&s==='Inactive')));
+}
+function saveBranch(){
+ const name=el('mBranchName').value.trim();
+ const code=el('mBranchCode').value.trim().toUpperCase();
+ if(!name){toast('Branch name is required');return;}
+ if(!code){toast('Branch code is required');return;}
+ const dupe=BRANCHES.find(b=>b.code===code && b.id!==editingBranchId);
+ if(dupe){toast('That branch code is already in use');return;}
+ if(editingBranchId){
+  const b=BRANCHES.find(x=>x.id===editingBranchId);
+  b.name=name; b.code=code; b.status=window._branchModalStatus||b.status;
+  toast('Branch updated');
+ } else {
+  BRANCHES.push({id:code,name,code,status:window._branchModalStatus||'Active'});
+  toast(name+' added — appears in Dashboard once it has transaction data');
+ }
+ closeModal(); renderAdmin();
+}
+
+/* ---- Add / Edit User ---- */
+function openUserModal(id){
+ editingUserId=id;
+ const u = id ? USERS.find(x=>x.id===id) : {name:'',phone:'',role:'CASHIER',branches:[],status:'Active'};
+ window._userModalRole = u.role;
+ window._userModalBranches = u.branches==='ALL' ? [] : [...u.branches];
+ modal(`<div class="modal-hd"><div><h3>${id?'Edit User':'Add User'}</h3><div class="sub">${id?u.name:'New team member'}</div></div><button class="modal-close" onclick="closeModal()">✕</button></div>
+  <div class="modal-bd">
+   <div class="mfield"><label>Full Name <span class="req">*</span></label><input id="mUserName" value="${u.name}" placeholder="e.g. Priya Nair"></div>
+   <div class="mfield"><label>Phone / Email <span style="color:var(--faint);font-weight:400">(optional)</span></label><input id="mUserPhone" value="${u.phone||''}" placeholder="for login reference"></div>
+   <div class="mfield"><label>Role <span class="req">*</span></label>
+    <div class="roleoptrow" id="roleOptRow">${ROLES.map(r=>`<button type="button" class="roleopt ${u.role===r.k?'on':''}" onclick="setUserModalRole('${r.k}')">${r.label}</button>`).join('')}</div>
+   </div>
+   <div class="mfield" style="margin-bottom:0" id="branchAccessField"></div>
+   <div class="mfoot"><button class="mbtn" onclick="closeModal()">Cancel</button><button class="mbtn pri" onclick="saveUser()">${id?'Save Changes':'Add User'}</button></div>
+  </div>`);
+ renderBranchAccessField();
+}
+function setUserModalRole(roleKey){
+ window._userModalRole=roleKey;
+ document.querySelectorAll('#roleOptRow .roleopt').forEach((btn,i)=>btn.classList.toggle('on', ROLES[i].k===roleKey));
+ renderBranchAccessField();
+}
+function renderBranchAccessField(){
+ const info=roleInfo(window._userModalRole);
+ const box=el('branchAccessField'); if(!box) return;
+ if(info.branchMode==='all'){
+  box.innerHTML=`<label>Branch Access</label><div class="allbranchnote">All branches — this role always has full access, no selection needed.</div>`;
+  window._userModalBranches='ALL';
+  return;
+ }
+ if(info.branchMode==='single'){
+  const cur = Array.isArray(window._userModalBranches) && window._userModalBranches.length ? window._userModalBranches[0] : BRANCHES[0].id;
+  window._userModalBranches=[cur];
+  box.innerHTML=`<label>Branch <span style="color:var(--faint);font-weight:400">(single — cashiers work one branch)</span></label>
+   <select id="mUserSingleBranch" onchange="window._userModalBranches=[this.value]">
+    ${BRANCHES.map(b=>`<option value="${b.id}" ${cur===b.id?'selected':''}>${b.name}</option>`).join('')}
+   </select>`;
+  return;
+ }
+ // multi
+ const sel = Array.isArray(window._userModalBranches) ? window._userModalBranches : [];
+ box.innerHTML=`<label>Branches Assigned <span style="color:var(--faint);font-weight:400">(pick one or more)</span></label>
+  ${BRANCHES.map(b=>`<label class="branchcheck"><input type="checkbox" value="${b.id}" ${sel.includes(b.id)?'checked':''} onchange="toggleModalBranch('${b.id}',this.checked)"> ${b.name}</label>`).join('')}`;
+}
+function toggleModalBranch(bid,checked){
+ if(!Array.isArray(window._userModalBranches)) window._userModalBranches=[];
+ if(checked){ if(!window._userModalBranches.includes(bid)) window._userModalBranches.push(bid); }
+ else { window._userModalBranches=window._userModalBranches.filter(x=>x!==bid); }
+}
+function saveUser(){
+ const name=el('mUserName').value.trim();
+ const phone=el('mUserPhone').value.trim();
+ const role=window._userModalRole;
+ const info=roleInfo(role);
+ if(!name){toast('Name is required');return;}
+ let branches;
+ if(info.branchMode==='all') branches='ALL';
+ else {
+  branches = Array.isArray(window._userModalBranches) ? window._userModalBranches : [];
+  if(!branches.length){toast(info.branchMode==='single' ? 'Pick a branch for this cashier' : 'Pick at least one branch');return;}
+ }
+ if(editingUserId){
+  const u=USERS.find(x=>x.id===editingUserId);
+  u.name=name; u.phone=phone; u.role=role; u.branches=branches;
+  toast('User updated');
+ } else {
+  const newId = Math.max(...USERS.map(u=>u.id))+1;
+  USERS.push({id:newId,name,phone,role,branches,status:'Active'});
+  toast(name+' added as '+info.label);
+ }
+ closeModal(); renderAdmin();
+}
+
+/* ================= MASTER RENDER ================= */
+function renderAll(){
+ renderControls();
+ renderKpis();
+ renderTrend();
+ renderDonut();
+ renderDept();
+ renderBranchTable();
+ renderOutstanding();
+ renderActivity();
+}
+
+/* ================= ERROR HARDENING ================= */
+window.onerror=function(msg,src,line,col,err){
+ const box=el('fatalBox');
+ box.style.display='block';
+ box.textContent='Something failed to load:\n'+msg+'\n(line '+line+', col '+col+')'+(err&&err.stack?'\n\n'+err.stack:'');
+ return false;
+};
+try{ renderAll(); }catch(err){
+ const box=el('fatalBox'); box.style.display='block';
+ box.textContent='Something failed to load:\n'+(err&&err.message)+'\n\n'+(err&&err.stack||'');
+}
+</script>
+</body>
+</html>
