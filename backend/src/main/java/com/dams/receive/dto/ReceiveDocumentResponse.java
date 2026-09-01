@@ -1,5 +1,7 @@
 package com.dams.receive.dto;
 
+import com.dams.audit.dto.DocumentHistoryEntry;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -41,6 +43,8 @@ public record ReceiveDocumentResponse(
     BigDecimal pendingAmount,        // job-card-wide; 0 when no invoice or a claim is closed
     boolean settledViaClaimClose,
     BigDecimal claimFinalAmount,
+    boolean claimOverridden,        // final amount differs from what was received ("Overridden · Final")
+    String claimOverrideReason,
     BigDecimal totalReceived,        // Σ this document's lines
     boolean canRecordPayment,
 
@@ -50,6 +54,7 @@ public record ReceiveDocumentResponse(
     Instant createdAt,
     Instant submittedAt,
 
-    List<SettlementLineResponse> lines
+    List<SettlementLineResponse> lines,
+    List<DocumentHistoryEntry> history   // oldest-first; drives the review pane + the cashier's "why queried"
 ) {
 }

@@ -23,6 +23,6 @@ public record SearchResponse(
         int jobCardCount,
         BigDecimal totalInvoiced,
         BigDecimal totalOutstanding,
-        String matchField        // "Name" | "Phone" | "Vehicle" | "Job Card" | "Invoice"
+        String matchField        // "Name" | "Phone" | "Vehicle" | "Job Card" | "Invoice" | "Receipt" | "Expense"
     ) {}
 }

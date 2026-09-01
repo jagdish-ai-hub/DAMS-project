@@ -39,6 +39,10 @@ public record JobCardResponse(
     BigDecimal pendingAmount,
     boolean settledViaClaimClose,
     BigDecimal claimFinalAmount,
+    boolean claimOverridden,          // the final amount differs from what was received ("Overridden · Final")
+    String claimOverrideReason,
+    String claimClosedByName,
+    Instant claimClosedAt,
     boolean canRecordPayment,
     Instant createdAt
 ) {

@@ -9,6 +9,11 @@ import com.dams.attachment.storage.StorageService;
 import com.dams.common.exception.DamsException;
 import com.dams.common.security.BranchScope;
 import com.dams.config.TenantContext;
+import com.dams.expense.entity.ExpenseDocument;
+import com.dams.expense.entity.ExpenseLine;
+import com.dams.expense.entity.ExpenseWorkflowStatus;
+import com.dams.expense.repository.ExpenseDocumentRepository;
+import com.dams.expense.repository.ExpenseLineRepository;
 import com.dams.receive.entity.ReceiveDocument;
 import com.dams.receive.entity.SettlementLine;
 import com.dams.receive.entity.WorkflowStatus;
@@ -29,10 +34,9 @@ import java.util.Set;
  * this class owns the {@code attachment} rows and the rules around them:
  *
  *   - only PDF / image, max {@value #MAX_BYTES} bytes;
- *   - no uploads once the owning receive document is settled or rejected (its history is done);
+ *   - no uploads once the owning document is "done" — a receive document that is settled or
+ *     rejected, or an expense document that is closed or rejected;
  *   - frozen attachments (set when a document is settled / approved / closed) cannot be deleted.
- *
- * Expense parents ({@code EXPENSE_DOCUMENT} / {@code EXPENSE_LINE}) are rejected until Stage 5.
  */
 @Service
 public class AttachmentService {
@@ -44,17 +48,23 @@ public class AttachmentService {
     private final AttachmentRepository attachmentRepo;
     private final ReceiveDocumentRepository receiveDocumentRepo;
     private final SettlementLineRepository settlementLineRepo;
+    private final ExpenseDocumentRepository expenseDocumentRepo;
+    private final ExpenseLineRepository expenseLineRepo;
     private final StorageService storage;
     private final BranchScope branchScope;
 
     public AttachmentService(AttachmentRepository attachmentRepo,
                              ReceiveDocumentRepository receiveDocumentRepo,
                              SettlementLineRepository settlementLineRepo,
+                             ExpenseDocumentRepository expenseDocumentRepo,
+                             ExpenseLineRepository expenseLineRepo,
                              StorageService storage,
                              BranchScope branchScope) {
         this.attachmentRepo = attachmentRepo;
         this.receiveDocumentRepo = receiveDocumentRepo;
         this.settlementLineRepo = settlementLineRepo;
+        this.expenseDocumentRepo = expenseDocumentRepo;
+        this.expenseLineRepo = expenseLineRepo;
         this.storage = storage;
         this.branchScope = branchScope;
     }
@@ -62,11 +72,11 @@ public class AttachmentService {
     @Transactional
     public AttachmentResponse upload(ParentType parentType, Long parentId, MultipartFile file) {
         Long orgId = TenantContext.requireOrgId();
-        ReceiveDocument owningDoc = resolveOwningReceiveDocument(orgId, parentType, parentId);
+        OwningDoc owner = resolveOwner(orgId, parentType, parentId);
 
-        if (owningDoc.isSettled() || owningDoc.getWorkflowStatus() == WorkflowStatus.REJECTED) {
+        if (owner.frozen()) {
             throw DamsException.conflict(
-                "Document " + describe(owningDoc) + " is closed — its receipts are frozen and cannot be changed");
+                "Document " + owner.label() + " is closed — its receipts are frozen and cannot be changed");
         }
         validate(file);
 
@@ -93,7 +103,7 @@ public class AttachmentService {
     @Transactional(readOnly = true)
     public List<AttachmentResponse> list(ParentType parentType, Long parentId) {
         Long orgId = TenantContext.requireOrgId();
-        resolveOwningReceiveDocument(orgId, parentType, parentId); // authorises + 404s
+        resolveOwner(orgId, parentType, parentId); // authorises + 404s
         return attachmentRepo.findByOrgIdAndParentTypeAndParentIdOrderByUploadedAtAsc(orgId, parentType, parentId)
             .stream().map(AttachmentResponse::of).toList();
     }
@@ -124,13 +134,22 @@ public class AttachmentService {
 
     /**
      * Freeze every attachment on a receive document and its lines. Called when the document
-     * settles (this stage) and, later, on approve / claim-close.
+     * settles (Stage 4) and, later, on approve / claim-close.
      */
     @Transactional
     public void freezeReceiveDocument(Long orgId, Long receiveDocumentId, List<Long> settlementLineIds) {
         freeze(orgId, ParentType.RECEIVE_DOCUMENT, List.of(receiveDocumentId));
         if (!settlementLineIds.isEmpty()) {
             freeze(orgId, ParentType.SETTLEMENT_LINE, settlementLineIds);
+        }
+    }
+
+    /** Freeze every attachment on an expense document and its lines — on close / approve (Stage 7). */
+    @Transactional
+    public void freezeExpenseDocument(Long orgId, Long expenseDocumentId, List<Long> expenseLineIds) {
+        freeze(orgId, ParentType.EXPENSE_DOCUMENT, List.of(expenseDocumentId));
+        if (!expenseLineIds.isEmpty()) {
+            freeze(orgId, ParentType.EXPENSE_LINE, expenseLineIds);
         }
     }
 
@@ -144,19 +163,39 @@ public class AttachmentService {
 
     // --- helpers ---
 
-    private ReceiveDocument resolveOwningReceiveDocument(Long orgId, ParentType parentType, Long parentId) {
+    /** The document that owns a parent, reduced to what the attachment rules need. */
+    private record OwningDoc(boolean frozen, String label) {}
+
+    private OwningDoc resolveOwner(Long orgId, ParentType parentType, Long parentId) {
         return switch (parentType) {
-            case RECEIVE_DOCUMENT -> receiveDocumentRepo.findByIdAndOrgId(parentId, orgId)
-                .orElseThrow(() -> DamsException.notFound("Receive document", parentId));
+            case RECEIVE_DOCUMENT -> receiveOwner(receiveDocumentRepo.findByIdAndOrgId(parentId, orgId)
+                .orElseThrow(() -> DamsException.notFound("Receive document", parentId)));
             case SETTLEMENT_LINE -> {
                 SettlementLine line = settlementLineRepo.findByIdAndOrgId(parentId, orgId)
                     .orElseThrow(() -> DamsException.notFound("Settlement line", parentId));
-                yield receiveDocumentRepo.findByIdAndOrgId(line.getReceiveDocumentId(), orgId)
-                    .orElseThrow(() -> DamsException.notFound("Receive document", line.getReceiveDocumentId()));
+                yield receiveOwner(receiveDocumentRepo.findByIdAndOrgId(line.getReceiveDocumentId(), orgId)
+                    .orElseThrow(() -> DamsException.notFound("Receive document", line.getReceiveDocumentId())));
             }
-            case EXPENSE_DOCUMENT, EXPENSE_LINE ->
-                throw DamsException.badRequest("Expense attachments arrive in Stage 5");
+            case EXPENSE_DOCUMENT -> expenseOwner(expenseDocumentRepo.findByIdAndOrgId(parentId, orgId)
+                .orElseThrow(() -> DamsException.notFound("Expense document", parentId)));
+            case EXPENSE_LINE -> {
+                ExpenseLine line = expenseLineRepo.findByIdAndOrgId(parentId, orgId)
+                    .orElseThrow(() -> DamsException.notFound("Expense line", parentId));
+                yield expenseOwner(expenseDocumentRepo.findByIdAndOrgId(line.getExpenseDocumentId(), orgId)
+                    .orElseThrow(() -> DamsException.notFound("Expense document", line.getExpenseDocumentId())));
+            }
         };
+    }
+
+    private static OwningDoc receiveOwner(ReceiveDocument doc) {
+        boolean frozen = doc.isSettled() || doc.getWorkflowStatus() == WorkflowStatus.REJECTED;
+        return new OwningDoc(frozen, doc.getDocumentNo() != null ? doc.getDocumentNo() : "#" + doc.getId());
+    }
+
+    private static OwningDoc expenseOwner(ExpenseDocument doc) {
+        boolean frozen = doc.getWorkflowStatus() == ExpenseWorkflowStatus.CLOSED
+            || doc.getWorkflowStatus() == ExpenseWorkflowStatus.REJECTED;
+        return new OwningDoc(frozen, doc.getDocumentNo() != null ? doc.getDocumentNo() : "#" + doc.getId());
     }
 
     private void validate(MultipartFile file) {
@@ -187,9 +226,5 @@ public class AttachmentService {
         }
         String base = original.substring(original.replace('\\', '/').lastIndexOf('/') + 1);
         return base.length() > 200 ? base.substring(base.length() - 200) : base;
-    }
-
-    private static String describe(ReceiveDocument doc) {
-        return doc.getDocumentNo() != null ? doc.getDocumentNo() : "#" + doc.getId();
     }
 }

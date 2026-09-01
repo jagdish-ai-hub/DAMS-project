@@ -3,11 +3,14 @@ package com.dams.receive.service;
 import com.dams.attachment.service.AttachmentService;
 import com.dams.audit.entity.EventType;
 import com.dams.audit.service.AuditService;
+import com.dams.audit.service.DocumentHistoryService;
 import com.dams.branch.entity.Branch;
 import com.dams.branch.entity.DocType;
 import com.dams.branch.repository.BranchRepository;
 import com.dams.branch.service.DocumentNumberService;
+import com.dams.cash.service.CashDateLock;
 import com.dams.common.exception.DamsException;
+import com.dams.common.security.BranchScope;
 import com.dams.config.TenantContext;
 import com.dams.customer.entity.Customer;
 import com.dams.customer.repository.CustomerRepository;
@@ -91,8 +94,11 @@ public class ReceiveDocumentService {
     private final DocumentNumberService documentNumberService;
     private final PendingAmountCalculator pendingAmountCalculator;
     private final ReceivePaymentGuard paymentGuard;
+    private final CashDateLock cashDateLock;
     private final AuditService auditService;
     private final AttachmentService attachmentService;
+    private final DocumentHistoryService documentHistoryService;
+    private final BranchScope branchScope;
 
     public ReceiveDocumentService(ReceiveDocumentRepository receiveDocumentRepo,
                                   SettlementLineRepository settlementLineRepo,
@@ -111,8 +117,11 @@ public class ReceiveDocumentService {
                                   DocumentNumberService documentNumberService,
                                   PendingAmountCalculator pendingAmountCalculator,
                                   ReceivePaymentGuard paymentGuard,
+                                  CashDateLock cashDateLock,
                                   AuditService auditService,
-                                  AttachmentService attachmentService) {
+                                  AttachmentService attachmentService,
+                                  DocumentHistoryService documentHistoryService,
+                                  BranchScope branchScope) {
         this.receiveDocumentRepo = receiveDocumentRepo;
         this.settlementLineRepo = settlementLineRepo;
         this.jobCardRepo = jobCardRepo;
@@ -130,14 +139,37 @@ public class ReceiveDocumentService {
         this.documentNumberService = documentNumberService;
         this.pendingAmountCalculator = pendingAmountCalculator;
         this.paymentGuard = paymentGuard;
+        this.cashDateLock = cashDateLock;
         this.auditService = auditService;
         this.attachmentService = attachmentService;
+        this.documentHistoryService = documentHistoryService;
+        this.branchScope = branchScope;
     }
 
     @Transactional(readOnly = true)
     public ReceiveDocumentResponse get(Long id) {
         Long orgId = TenantContext.requireOrgId();
-        return assemble(load(orgId, id));
+        ReceiveDocument doc = load(orgId, id);
+        // Detail reads are branch-scoped for every role: a cashier sees only their home
+        // branch (org-wide with the multi-branch toggle), an accountant their assigned
+        // branches, FM / Owner everything. See BranchScope.
+        if (!branchScope.canSeeBranch(doc.getBranchId())) {
+            throw DamsException.forbidden("You do not have access to the branch of receive document " + id);
+        }
+        return assemble(doc);
+    }
+
+    /**
+     * Re-run the auto-settle check after a change made outside this service — an Accountant
+     * settlement-line override (Stage 7) shifts the job-card-wide Pending Amount.
+     */
+    @Transactional
+    public void refreshSettlement(Long documentId) {
+        Long orgId = TenantContext.requireOrgId();
+        ReceiveDocument doc = load(orgId, documentId);
+        JobCard jobCard = loadJobCardFor(orgId, doc);
+        settleIfFullyPaid(orgId, jobCard, doc);
+        receiveDocumentRepo.save(doc);
     }
 
     /** Resolve a document's {@code lineNo} to the settlement-line id — for the line attachment endpoints. */
@@ -183,11 +215,11 @@ public class ReceiveDocumentService {
         doc.setLastModifiedBy(me.getId());
 
         if (opened) {
-            auditService.recordUserEvent(ENTITY, doc.getId(), EventType.CREATED, me.getId(),
+            auditService.recordUserEvent(ENTITY, doc.getId(), doc.getBranchId(), EventType.CREATED, me.getId(),
                 Map.of("jobCardId", jobCard.getId()));
         }
         for (SettlementLine l : added) {
-            auditService.recordUserEvent(ENTITY, doc.getId(), EventType.LINE_ADDED, me.getId(),
+            auditService.recordUserEvent(ENTITY, doc.getId(), doc.getBranchId(), EventType.LINE_ADDED, me.getId(),
                 orderedDetail("lineNo", l.getLineNo(), "amount", l.getAmount()));
         }
 
@@ -220,7 +252,7 @@ public class ReceiveDocumentService {
 
         SettlementLine line = appendLines(orgId, doc, List.of(input), me.getId()).get(0);
         doc.setLastModifiedBy(me.getId());
-        auditService.recordUserEvent(ENTITY, doc.getId(), EventType.LINE_ADDED, me.getId(),
+        auditService.recordUserEvent(ENTITY, doc.getId(), doc.getBranchId(), EventType.LINE_ADDED, me.getId(),
             orderedDetail("lineNo", line.getLineNo(), "amount", line.getAmount()));
 
         settleIfFullyPaid(orgId, jobCard, doc);
@@ -277,7 +309,7 @@ public class ReceiveDocumentService {
             .findByOrgIdAndReceiveDocumentIdAndLineNo(orgId, documentId, lineNo)
             .orElseThrow(() -> DamsException.notFound("Settlement line", "lineNo", lineNo));
 
-        applyLineInput(orgId, line, input);
+        applyLineInput(orgId, doc.getBranchId(), line, input);
         settlementLineRepo.save(line);
         doc.setLastModifiedBy(me.getId());
         receiveDocumentRepo.save(doc);
@@ -296,6 +328,10 @@ public class ReceiveDocumentService {
         SettlementLine line = settlementLineRepo
             .findByOrgIdAndReceiveDocumentIdAndLineNo(orgId, documentId, lineNo)
             .orElseThrow(() -> DamsException.notFound("Settlement line", "lineNo", lineNo));
+        // Removing a cash-mode line from an already-closed cash day would rewrite its drawer — refuse.
+        SettlementMode existingMode = settlementModeRepo.findByIdAndOrgId(line.getSettlementModeId(), orgId).orElse(null);
+        cashDateLock.requireCashLineDateOpen(orgId, doc.getBranchId(), line.getTransactionDate(),
+            existingMode != null && existingMode.isCash(), "settlement");
         // line_no is not renumbered — the number (and later the line id) is never reused.
         settlementLineRepo.delete(line);
         doc.setLastModifiedBy(me.getId());
@@ -357,14 +393,14 @@ public class ReceiveDocumentService {
                 line.setLineId(doc.getDocumentNo() + "-L" + nextLineNo);
             }
             line.setCreatedBy(createdByUserId);
-            applyLineInput(orgId, line, input);
+            applyLineInput(orgId, doc.getBranchId(), line, input);
             saved.add(settlementLineRepo.save(line));
             nextLineNo++;
         }
         return saved;
     }
 
-    private void applyLineInput(Long orgId, SettlementLine line, SettlementLineInput input) {
+    private void applyLineInput(Long orgId, Long branchId, SettlementLine line, SettlementLineInput input) {
         SettlementMode mode = settlementModeRepo.findByIdAndOrgId(input.getSettlementModeId(), orgId)
             .orElseThrow(() -> DamsException.notFound("Settlement mode", input.getSettlementModeId()));
         if (!mode.isActive()) {
@@ -373,6 +409,9 @@ public class ReceiveDocumentService {
         if (mode.isRequiresBank() && input.getBankId() == null) {
             throw DamsException.badRequest("Settlement mode '" + mode.getName() + "' needs a bank");
         }
+        // A cash-mode line dated into an already-closed cash day would silently change that
+        // day's drawer position — refuse it (Stage 6).
+        cashDateLock.requireCashLineDateOpen(orgId, branchId, input.getTransactionDate(), mode.isCash(), "settlement");
         Long bankId = null;
         if (input.getBankId() != null) {
             bankId = bankRepo.findByIdAndOrgId(input.getBankId(), orgId)
@@ -408,7 +447,7 @@ public class ReceiveDocumentService {
         doc.setWorkflowStatus(WorkflowStatus.SUBMITTED);
         doc.setSubmittedAt(Instant.now());
         doc.setLastModifiedBy(actorId);
-        auditService.recordUserEvent(ENTITY, doc.getId(), EventType.SUBMITTED, actorId,
+        auditService.recordUserEvent(ENTITY, doc.getId(), doc.getBranchId(), EventType.SUBMITTED, actorId,
             orderedDetail("documentNo", doc.getDocumentNo(), "resubmit", resubmit));
         log.info("ReceiveDocument {}: orgId={} docId={} documentNo={}",
             resubmit ? "resubmitted" : "submitted", orgId, doc.getId(), doc.getDocumentNo());
@@ -432,7 +471,7 @@ public class ReceiveDocumentService {
             return;
         }
         doc.setSettled(true);
-        auditService.recordSystemEvent(ENTITY, doc.getId(), EventType.SETTLED,
+        auditService.recordSystemEvent(ENTITY, doc.getId(), doc.getBranchId(), EventType.SETTLED,
             orderedDetail("pendingAmount", BigDecimal.ZERO, "invoiceAmount", jobCard.getInvoiceAmount()));
 
         List<Long> lineIds = settlementLineRepo
@@ -514,6 +553,8 @@ public class ReceiveDocumentService {
             pending,
             claimClosed,
             claimClose != null ? claimClose.getFinalAmount() : null,
+            claimClose != null && claimClose.isOverridden(),
+            claimClose != null ? claimClose.getOverrideReason() : null,
             totalReceived,
             paymentGuard.canRecordPayment(orgId, jc, pending, claimClosed) && !doc.isSettled(),
             doc.getCreatedBy(),
@@ -521,7 +562,8 @@ public class ReceiveDocumentService {
             doc.getLastModifiedBy(),
             doc.getCreatedAt(),
             doc.getSubmittedAt(),
-            lineDtos);
+            lineDtos,
+            documentHistoryService.forDocument(ENTITY, doc.getId()));
     }
 
     private List<SettlementLineResponse> toLineDtos(Long orgId, List<SettlementLine> lines) {

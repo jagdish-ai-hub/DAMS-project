@@ -4,9 +4,13 @@ import com.dams.common.security.BranchScope;
 import com.dams.config.TenantContext;
 import com.dams.customer.entity.Customer;
 import com.dams.customer.repository.CustomerRepository;
+import com.dams.expense.entity.ExpenseDocument;
+import com.dams.expense.repository.ExpenseDocumentRepository;
 import com.dams.jobcard.entity.JobCard;
 import com.dams.jobcard.repository.JobCardRepository;
 import com.dams.jobcard.service.PendingAmountCalculator;
+import com.dams.receive.entity.ReceiveDocument;
+import com.dams.receive.repository.ReceiveDocumentRepository;
 import com.dams.search.dto.SearchResponse;
 import com.dams.vehicle.entity.Vehicle;
 import com.dams.vehicle.repository.VehicleRepository;
@@ -25,14 +29,18 @@ import java.util.stream.Collectors;
 
 /**
  * Universal search behind {@code GET /api/v1/search?q=} (cashier-home.html). Matches a
- * customer by name / phone, a vehicle by number, or a job card by internal id /
- * invoice_no / dbm_id, and returns one hit per customer.
+ * customer by name / phone, a vehicle by number, a job card by internal id / invoice_no /
+ * dbm_id, or a receive / expense document by its number (OOR-JUL26-R-013 /
+ * OOR-JUL26-E-005), and returns one hit per customer.
  *
- * Branch scope ({@link BranchScope}): job-card / invoice matches and every customer's
- * job-card roll-up are limited to the branches the caller may see — for a CASHIER that is
- * their home branch unless the org's multi_branch_cashier_access toggle is on. Name /
- * phone / vehicle matches are org-wide because customers and vehicles are not
- * branch-scoped.
+ * Branch scope ({@link BranchScope}): job-card / invoice / document-number matches and every
+ * customer's job-card roll-up are limited to the branches the caller may see — for a CASHIER
+ * that is their home branch unless the org's multi_branch_cashier_access toggle is on. Name /
+ * phone / vehicle matches are org-wide because customers and vehicles are not branch-scoped.
+ *
+ * A standalone overhead expense (no job card) has no customer, so its number is not
+ * reachable through this customer-centric result — those are found via the Accountant's
+ * expense queue (Stage 7).
  */
 @Service
 public class SearchService {
@@ -43,17 +51,23 @@ public class SearchService {
     private final CustomerRepository customerRepo;
     private final VehicleRepository vehicleRepo;
     private final JobCardRepository jobCardRepo;
+    private final ReceiveDocumentRepository receiveDocumentRepo;
+    private final ExpenseDocumentRepository expenseDocumentRepo;
     private final BranchScope branchScope;
     private final PendingAmountCalculator pendingAmountCalculator;
 
     public SearchService(CustomerRepository customerRepo,
                          VehicleRepository vehicleRepo,
                          JobCardRepository jobCardRepo,
+                         ReceiveDocumentRepository receiveDocumentRepo,
+                         ExpenseDocumentRepository expenseDocumentRepo,
                          BranchScope branchScope,
                          PendingAmountCalculator pendingAmountCalculator) {
         this.customerRepo = customerRepo;
         this.vehicleRepo = vehicleRepo;
         this.jobCardRepo = jobCardRepo;
+        this.receiveDocumentRepo = receiveDocumentRepo;
+        this.expenseDocumentRepo = expenseDocumentRepo;
         this.branchScope = branchScope;
         this.pendingAmountCalculator = pendingAmountCalculator;
     }
@@ -94,6 +108,23 @@ public class SearchService {
             }
             boolean invoiceHit = j.getInvoiceNo() != null && j.getInvoiceNo().toLowerCase().contains(lowerQ);
             matchByCustomer.putIfAbsent(j.getCustomerId(), invoiceHit ? "Invoice" : "Job Card");
+        }
+
+        // 4. document number: receive / expense document_no (branch-scoped, resolved to the
+        //    job card's customer). Standalone overhead expenses have no customer and are skipped.
+        for (ReceiveDocument d : receiveDocumentRepo.findByOrgIdAndDocumentNoContainingIgnoreCase(orgId, q)) {
+            if (!branchAllowed(allowedBranches, d.getBranchId())) {
+                continue;
+            }
+            jobCardRepo.findByIdAndOrgId(d.getJobCardId(), orgId)
+                .ifPresent(j -> matchByCustomer.putIfAbsent(j.getCustomerId(), "Receipt"));
+        }
+        for (ExpenseDocument d : expenseDocumentRepo.findByOrgIdAndDocumentNoContainingIgnoreCase(orgId, q)) {
+            if (d.getJobCardId() == null || !branchAllowed(allowedBranches, d.getBranchId())) {
+                continue;
+            }
+            jobCardRepo.findByIdAndOrgId(d.getJobCardId(), orgId)
+                .ifPresent(j -> matchByCustomer.putIfAbsent(j.getCustomerId(), "Expense"));
         }
 
         if (matchByCustomer.isEmpty()) {

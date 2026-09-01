@@ -26,4 +26,8 @@ public class SettlementMode extends OrgMaster {
 
     @Column(name = "requires_ref", nullable = false)
     private boolean requiresRef = false;
+
+    /** True for physical-cash modes (Cash, Adv-Cash) — these feed the Cash-page drawer. */
+    @Column(name = "is_cash", nullable = false)
+    private boolean cash = false;
 }

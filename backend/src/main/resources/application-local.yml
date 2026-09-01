@@ -6,4 +6,9 @@ spring:
 
 dams:
   cors:
-    allowed-origins: "http://localhost:5173"
+    # dams.bat runs the frontend on :2314; a plain `npm run dev` uses :5173. Allow both.
+    allowed-origins: "http://localhost:5173,http://localhost:2314"
+  jwt:
+    # Local convenience only — a 30-day token so Swagger / the app don't log you out
+    # mid-session. Prod keeps the 8h default from application.yml.
+    access-token-expiry-hours: 720

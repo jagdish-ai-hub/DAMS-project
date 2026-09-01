@@ -34,11 +34,12 @@ public class LocalFilesystemStorageService implements StorageService {
 
     public LocalFilesystemStorageService(
         @Value("${dams.storage.local.dir:${java.io.tmpdir}/dams-storage}") String dir,
-        @Value("${dams.app.base-url:http://localhost:8080}") String baseUrl,
+        // Where the signed /api/v1/attachments/raw endpoint is reachable — this backend, NOT
+        // the frontend origin. Defaults to the local server; set it in prod to the API's URL.
+        @Value("${dams.storage.local.public-base-url:http://localhost:8080}") String baseUrl,
         SignedUrlTokens tokens) {
         this.root = Path.of(dir);
-        // the raw endpoint is served by the backend, not the frontend origin
-        this.baseUrl = baseUrl.replace(":5173", ":8080");
+        this.baseUrl = baseUrl.replaceAll("/+$", "");
         this.tokens = tokens;
     }
 

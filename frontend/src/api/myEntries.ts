@@ -1,18 +1,20 @@
 import api from './axios'
-import type { WorkflowStatus } from './receipts'
+
+export type MyEntryKind = 'RECEIPT' | 'EXPENSE' | 'CASH'
 
 export interface MyEntry {
   id: number
-  kind: 'RECEIPT'
+  kind: MyEntryKind
   documentNo: string | null
-  workflowStatus: WorkflowStatus
+  workflowStatus: string
   settled: boolean
-  jobCardId: number
-  jobCardReference: string
-  customerName: string | null
-  totalReceived: number
-  pendingAmount: number
+  jobCardId: number | null
+  jobCardReference: string | null
+  partyName: string | null        // customer (receipt) or receiver (expense)
+  total: number
+  pendingAmount: number | null    // null for an expense
   lineCount: number
+  overLimit: boolean              // expenses only
   today: boolean
   queried: boolean
   createdAt: string

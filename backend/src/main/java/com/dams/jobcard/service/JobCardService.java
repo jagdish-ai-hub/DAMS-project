@@ -122,7 +122,7 @@ public class JobCardService {
         jc.setBusinessStatusId(status.getId());
         jc = jobCardRepo.save(jc);
 
-        auditService.recordUserEvent(ENTITY, jc.getId(), EventType.CREATED, branchScope.currentUserId(),
+        auditService.recordUserEvent(ENTITY, jc.getId(), jc.getBranchId(), EventType.CREATED, branchScope.currentUserId(),
             Map.of("customerId", customer.getId(), "branchId", branchId, "categoryId", category.getId()));
 
         log.info("JobCard created: orgId={} jobCardId={} branchId={} customerId={}",
@@ -168,7 +168,7 @@ public class JobCardService {
             Long before = jc.getCategoryId();
             ReceiveCategory next = requireActiveCategory(orgId, request.getCategoryId());
             jc.setCategoryId(next.getId());
-            auditService.recordUserEvent(ENTITY, jc.getId(), EventType.CATEGORY_CHANGED,
+            auditService.recordUserEvent(ENTITY, jc.getId(), jc.getBranchId(), EventType.CATEGORY_CHANGED,
                 branchScope.currentUserId(),
                 orderedDetail("before", before, "after", next.getId()));
         }
@@ -302,6 +302,8 @@ public class JobCardService {
         ClaimClose claimClose = claimCloseRepo.findByOrgIdAndJobCardId(orgId, jc.getId()).orElse(null);
         BigDecimal pending = pendingAmountCalculator.forJobCard(jc);
         boolean claimClosed = claimClose != null;
+        String claimClosedByName = claimClose == null ? null
+            : userRepo.findById(claimClose.getClosedBy()).map(AppUser::getName).orElse(null);
 
         return new JobCardResponse(
             jc.getId(),
@@ -327,6 +329,10 @@ public class JobCardService {
             pending,
             claimClosed,
             claimClose != null ? claimClose.getFinalAmount() : null,
+            claimClose != null && claimClose.isOverridden(),
+            claimClose != null ? claimClose.getOverrideReason() : null,
+            claimClosedByName,
+            claimClose != null ? claimClose.getClosedAt() : null,
             paymentGuard.canRecordPayment(orgId, jc, pending, claimClosed),
             jc.getCreatedAt());
     }

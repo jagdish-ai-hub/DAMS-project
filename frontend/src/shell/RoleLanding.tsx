@@ -2,9 +2,9 @@ import { useAuth } from '../auth/useAuth'
 import type { Role } from '../auth/AuthContext'
 
 const NEXT_STAGE: Record<Exclude<Role, 'SUPER_ADMIN'>, string> = {
-  OWNER: 'Your dashboard, team & branch setup, and masters management arrive in Stage 2 and Stage 9.',
-  FINANCE_MANAGER: 'Your approval queue, claim closing, and override audit arrive in Stage 8.',
-  ACCOUNTANT: 'Your review queue — verify, override, query, reject — arrives in Stage 7.',
+  OWNER: 'Your dashboard arrives in Stage 9. Team & Branches, Masters and the Override Audit are in the top nav.',
+  FINANCE_MANAGER: 'Your approvals & claims queue is your home screen.',
+  ACCOUNTANT: 'Your review queue is your home screen.',
   CASHIER: 'Customer search, receipts, expenses, and the cash page arrive in Stages 3–6.',
 }
 

@@ -1,15 +1,39 @@
-name: CI
+name: CI / Deploy
 
 on:
   pull_request:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing image tag to (re)deploy or roll back to, e.g. sha-abc1234 or latest"
+        required: true
+        default: latest
+
+# One main-branch pipeline at a time; never cancel a run mid-deploy.
+concurrency:
+  group: dams-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  # Non-secret deploy config — kept here rather than in GitHub Variables.
+  DEPLOY_PATH: /home/server/dams
+  VITE_API_URL: https://dams.jjsoftware.in
 
 jobs:
+  # ------------------------------------------------------------------ tests
   backend:
     name: Backend — build & test
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: backend
@@ -20,12 +44,13 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      - name: Build and test
-        run: mvn -B verify
+      - run: mvn -B verify          # includes the Testcontainers isolation test
 
   frontend:
     name: Frontend — build & test
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: frontend
@@ -41,14 +66,15 @@ jobs:
       - run: npm run build
       - run: npm test
 
+  # ------------------------------------------------------- build & push images
   images:
     name: Build & push images
     needs: [backend, frontend]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    timeout-minutes: 30
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
     strategy:
       matrix:
         include:
@@ -58,32 +84,127 @@ jobs:
             context: ./frontend
     steps:
       - uses: actions/checkout@v4
+
+      - id: tag
+        run: echo "tag=sha-$(echo "${GITHUB_SHA}" | cut -c1-7)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
       - uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/metadata-action@v5
-        id: meta
-        with:
-          images: ghcr.io/${{ github.repository }}-${{ matrix.name }}
-          tags: |
-            type=sha
-            type=raw,value=latest
+
       - uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.name }}:${{ steps.tag.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.name }}:latest
+          # Layer cache in GitHub — keeps `mvn dependency:go-offline` (~4 min cold) fast.
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          # Frontend bakes the API origin in at build time; backend ignores it.
+          build-args: ${{ matrix.name == 'frontend' && format('VITE_API_URL={0}', env.VITE_API_URL) || '' }}
 
-  # Deploy is intentionally provider-agnostic: it only needs a host that can pull the
-  # freshly-built images from GHCR and run them (e.g. `docker compose pull && up -d`).
-  # Wire it to the real host when one is chosen — no cloud CLI is baked in here.
+  # -------------------------------------------------------------------- deploy
   deploy:
-    name: Deploy (placeholder)
+    name: Deploy to VPS
     needs: [images]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Runs after a successful image build on push, OR directly on a manual dispatch
+    # (which redeploys / rolls back to inputs.tag without rebuilding).
+    if: >
+      always() &&
+      (
+        (github.event_name == 'push' && needs.images.result == 'success') ||
+        github.event_name == 'workflow_dispatch'
+      )
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: dams-deploy-production
+      cancel-in-progress: false
     steps:
-      - run: echo "Images pushed to GHCR. Configure the deploy target for the chosen host."
+      - uses: actions/checkout@v4
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=sha-$(echo "${GITHUB_SHA}" | cut -c1-7)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Prepare SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}"   > ~/.ssh/id_ed25519
+          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Ship compose file
+        env:
+          DEST: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+        run: |
+          scp -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes \
+            compose.prod.yml "$DEST:$DEPLOY_PATH/compose.prod.yml"
+
+      - name: Deploy — pull, health-check, auto-rollback
+        env:
+          DEST: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+          NEW_TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 \
+            -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
+            "$DEST" "APP_DIR='$DEPLOY_PATH' NEW_TAG='$NEW_TAG' bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd "$APP_DIR"
+          cf=compose.prod.yml
+          compose() { docker compose -f "$cf" "$@"; }
+
+          # The tag currently serving traffic — the rollback target. Empty on the first deploy.
+          OLD_TAG="$(docker inspect --format '{{ index .Config.Image }}' dams-backend-1 2>/dev/null | sed 's/.*://' || true)"
+          echo "currently running: ${OLD_TAG:-<none>}   ->   deploying: $NEW_TAG"
+
+          roll() {
+            DAMS_TAG="$1" compose pull --quiet
+            DAMS_TAG="$1" compose up -d --remove-orphans
+          }
+
+          healthy() {
+            for _ in $(seq 1 30); do
+              if curl -fsS http://127.0.0.1:8082/actuator/health >/dev/null 2>&1 \
+                 && curl -fsS http://127.0.0.1:8083/            >/dev/null 2>&1; then
+                return 0
+              fi
+              sleep 3
+            done
+            return 1
+          }
+
+          roll "$NEW_TAG"
+          if healthy; then
+            echo "OK: $NEW_TAG healthy"
+            # keep the two most recent images per repo, drop the rest
+            docker image prune -f >/dev/null 2>&1 || true
+            exit 0
+          fi
+
+          echo "FAIL: $NEW_TAG unhealthy after ~90s"
+          docker logs dams-backend-1  --tail 60 2>&1 | sed 's/^/  backend| /' || true
+          docker logs dams-frontend-1 --tail 20 2>&1 | sed 's/^/  frontend| /' || true
+
+          if [ -n "$OLD_TAG" ] && [ "$OLD_TAG" != "$NEW_TAG" ]; then
+            echo "Rolling back to $OLD_TAG ..."
+            roll "$OLD_TAG"
+            if healthy; then echo "rolled back to $OLD_TAG — site is up on the previous version"
+            else echo "WARNING: rollback to $OLD_TAG is also unhealthy — manual attention needed"; fi
+          else
+            echo "No previous version to roll back to."
+          fi
+          exit 1
+          REMOTE

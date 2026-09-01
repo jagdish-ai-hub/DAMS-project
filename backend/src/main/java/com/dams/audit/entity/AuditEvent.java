@@ -36,6 +36,10 @@ public class AuditEvent {
     @Column(name = "entity_id", nullable = false)
     private Long entityId;
 
+    /** The branch the event's document belongs to, when it has one (null for org-/user-level events). */
+    @Column(name = "branch_id")
+    private Long branchId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "event_type", nullable = false, length = 30)
     private EventType eventType;

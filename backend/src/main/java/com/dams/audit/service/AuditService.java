@@ -38,22 +38,42 @@ public class AuditService {
     @Transactional
     public void recordUserEvent(String entityType, Long entityId, EventType eventType,
                                 Long actorUserId, Map<String, ?> detail) {
-        write(entityType, entityId, eventType, ActorType.USER, actorUserId, detail);
+        write(entityType, entityId, null, eventType, ActorType.USER, actorUserId, detail);
+    }
+
+    /**
+     * Record a user change, tagging the branch its document belongs to — used by the flows
+     * that know the branch (review, claim close), so Override Audit / the dashboard can
+     * filter by branch on an index. Passing {@code null} for {@code branchId} is the same as
+     * {@link #recordUserEvent(String, Long, EventType, Long, Map)}.
+     */
+    @Transactional
+    public void recordUserEvent(String entityType, Long entityId, Long branchId, EventType eventType,
+                                Long actorUserId, Map<String, ?> detail) {
+        write(entityType, entityId, branchId, eventType, ActorType.USER, actorUserId, detail);
     }
 
     /** Record a machine-made change (auto-settle, etc.) — actor id is null by definition. */
     @Transactional
     public void recordSystemEvent(String entityType, Long entityId, EventType eventType,
                                   Map<String, ?> detail) {
-        write(entityType, entityId, eventType, ActorType.SYSTEM, null, detail);
+        write(entityType, entityId, null, eventType, ActorType.SYSTEM, null, detail);
     }
 
-    private void write(String entityType, Long entityId, EventType eventType,
+    /** Branch-tagged machine-made change — same as above with the document's branch recorded. */
+    @Transactional
+    public void recordSystemEvent(String entityType, Long entityId, Long branchId, EventType eventType,
+                                  Map<String, ?> detail) {
+        write(entityType, entityId, branchId, eventType, ActorType.SYSTEM, null, detail);
+    }
+
+    private void write(String entityType, Long entityId, Long branchId, EventType eventType,
                        ActorType actorType, Long actorId, Map<String, ?> detail) {
         AuditEvent event = new AuditEvent();
         event.setOrgId(TenantContext.requireOrgId());
         event.setEntityType(entityType);
         event.setEntityId(entityId);
+        event.setBranchId(branchId);
         event.setEventType(eventType);
         event.setActorType(actorType);
         event.setActorId(actorId);

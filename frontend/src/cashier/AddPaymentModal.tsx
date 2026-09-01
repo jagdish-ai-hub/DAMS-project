@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { mastersApi, type MasterRow } from '../api/masters'
 import { receiptsApi, type ReceiveDocument } from '../api/receipts'
-import { Modal, Field, ErrorBanner, inputStyle, primaryBtn, ghostBtn, inr } from '../shell/ui'
+import { Modal, Field, ErrorBanner, inputStyle, primaryBtn, ghostBtn, inr, istToday } from '../shell/ui'
 
 /**
  * Add Payment (intial ui prototypes/cashier-home.html). Appends ONE settlement line to the
@@ -18,7 +18,7 @@ export default function AddPaymentModal(props: {
 }) {
   const [modes, setModes] = useState<MasterRow[]>([])
   const [banks, setBanks] = useState<MasterRow[]>([])
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState(istToday())
   const [modeId, setModeId] = useState<number | ''>('')
   const [amount, setAmount] = useState(props.balanceDue > 0 ? String(props.balanceDue) : '')
   const [bankId, setBankId] = useState<number | ''>('')

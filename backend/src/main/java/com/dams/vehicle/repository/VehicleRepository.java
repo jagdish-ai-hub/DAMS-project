@@ -18,6 +18,9 @@ public interface VehicleRepository extends JpaRepository<Vehicle, Long> {
 
     List<Vehicle> findByOrgIdAndCustomerIdInOrderByVehicleNoAsc(Long orgId, Collection<Long> customerIds);
 
+    /** Batch id lookup scoped by org — the dashboard resolves many vehicles at once. */
+    List<Vehicle> findByOrgIdAndIdIn(Long orgId, Collection<Long> ids);
+
     /** Universal search — contains-match on the normalised number. */
     List<Vehicle> findByOrgIdAndVehicleNoContainingOrderByVehicleNoAsc(Long orgId, String vehicleNoFragment);
 

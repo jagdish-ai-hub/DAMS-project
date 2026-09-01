@@ -4,6 +4,7 @@ import com.dams.admin.service.AdminOrgService;
 import com.dams.admin.service.OrganizationPurgeService;
 import com.dams.common.exception.DamsException;
 import com.dams.email.EmailService;
+import com.dams.masters.service.MasterProvisioningService;
 import com.dams.organization.entity.Organization;
 import com.dams.organization.repository.OrganizationRepository;
 import com.dams.user.entity.AppUser;
@@ -49,11 +50,15 @@ class AdminOrgServiceTest {
     @Mock
     private OrganizationPurgeService purgeService;
 
+    @Mock
+    private MasterProvisioningService masterProvisioningService;
+
     private AdminOrgService service;
 
     @BeforeEach
     void setUp() {
-        service = new AdminOrgService(orgRepo, userRepo, emailService, purgeService, APP_BASE_URL);
+        service = new AdminOrgService(orgRepo, userRepo, emailService, purgeService,
+            masterProvisioningService, APP_BASE_URL);
     }
 
     @Test
@@ -86,6 +91,20 @@ class AdminOrgServiceTest {
         assertThat(captured.getInviteToken()).isNotBlank();
         assertThat(captured.getPasswordHash()).isNull();
         assertThat(captured.isActive()).isTrue();
+
+        // The new org is seeded with the standard master catalogue.
+        verify(masterProvisioningService).provisionDefaults(42L);
+    }
+
+    @Test
+    void createOrganization_doesNotProvisionMasters_whenEmailAlreadyExists() {
+        when(userRepo.findByEmail("existing@dams.local")).thenReturn(Optional.of(new AppUser()));
+
+        assertThatThrownBy(() ->
+            service.createOrganization("Org X", "Owner X", "existing@dams.local"))
+            .isInstanceOf(DamsException.class);
+
+        verify(masterProvisioningService, never()).provisionDefaults(any());
     }
 
     @Test

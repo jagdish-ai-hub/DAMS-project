@@ -19,6 +19,14 @@ language first — entities touched, migrations, endpoints, screens — and wait
 for confirmation. Don't treat a prior stage as untouchable if new
 requirements mean it should change; flag the conflict and ask.
 
+## Answer first, then work
+
+When the user asks a question — or their message contains a question mixed
+with a request — answer the question directly and up front, in plain words,
+BEFORE running tools or writing code. Do not bury the answer at the end of a
+long work turn; the user must not be left guessing what you're doing.
+State what you're about to do in one line, then do it.
+
 ## Stack is fixed
 
 See AGENT.md "Tech stack" and plan.md "Tech Stack". Do not substitute

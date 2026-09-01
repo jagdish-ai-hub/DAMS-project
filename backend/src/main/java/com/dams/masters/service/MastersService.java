@@ -132,7 +132,14 @@ public class MastersService {
      */
     @Transactional
     public void purgeOrg(long orgId) {
-        repos.values().forEach(repo -> repo.deleteByOrgId(orgId));
+        // expense_sub_category has an FK to expense_category — delete the children first,
+        // whatever order the EnumMap iterates in.
+        subCategoryRepo.deleteByOrgId(orgId);
+        repos.forEach((type, repo) -> {
+            if (type != MasterType.EXPENSE_SUB_CATEGORIES) {
+                repo.deleteByOrgId(orgId);
+            }
+        });
     }
 
     // --- helpers ---
@@ -154,6 +161,23 @@ public class MastersService {
             }
             if (req.getRequiresRef() != null) {
                 sm.setRequiresRef(req.getRequiresRef());
+            }
+            if (req.getIsCash() != null) {
+                sm.setCash(req.getIsCash());
+            }
+        } else if (type.hasModeFlags() && entity instanceof ExpenseMode em) {
+            if (req.getRequiresBank() != null) {
+                em.setRequiresBank(req.getRequiresBank());
+            }
+            if (req.getRequiresRef() != null) {
+                em.setRequiresRef(req.getRequiresRef());
+            }
+            if (req.getIsCash() != null) {
+                em.setCash(req.getIsCash());
+            }
+        } else if (type.hasClaimTriggerFlag() && entity instanceof ExpenseBusinessStatus ebs) {
+            if (req.getTriggersClaim() != null) {
+                ebs.setTriggersClaim(req.getTriggersClaim());
             }
         } else if (type.isExpenseSubCategory() && entity instanceof ExpenseSubCategory esc) {
             Long parentId = req.getExpenseCategoryId();

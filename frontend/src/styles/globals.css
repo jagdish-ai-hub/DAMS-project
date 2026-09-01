@@ -26,7 +26,14 @@
     --gray-bg:  #EEF0F3;
     --radius:   10px;
     --shadow:   0 1px 2px rgba(16,24,40,.04), 0 2px 8px rgba(16,24,40,.05);
+    --shadow-lift: 0 4px 14px rgba(16,24,40,.10), 0 2px 6px rgba(16,24,40,.06);
     --font:     'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+
+    /* Motion — one short scale for the whole app so nothing feels sluggish. */
+    --dur-fast: 120ms;
+    --dur:      190ms;
+    --dur-slow: 260ms;
+    --ease:     cubic-bezier(.2, .6, .2, 1);
   }
 
   *, *::before, *::after {
@@ -53,4 +60,135 @@
     font-size: 0.86rem;
     color: var(--ink);
   }
+}
+
+/* Login: show the brand panel only on wide screens, the inline mini-brand only on narrow */
+.dams-login-compact-brand { display: none; }
+@media (max-width: 860px) {
+  .dams-login-brand { display: none !important; }
+  .dams-login-compact-brand { display: flex !important; }
+}
+
+/* Help Center article typography (react-markdown output) */
+.dams-help-body { color: var(--ink); font-size: 0.88rem; line-height: 1.6; }
+.dams-help-body h1 { font-size: 1.25rem; color: var(--navy); margin: 0 0 12px; }
+.dams-help-body h2 { font-size: 1.02rem; color: var(--navy); margin: 22px 0 8px; }
+.dams-help-body h3 { font-size: 0.92rem; color: var(--ink); margin: 16px 0 6px; }
+.dams-help-body p { margin: 0 0 10px; }
+.dams-help-body ul, .dams-help-body ol { margin: 0 0 10px; padding-left: 22px; }
+.dams-help-body li { margin: 3px 0; }
+.dams-help-body li > ul, .dams-help-body li > ol { margin: 3px 0; }
+.dams-help-body code {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 4px;
+  padding: 1px 5px; font-size: 0.82em;
+}
+.dams-help-body strong { color: var(--navy); }
+.dams-help-body table { border-collapse: collapse; margin: 0 0 12px; font-size: 0.84rem; }
+.dams-help-body th, .dams-help-body td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; }
+.dams-help-body a { color: var(--navy); }
+.dams-help-body blockquote {
+  margin: 0 0 10px; padding: 6px 12px; border-left: 3px solid var(--line); color: var(--muted);
+}
+/* Wide content must scroll inside the article, never shove the pane sideways. */
+.dams-help-body pre {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+  padding: 10px 12px; margin: 0 0 12px; overflow-x: auto; font-size: 0.8rem;
+}
+.dams-help-body pre code { background: none; border: none; padding: 0; }
+.dams-help-body p code, .dams-help-body li code { overflow-wrap: anywhere; }
+.dams-help-body .dams-help-table-wrap { overflow-x: auto; margin: 0 0 12px; }
+.dams-help-body .dams-help-table-wrap table { margin: 0; }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Motion & interaction polish. Everything here is scoped to the authenticated
+   app frame (.dams-app) so the login / accept-invite screens keep their own look.
+   Keyframes and the reduced-motion guard are global.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+@keyframes dams-fade-in   { from { opacity: 0 }               to { opacity: 1 } }
+@keyframes dams-slide-up   { from { opacity: 0; transform: translateY(12px) scale(.98) } to { opacity: 1; transform: none } }
+@keyframes dams-slide-in-right { from { transform: translateX(100%) } to { transform: translateX(0) } }
+@keyframes dams-scale-in   { from { opacity: 0; transform: translateY(-6px) scale(.96) } to { opacity: 1; transform: none } }
+@keyframes dams-notice-in  { from { opacity: 0; transform: translateY(-8px) }  to { opacity: 1; transform: none } }
+@keyframes dams-route-in   { from { opacity: 0; transform: translateY(6px) }   to { opacity: 1; transform: none } }
+@keyframes dams-toast-in   { from { opacity: 0; transform: translateY(10px) }  to { opacity: 1; transform: none } }
+@keyframes dams-spin       { to { transform: rotate(360deg) } }
+@keyframes dams-shimmer    { from { background-position: 200% 0 } to { background-position: -200% 0 } }
+@keyframes dams-fade-out        { from { opacity: 1 } to { opacity: 0 } }
+@keyframes dams-slide-out-right { from { transform: translateX(0) } to { transform: translateX(100%) } }
+
+/* Entrance helpers used by shared components. */
+.dams-anim-backdrop { animation: dams-fade-in var(--dur) var(--ease) both; }
+.dams-anim-modal    { animation: dams-slide-up var(--dur-slow) var(--ease) both; }
+.dams-anim-drawer   { animation: dams-slide-in-right var(--dur-slow) var(--ease) both; }
+.dams-anim-menu     { animation: dams-scale-in var(--dur-fast) var(--ease) both; transform-origin: top right; }
+.dams-anim-notice   { animation: dams-notice-in var(--dur) var(--ease) both; }
+.dams-anim-toast    { animation: dams-toast-in var(--dur) var(--ease) both; }
+.dams-route-fade    { animation: dams-route-in var(--dur) var(--ease) both; }
+.dams-anim-backdrop-out { animation: dams-fade-out var(--dur) var(--ease) both; }
+.dams-anim-drawer-out   { animation: dams-slide-out-right var(--dur-slow) var(--ease) both; }
+
+/* Loading skeleton — a soft shimmer sweep. */
+.dams-skeleton {
+  background: linear-gradient(90deg, var(--gray-bg) 25%, #f4f6f9 37%, var(--gray-bg) 63%);
+  background-size: 200% 100%;
+  animation: dams-shimmer 1.4s ease-in-out infinite;
+}
+
+/* Inline button spinner. */
+.dams-spinner {
+  display: inline-block; width: 1em; height: 1em; vertical-align: -0.15em;
+  border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+  animation: dams-spin 0.6s linear infinite;
+}
+
+/* Interaction feedback for the app frame. */
+.dams-app button,
+.dams-app a,
+.dams-app input,
+.dams-app select,
+.dams-app textarea {
+  transition: background-color var(--dur) var(--ease),
+              border-color var(--dur) var(--ease),
+              box-shadow var(--dur) var(--ease),
+              color var(--dur) var(--ease),
+              filter var(--dur-fast) var(--ease),
+              transform var(--dur-fast) var(--ease),
+              opacity var(--dur) var(--ease);
+}
+.dams-app button:not(:disabled):hover { filter: brightness(1.05); }
+.dams-app button:not(:disabled):active { transform: scale(.975); filter: brightness(.97); }
+
+/* Visible keyboard focus everywhere (many inputs set outline:none inline). */
+.dams-app button:focus-visible,
+.dams-app a:focus-visible,
+.dams-app input:focus-visible,
+.dams-app select:focus-visible,
+.dams-app textarea:focus-visible {
+  outline: 2px solid var(--navy2);
+  outline-offset: 2px;
+}
+/* Soft focus ring on text fields (box-shadow isn't set inline, so this lands). */
+.dams-app input:not([type=checkbox]):not([type=radio]):focus,
+.dams-app select:focus,
+.dams-app textarea:focus {
+  box-shadow: 0 0 0 3px var(--navy3);
+}
+
+/* Topbar nav — hover on the inactive links (active carries aria-current). */
+.dams-app header nav a:not([aria-current]):hover {
+  background: rgba(255, 255, 255, .12) !important;
+}
+
+/* Table rows — a quiet hover so long rows are easy to track across. */
+.dams-app tbody tr { transition: background-color var(--dur-fast) var(--ease); }
+.dams-app tbody tr:hover { background: rgba(31, 56, 100, .04); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+  .dams-app button:not(:disabled):active { transform: none; }
 }

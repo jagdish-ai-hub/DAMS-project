@@ -56,6 +56,110 @@ for everything; this file is just how to run it.
 - Frontend: New Receipt page, Add Payment modal, View Receipts modal, My Entries page;
   cashier home wired end-to-end.
 
+**Stage 5**
+- `expense_document`, `expense_line` — migrations V13 (`expense_mode` / `expense_business_status`
+  flag columns), V14 (tables + `TRANSFERRED_TO_CLAIM` audit type + doc-number search indexes),
+  V15 (seed: 5 expense docs across states).
+- `POST /api/v1/expenses` — one flow: `receiverId` **or** inline `receiverName` (deduped),
+  optional `jobCardId`, `lines[]`, optional `submit`. No branch field — posts under the
+  cashier's home branch. `PATCH` header (draft/queried), `submit` / `resubmit`, `lines`
+  (Add Expense — allowed until the Accountant closes the doc), line edit+delete, plus
+  document/line attachments.
+- Gap-free `DAMS-Expenses-ID` (`OOR-AUG26-E-001`) on submit; `over_limit` flag recomputed on
+  every line change (`amount > expense_sub_category.limit_amount`) — flags for Finance
+  approval, never blocks.
+- `POST /api/v1/expenses/{id}/transfer-to-claim` — only when the expense sits on a
+  warranty / AMC / goodwill job card (`receive_category.is_claim`); a status change, no new
+  document.
+- A cashier can only record expenses under **their own home branch** (cross-branch job-card
+  tag refused, 409).
+- `GET /api/v1/my-entries` now merges receipts + expenses; universal search matches
+  receive + expense `document_no`.
+- Frontend: New Expense page (category→sub-category cascade, per-line limit warnings,
+  Transfer to Claim); My Entries shows both kinds; cashier home "New Expense" wired.
+
+**Stage 6**
+- `cash_document`, `branch_cash_opening`, `cash_day_close` — migrations V16 (`is_cash` flag on
+  settlement/expense modes), V17 (tables), V18 (seed: OOR opening, four cash docs, one close).
+- `POST /api/v1/cash-documents` — one IN-from-bank / OUT-to-bank movement, single amount, no
+  branch field (posts under the cashier's home branch). `submit` / `resubmit` / `PATCH`
+  (draft or queried) / delete-a-draft. `C`-numbered on submit (`OOR-AUG26-C-001`).
+- `GET /api/v1/cash/drawer?date=` — live drawer position + breakdown + the day's movements:
+  `opening + cash-mode receipts + cash IN − cash-mode expenses − cash OUT`. Opening is the
+  previous day's counted close, or the Accountant's one-time `POST /api/v1/cash/opening`.
+- `POST /api/v1/cash/close-day` — counted amount, auto variance, remark required when the
+  variance isn't zero. Closing **locks the date**: no new cash movements, and no cash-mode
+  receipt/expense line can be backdated into it.
+- `GET /api/v1/my-entries` now merges cash movements too.
+- Frontend: Cash page (`/cash`) — drawer card, movements table, Cash In / Out and Close Day
+  modals; `Cash` in the cashier nav.
+
+**Stage 7**
+- Accountant review — new `com.dams.review` package, no migration (override columns,
+  workflow / event-type CHECKs and queue indexes all pre-existed).
+- `GET /api/v1/review/receipts` · `/review/expenses` — the accountant's queue (SUBMITTED,
+  in their assigned branches). `POST /api/v1/{receipts|expenses}/{id}/verify` · `/query`
+  (note) · `/reject` (reason) · `/lines/{lineNo}/override` (amount + reason); plus
+  `POST /api/v1/expenses/{id}/close`.
+- `ReviewGuard`: ACCOUNTANT only, branch-scoped, and never a document you created or last
+  modified (maker-checker). Review actions don't touch `last_modified_by`, so one
+  accountant can override a line and still verify the same document.
+- A line override stamps `original_amount` + `overridden_by/at` and writes an `OVERRIDE`
+  audit row; it recomputes an expense's `over_limit` and re-runs a receipt's auto-settle.
+  Closing an **over-limit** expense needs Finance Manager `APPROVED` first (Stage 8).
+- `GET /api/v1/{receipts|expenses}/{id}` is now branch-scoped for every role. Both document
+  responses gain a `history` array (humanised audit events) — drives the review pane and
+  the cashier's "Query from the accountant" banner.
+- Frontend: `/` for an Accountant is the **Review Queue** — two-pane queue + overview +
+  record detail with inline verify / query / reject / override.
+
+**Stage 8**
+- Finance Manager approval + claim closing + Override Audit. Migration **V19** adds
+  `audit_event.branch_id` (nullable, backfilled) so overrides can be filtered by branch.
+- `GET /api/v1/review/fm/{receipts|expenses}` — the FM queue (`awaitingApproval` +, for
+  receipts, `openClaims` and `recentlyClosed`). `POST /api/v1/{receipts|expenses}/{id}/approve`
+  (VERIFIED → APPROVED). `/query` and `/reject` now serve both reviewers — the Accountant
+  from SUBMITTED, the FM from VERIFIED, both landing on QUERIED / REJECTED.
+- `POST /api/v1/job-cards/{id}/close-claim` `{ finalAmount, reason? }` — FM only. One
+  transaction writes the immutable `claim_close` row **and** flips `settled = true` on every
+  open receive document of the job card (freezing their receipts). A reason is required when
+  the final amount differs from what was received; that difference then shows as
+  **"Overridden · Final"** everywhere. Every non-rejected receive document on the claim must
+  already be APPROVED. After close: `PATCH /job-cards` category/status → 409, `POST /receipts`
+  → 409, `pending_amount` = 0.
+- `GET /api/v1/override-audit?userId=&branchId=&from=&to=` (Owner + FM) — one feed of every
+  amount override: the Accountant's line overrides **and** the FM's claim-close overrides.
+- Frontend: `/` for an FM is **Approvals & Claims** (three-section queue, Approve / Query /
+  Reject, claim-close modal); **Override Audit** screen at `/override-audit` for FM + Owner.
+
+**Stage 8.5 — Cash review**
+- Cash movements run the same maker-checker chain as receipts / expenses.
+  `POST /api/v1/cash-documents/{id}/{verify|approve|query|reject}`;
+  `GET /api/v1/review/cash` (Accountant, SUBMITTED in-branch) and
+  `GET /api/v1/review/fm/cash` (FM, VERIFIED org-wide). A **Cash** tab joins Receipts /
+  Expenses in both review screens with a compact cash detail panel + History.
+
+**Stage 9 — Owner dashboard**
+- `GET /api/v1/dashboard/{summary|outstanding|activity}` (Owner + FM). `summary` returns
+  KPI cards (collections / expenses / net / cash-in-hand / pending-review — **money counts
+  APPROVED docs only; cash In/Out never counts as collections or expenses**), a 14-day
+  trend, collections-by-mode, expenses-by-category, and a per-branch comparison table.
+- Frontend: `owner/DashboardPage.tsx` is the Owner home — branch + period (Today / MTD)
+  filters, `recharts` area + donut, outstanding list, activity feed.
+- The aggregates are batched (one drawer roll-up for all branches, grouped
+  pending-review / settlement-sum queries) — see plan.md rev 15 for the numbers.
+
+**Stage 10 — Super Admin panel**
+- `superadmin/OrganizationsPage.tsx` (frontend only; Stage 1 admin endpoints): org table
+  with created date / cashier-access / status, onboard form with a copy-able invite link,
+  activate / deactivate, and a type-name-to-confirm delete modal.
+
+**Stage 11 — Help Center**
+- `? Help` in the shell header opens a right-side drawer: search + role-scoped table of
+  contents + Markdown articles bundled from `frontend/src/help/<role>/*.md`
+  (`help/manifest.ts` fixes order + titles). No backend, no migration.
+- Text-only by design (no screenshots). Per-screen contextual `?` deep-links deferred.
+
 ## Prerequisites
 
 - **JDK 21** (the build targets 21; newer JDKs may work but aren't the target).
@@ -73,13 +177,22 @@ cp .env.example .env
 cd frontend && npm install   # generates package-lock.json — commit it
 ```
 
+## Run — Windows one-click
+
+Double-click **`dams.bat`** in the repo root (or `.\dams.bat`). It frees ports 8080/2314,
+loads `.env`, and opens the backend and frontend each in its own window.
+
+- Frontend → http://localhost:2314
+- Backend  → http://localhost:8080
+- Backend is ready ~35s after start (Flyway + Neon).
+
 ## Run — Docker (one command)
 
 ```bash
 docker compose up --build
 ```
 
-- Backend  → http://localhost:8080  (Swagger UI at `/swagger-ui.html`)
+- Backend  → http://localhost:8080
 - Frontend → http://localhost:5173
 
 ## Run — without Docker
@@ -94,6 +207,29 @@ mvn spring-boot:run
 # frontend
 cd frontend
 npm run dev
+```
+
+## API docs (Swagger)
+
+- **Swagger UI:** http://localhost:8080/swagger-ui.html — browse and try every endpoint
+- **OpenAPI JSON:** http://localhost:8080/api-docs
+
+Both are open (no token needed to view). To *try* a secured endpoint:
+
+1. Run `POST /api/v1/auth/login` in Swagger with a seeded login (below), e.g.
+   `{"email":"owner@jjmotors.demo","password":"owner123"}`
+2. Copy `accessToken` from the response.
+3. Click **Authorize** (top-right), paste the token, **Authorize**, **Close**.
+
+Swagger remembers the token across reloads (`persist-authorization`), and the `local`
+profile issues a 30-day token, so you authorize once per month, not per session.
+
+One-liner to grab a token from the shell:
+
+```bash
+curl -s http://localhost:8080/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"owner@jjmotors.demo","password":"owner123"}'
 ```
 
 ## Seeded logins

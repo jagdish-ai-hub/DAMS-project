@@ -8,6 +8,14 @@ export type WorkflowStatus =
   | 'QUERIED'
   | 'REJECTED'
 
+/** One humanised audit event — the review pane's History card and the cashier's "why queried". */
+export interface DocumentHistoryEntry {
+  actor: string
+  action: string
+  note: string | null
+  at: string
+}
+
 export interface SettlementLine {
   id: number
   lineNo: number
@@ -55,6 +63,8 @@ export interface ReceiveDocument {
   pendingAmount: number
   settledViaClaimClose: boolean
   claimFinalAmount: number | null
+  claimOverridden: boolean
+  claimOverrideReason: string | null
   totalReceived: number
   canRecordPayment: boolean
   createdBy: number
@@ -63,6 +73,7 @@ export interface ReceiveDocument {
   createdAt: string
   submittedAt: string | null
   lines: SettlementLine[]
+  history: DocumentHistoryEntry[]
 }
 
 /** One settlement line as sent to the API. */

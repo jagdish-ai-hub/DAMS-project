@@ -91,6 +91,7 @@ export default function AccountMenu() {
       {open && (
         <div
           role="menu"
+          className="dams-anim-menu"
           style={{
             position: 'absolute',
             right: 0,
@@ -99,7 +100,7 @@ export default function AccountMenu() {
             color: 'var(--ink)',
             border: '1px solid var(--line)',
             borderRadius: 10,
-            boxShadow: 'var(--shadow)',
+            boxShadow: 'var(--shadow-lift)',
             minWidth: 220,
             overflow: 'hidden',
             zIndex: 20,

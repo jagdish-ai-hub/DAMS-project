@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { searchApi, type SearchHit } from '../api/search'
 import { customersApi, type CustomerHistory } from '../api/customers'
-import { card, ErrorBanner, inr, initials } from '../shell/ui'
+import { card, ErrorBanner, Skeleton, SkeletonRows, inr, initials, fmtDateShort } from '../shell/ui'
 import AddPaymentModal from './AddPaymentModal'
 import ViewReceiptsModal from './ViewReceiptsModal'
 
@@ -63,9 +63,9 @@ export default function CashierHomePage() {
   return (
     <>
       {flash && (
-        <div style={{
+        <div className="dams-anim-toast" style={{
           position: 'fixed', bottom: 20, right: 20, background: 'var(--ink)', color: '#fff',
-          borderRadius: 9, padding: '10px 16px', fontSize: '0.82rem', boxShadow: 'var(--shadow)', zIndex: 60,
+          borderRadius: 9, padding: '10px 16px', fontSize: '0.82rem', boxShadow: 'var(--shadow-lift)', zIndex: 60,
         }}>
           {flash}
         </div>
@@ -175,10 +175,11 @@ function HomeSearch(props: {
 
       {hits == null && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, maxWidth: 640, margin: '30px auto 0' }}>
-            <QuickCard tone="green" mark="＋" title="New Receipt" sub="Start a fresh entry" onClick={() => navigate('/new-receipt')} />
-            <QuickCard tone="red" mark="−" title="New Expense" sub="Arrives in Stage 5" disabled />
-            <QuickCard tone="navy" mark="☰" title="My Entries" sub="Today & recent" onClick={() => navigate('/my-entries')} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14, maxWidth: 640, margin: '30px auto 0' }}>
+            <QuickCard tone="green" mark="＋" title="New Receipt" sub="Start a fresh entry" onClick={() => navigate('/app/new-receipt')} />
+            <QuickCard tone="red" mark="−" title="New Expense" sub="Petty cash, fuel, taxi…" onClick={() => navigate('/app/new-expense')} />
+            <QuickCard tone="navy" mark="₹" title="Cash" sub="Drawer & day close" onClick={() => navigate('/app/cash')} />
+            <QuickCard tone="navy" mark="☰" title="My Entries" sub="Today & recent" onClick={() => navigate('/app/my-entries')} />
           </div>
           <RecentStrip recent={props.recent} onOpenCustomer={props.onOpenCustomer} />
         </>
@@ -373,7 +374,15 @@ function CustomerHistoryView(props: {
       </button>
 
       <ErrorBanner message={error} />
-      {loading && <p style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>Loading…</p>}
+      {loading && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <Skeleton height={84} radius={13} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} height={64} radius={10} />)}
+          </div>
+          <SkeletonRows rows={3} height={64} />
+        </div>
+      )}
 
       {data && (
         <>
@@ -404,12 +413,18 @@ function CustomerHistoryView(props: {
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
               <button
                 type="button"
-                onClick={() => navigate(`/new-receipt?customerId=${data.customerId}`)}
+                onClick={() => navigate(`/app/new-receipt?customerId=${data.customerId}`)}
                 style={{ border: '1.5px solid #BBDCC9', background: 'var(--surface)', borderRadius: 8, padding: '9px 14px', fontSize: '0.85rem', fontWeight: 700, color: 'var(--green)', cursor: 'pointer', whiteSpace: 'nowrap' }}
               >
                 ＋ New Receipt
               </button>
-              <SoonButton label="＋ New Expense" />
+              <button
+                type="button"
+                onClick={() => navigate(`/app/new-expense?customerId=${data.customerId}`)}
+                style={{ border: '1.5px solid #E4C3C3', background: 'var(--surface)', borderRadius: 8, padding: '9px 14px', fontSize: '0.85rem', fontWeight: 700, color: 'var(--red)', cursor: 'pointer', whiteSpace: 'nowrap' }}
+              >
+                ＋ New Expense
+              </button>
             </div>
           </div>
 
@@ -521,8 +536,8 @@ function CustomerHistoryView(props: {
                     display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0',
                     borderBottom: '1px dashed var(--line)', fontSize: '0.83rem',
                   }}>
-                    <span style={{ width: 90, color: 'var(--faint)', fontSize: '0.76rem', flexShrink: 0 }}>
-                      {new Date(t.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                    <span style={{ width: 96, color: 'var(--faint)', fontSize: '0.76rem', flexShrink: 0 }}>
+                      {fmtDateShort(t.date)}
                     </span>
                     <span style={{ flex: 1, color: 'var(--muted)' }}>
                       {t.description}{t.mode ? ` · ${t.mode}` : ''} · {t.lineId}

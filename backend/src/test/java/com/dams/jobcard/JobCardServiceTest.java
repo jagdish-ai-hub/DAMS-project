@@ -135,7 +135,7 @@ class JobCardServiceTest {
 
         service.create(req);
 
-        verify(auditService).recordUserEvent(eq("JobCard"), eq(100L), eq(EventType.CREATED),
+        verify(auditService).recordUserEvent(eq("JobCard"), eq(100L), any(), eq(EventType.CREATED),
             eq(CASHIER_ID), any());
     }
 
@@ -204,7 +204,7 @@ class JobCardServiceTest {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, Object>> detail = ArgumentCaptor.forClass(Map.class);
-        verify(auditService).recordUserEvent(eq("JobCard"), eq(100L), eq(EventType.CATEGORY_CHANGED),
+        verify(auditService).recordUserEvent(eq("JobCard"), eq(100L), any(), eq(EventType.CATEGORY_CHANGED),
             eq(CASHIER_ID), detail.capture());
         assertThat(detail.getValue()).containsEntry("before", 3L).containsEntry("after", 9L);
         assertThat(existing.getCategoryId()).isEqualTo(9L);
@@ -227,7 +227,7 @@ class JobCardServiceTest {
 
         service.patch(100L, patch);
 
-        verify(auditService, never()).recordUserEvent(any(), any(), any(), any(), any());
+        verify(auditService, never()).recordUserEvent(any(), any(), any(), any(), any(), any());
         assertThat(existing.getInvoiceNo()).isEqualTo("INV-1");
     }
 

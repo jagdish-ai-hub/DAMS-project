@@ -1,0 +1,53 @@
+# DAMS production stack — one VPS, images pulled from GHCR (built by CI, never built here).
+#
+# The VPS keeps its own /home/server/dams/.env with the real Neon / JWT / R2 values and
+# IMAGE_PREFIX. The image tag is chosen at deploy time by the CI job:
+#
+#   cd /home/server/dams
+#   DAMS_TAG=sha-abc1234 docker compose -f compose.prod.yml pull
+#   DAMS_TAG=sha-abc1234 docker compose -f compose.prod.yml up -d
+#
+# Roll back = run the same two commands with a previous sha- tag (every past build stays in GHCR).
+#
+# Containers listen on localhost only; the host's nginx (/etc/nginx/sites-available/dams)
+# terminates TLS and proxies  /  -> 127.0.0.1:8083 (frontend)  and  /api/ -> 127.0.0.1:8082
+# (backend).
+
+name: dams
+
+services:
+  backend:
+    image: ${IMAGE_PREFIX:?set IMAGE_PREFIX in /home/server/dams/.env}-backend:${DAMS_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    mem_limit: 640m
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      # Bounded JVM footprint — SerialGC + a fixed 448 MB heap suit a low-concurrency CRUD API
+      # and keep RSS predictable under the 640 MB container limit above.
+      JAVA_TOOL_OPTIONS: "-Xms128m -Xmx448m -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m"
+    ports:
+      - "127.0.0.1:8082:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+
+  frontend:
+    image: ${IMAGE_PREFIX:?set IMAGE_PREFIX in /home/server/dams/.env}-frontend:${DAMS_TAG:-latest}
+    restart: unless-stopped
+    mem_limit: 96m
+    ports:
+      - "127.0.0.1:8083:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      # 127.0.0.1, not localhost — busybox wget in nginx:alpine tries ::1 first and the
+      # container's nginx only listens on IPv4.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:80/"]
+      interval: 10s
+      timeout: 3s
+      retries: 12

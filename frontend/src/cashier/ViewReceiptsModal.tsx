@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { receiptsApi, type Attachment } from '../api/receipts'
-import { Modal, ErrorBanner, ghostBtn, dangerBtn } from '../shell/ui'
+import { Modal, ErrorBanner, ghostBtn, dangerBtn, SkeletonRows } from '../shell/ui'
 
 /**
  * "View Receipts" (AGENT.md: a button that opens on click — not inline thumbnails).
@@ -72,7 +72,7 @@ export default function ViewReceiptsModal(props: {
       <ErrorBanner message={error} />
 
       {items == null ? (
-        <p style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>Loading…</p>
+        <SkeletonRows rows={3} height={44} />
       ) : items.length === 0 ? (
         <p style={{ color: 'var(--faint)', fontSize: '0.85rem' }}>No receipt attached yet.</p>
       ) : (

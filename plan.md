@@ -7,6 +7,337 @@
 
 ## Revision log
 
+- **rev 18 (2026-08-31)** — Global search on the Accountant & Finance Manager home screens
+  (frontend only — `/api/v1/search` and `/api/v1/customers/{id}/history` are already open to
+  all roles, and search is already branch-scoped per role). New
+  `frontend/src/shared/GlobalSearch.tsx`: compact search bar in the blank strip under the page
+  subtitle, same debounced `searchApi.query` the cashier uses, results dropdown, and a
+  **read-only** customer drawer (shared `Modal`, new optional `maxWidth` prop → 720) showing
+  totals / job cards / payment timeline + a per-job-card "View documents" button
+  (`ViewReceiptsModal`). No create / pay actions for reviewers. Wired into `ReviewQueuePage`
+  and `FmQueuePage` under the subtitle. Cashier home untouched.
+
+- **rev 17 (2026-08-31)** — CI/CD deploy pipeline (no app code change). Owner chose:
+  auto-deploy on push to `main`, health-check with automatic rollback to the previous GHCR
+  image, nginx + certbot on the VPS, single domain with `/api` proxied, private GHCR images.
+  - `ci.yml`: `images` job now passes `VITE_API_URL` (a repo **variable**) as the frontend
+    build-arg; the `deploy` placeholder is now a real job — scp `compose.prod.yml`, ssh in,
+    `docker compose pull && up -d` at `sha-<commit>`, poll `/actuator/health` + frontend `/`
+    for ~90s, and on failure re-launch the previously-running `sha-` tag and fail the run.
+    `concurrency: deploy-production` serialises overlapping merges.
+  - New `compose.prod.yml` (GHCR `image:` refs with `${DAMS_TAG:-latest}`, `env_file: .env`,
+    localhost-only ports, healthchecks), `deploy/dams.env.example` (VPS `/opt/dams/.env`
+    template incl. `IMAGE_PREFIX` + R2), `deploy/nginx-dams.conf`, `deploy/bootstrap-vps.sh`
+    (one-time: docker + `deploy` user + nginx/certbot + server block), `docs/deployment-guide.md`
+    (both paths — automated GitHub Actions **and** manual SFTP: 2A images-from-GHCR, 2B
+    jar + static under systemd, 2C registry-free tarball — plus secret table, rollback, ops).
+  - GitHub **secrets**: `DEPLOY_SSH_KEY` (dedicated ed25519), `DEPLOY_HOST`, `DEPLOY_USER`,
+    `DEPLOY_KNOWN_HOSTS`. GitHub **variables**: `VITE_API_URL`, `DEPLOY_PATH`, `DEPLOY_PORT`.
+    Neon/JWT/R2 stay only in the VPS `.env`. `compose.prod.yml config` renders clean.
+
+- **rev 16 (2026-08-31)** — UI polish pass + Help Center rewrite (frontend only, no
+  backend, no migration). Owner asked for a friendlier, more polished feel and flagged the
+  Help drawer opening wrong / reading thin.
+  - **Motion foundation** in `styles/globals.css`: motion tokens (`--dur*`, `--ease`),
+    keyframes (fade / slide-up / slide-in-right / scale-in / notice / route / toast /
+    spin / shimmer + the `-out` pair), and interaction polish **scoped under `.dams-app`**
+    (added to the `AppShell` root) — button hover-brightness + active-press, real
+    `:focus-visible` outlines, a soft focus ring on text fields, topbar-nav hover on
+    inactive links, quiet table-row hover. `prefers-reduced-motion` guard neutralises all
+    of it.
+  - **Component entrances**: `ui.tsx` `Modal` (backdrop fade + panel slide-up, now on
+    `--shadow-lift`); `AccountMenu` dropdown scale-in; `AppShell` wraps `<Routes>` in a
+    `key={location.pathname}` `.dams-route-fade` div so each screen fades in on arrival
+    (keyed on path only — an in-place `?editDoc=` replace doesn't re-fire).
+  - **Skeletons / spinners**: new `Skeleton` / `SkeletonRows` / `Spinner` exports in
+    `ui.tsx` (`.dams-skeleton` shimmer, `.dams-spinner` ring). Every bare `Loading…` swapped
+    for a shaped skeleton — Dashboard, both review queues (list + detail), My Entries,
+    Cash, Override Audit, Organizations, Cashier home + history, ViewReceiptsModal. Submit /
+    Resubmit / Upload buttons show `<Spinner/> …ing…` while busy. `ErrorBanner` + the
+    `notice` / `flash` banners animate in (`.dams-anim-notice` / `.dams-anim-toast`).
+  - **Help drawer layout fix** (`HelpDrawer.tsx` + `.dams-help-body`): panel
+    `overflow:hidden`, both panes `min-width/min-height:0` with their own scroll, responsive
+    width (`min(760px,100%)`, nav `clamp(180px,32%,240px)`), slide-in / slide-out with a
+    brief post-close mount, and `pre` / a `table` wrapper get `overflow-x:auto` so wide
+    content scrolls instead of shoving the article off-screen (the "cut off" bug).
+  - **Help content rewrite**: all 19 task articles rewritten in a fuller, plain-language
+    voice (what/when → steps with the *why* → what happens next / common mistakes); stale
+    lines fixed (e.g. cashier *finding-a-customer* "next release"). New **"Your role in
+    DAMS"** orientation article per role (money lifecycle receipt → review → approval →
+    claim close), added as the first manifest entry for every role.
+  - **Follow-up fixes (same rev):**
+    - **Settings page** rebuilt: a read-only account summary card at the top, then each
+      setting as a click-to-expand "menu item" (`Collapsible`) — Change password collapsed
+      by default, Organization open for the owner. Was two always-expanded cards on a
+      narrow column.
+    - **Documents panel** on New Receipt / New Expense: `DAMS-Receive-ID` /
+      `DAMS-Expenses-ID` stays as the last row of the right header column. The **Documents**
+      control (plain — no box) now renders **inside that right column, directly below the ID
+      field**, filling the whitespace the shorter right column used to leave. (Iterations:
+      full-width row → reverted; boxed full-width block → reverted; final = compact, in-column
+      under the ID, per owner's screenshot markup.)
+  - Frontend `lint` / `build` / `vitest` green.
+
+- **rev 15 (2026-08-30)** — Stages 8.5 / 9 / 10 / 11 built; V20 demo seed dropped;
+  API-performance pass.
+  - **Stage 8.5 (Cash review)** and **Stage 9 (Owner dashboard)** built and running against
+    Neon (all 125 backend tests green). No migration.
+  - **Stage 10 (Super Admin panel)** — `OrganizationsPage` reworked onto the shared
+    `shell/ui` primitives: `ErrorBanner`, created-date + cashier-access columns, `Badge`
+    status, a type-name-to-confirm **delete modal** (was `window.prompt`), "Copied ✓"
+    feedback, per-row busy guards. No new backend — Stage 1 admin endpoints already cover it.
+  - **Stage 11 (Help Center)** — framework only (no backend, no migration):
+    `help/manifest.ts` (role → ordered articles + `import.meta.glob` bundling every
+    `help/<role>/*.md` as raw text), `help/HelpDrawer.tsx` (right-side slide-over: search +
+    role TOC + `react-markdown`/`remark-gfm` renderer), `.dams-help-body` typography in
+    `globals.css`, a **? Help** button wired into the shell header. All 19 stubs from
+    Stages 2–10 are wired; the missing `super-admin/onboarding-an-organization.md` was
+    written. **Decision (owner, rev 15): Help stays text-only — no screenshots.** Also not
+    done: per-screen contextual `?` deep-links (deferred).
+  - **V20 demo seed — dropped.** Owner asked to skip it. Testers add their own data; the
+    dashboard windows to the current month so it reads near-zero until they do.
+  - **Default masters on org creation.** `MasterProvisioningService` seeds a new org, in
+    `AdminOrgService.createOrganization`'s transaction, with the same master catalogue the
+    demo dealership ships with (11 receive categories, 7 receive statuses, 7 settlement
+    modes, 4 expense categories + 13 sub-categories, 3 expense modes, 6 expense statuses, 6
+    banks) — flags included (`is_cash`, `is_claim`, `triggers_claim`). A freshly-onboarded
+    Owner now has working dropdowns on day one instead of empty ones. Verified end-to-end
+    on Neon (create → 57 master rows → delete).
+  - **Bug fix — org purge FK order.** `MastersService.purgeOrg` deleted `expense_category`
+    before its `expense_sub_category` children → `DELETE /admin/organizations/{id}` failed
+    with a 409 FK violation for any org that had sub-categories (latent: only the
+    never-deleted demo org had them before). Now deletes sub-categories first.
+    `MastersServicePurgeTest` guards the order.
+  - **Auto-docs confirmed live** — springdoc-openapi, `GET /api-docs` (74 paths),
+    `/swagger-ui.html`. Added `OpenApiConfig` (the `bearerAuth` scheme every controller
+    references was never defined, so Swagger's Authorize button had no field) + real API
+    title; `springdoc.swagger-ui.persist-authorization: true`; `local` profile issues a
+    30-day JWT so Swagger / the app don't log you out mid-session.
+  - **Attachments UI (New Receipt + New Expense).** `AttachmentsPanel` — a "Documents"
+    section under DAMS-Receive-ID, always visible. Multi-file pick; each file tagged to the
+    whole document ("top level") or one settlement/expense line ("sub-transaction") via a
+    per-file dropdown; 10 MB/file, PDF or image (mirrors the backend). On a not-yet-saved
+    form the first upload calls `ensureDraft()` (saves the draft in place, no navigation)
+    so there's an id to attach to. List shows each doc with its tag, a **View** (signed
+    URL, new tab) and **Remove**. Frozen (settled/closed/rejected) → read-only. Backend
+    (`ReceiveDocumentController` / `ExpenseDocumentController` upload endpoints,
+    `AttachmentService`, `receiptsApi`/`expensesApi` client methods) already existed —
+    this is the missing UI. Verified end-to-end via the API (upload doc + line, list,
+    signed-URL fetch 200, delete).
+  - **Bug fix — signed attachment URL port.** `LocalFilesystemStorageService` built the
+    `/attachments/raw` link from `dams.app.base-url` with a hardcoded `:5173`→`:8080`
+    rewrite; the `APP_BASE_URL` → `:2314` change broke it (link pointed at the frontend).
+    Now uses a dedicated `dams.storage.local.public-base-url` (default `http://localhost:8080`).
+  - **`dams.bat`** at repo root — kills ports 8080/2314, loads `.env`, launches backend
+    (`:8080`) and frontend (`:2314`, `--strictPort`) each in its own window. `.env`
+    `CORS_ALLOWED_ORIGINS` now lists both `:5173` and `:2314`; `APP_BASE_URL` → `:2314`.
+    R2 storage keys (`DAMS_STORAGE_PROVIDER` + `R2_*`) added to `.env` / `.env.example`,
+    empty — flip `DAMS_STORAGE_PROVIDER=r2` and fill them to switch attachment storage.
+  - **API-performance pass (no schema change, Neon stays).** The Owner dashboard was firing
+    ~95 DB round-trips (drawer position recomputed per branch ~6×; one pending-review count
+    per branch per doc type); now ~25. Measured against Neon `ap-southeast-1`:
+    `/dashboard/summary` 8.0 s → 2.0 s, `/dashboard/outstanding` 3.5 s → 0.7 s,
+    `/my-entries` 2.9 s → ~1.0 s, `/review/fm/receipts` 2.2 s → 1.4 s.
+    - `DrawerService.computedPositions(orgId, branchIds, date)` — one batched roll-up for
+      all branches (2 mode lookups + 4 group-by-branch sums + openings) instead of ~8
+      queries each.
+    - `DashboardService.summary` / `outstanding` — batch-load branches, job cards,
+      customers, vehicles, categories, and grouped pending-review / last-close maps once;
+      new `countPendingReviewByBranch`, `sumAmountByJobCard`, `sumCashModeByBranchForDate`,
+      `sumByBranchForDateAndDirection` repo queries; `PendingAmountCalculator.forJobCards`
+      (batch, 2 queries).
+    - `MyEntriesService` + `ReviewService` queues — per-id lookup loops replaced with
+      `…IdIn` batch queries and full reference maps.
+    - `application.yml` — HikariCP pool sizing + keepalive, Hibernate
+      `default_batch_fetch_size` / `jdbc.batch_size` / autocommit-off.
+  - **Frontend robustness.** `ErrorBanner` now `scrollIntoView`s when a message appears, so
+    a failed Submit at the bottom of a long form no longer looks like a dead button. Nav
+    audit re-run — all in-app `navigate()` targets are `/app`-prefixed (the earlier bounce
+    to `/login` is gone).
+
+- **rev 14 (2026-08-30)** — Stage 8 (FM approval, claim closing, Override Audit) built +
+  verified on Neon.
+  - **V19** — `audit_event.branch_id` (nullable, FK), backfilled from each row's document
+    (receive / expense / cash / job card), + a `(org_id, event_type, created_at DESC)`
+    index. `AuditService` gains a branch-aware overload; **review and claim-close events
+    set it**, older maker-side events (CREATED / SUBMITTED / LINE_ADDED / SETTLED) stay
+    NULL until a later stage wires them — the backfill covers history.
+  - **FM approval** lives in `com.dams.review`: `ReviewGuard.requireFinanceManager`;
+    `ReviewService.approve{Receipt,Expense}` (VERIFIED → APPROVED); the existing
+    `query`/`reject` now **dispatch on role** — Accountant acts from SUBMITTED, FM from
+    VERIFIED, both land on QUERIED / REJECTED (one endpoint each, `POST
+    /{receipts,expenses}/{id}/query` · `/reject` · `/approve`). FM queue:
+    `GET /api/v1/review/fm/{receipts,expenses}` → `{ awaitingApproval, openClaims,
+    recentlyClosed }` (last two receipts-only).
+  - **Claim close** — `ClaimCloseService` + `POST /api/v1/job-cards/{id}/close-claim`
+    `{finalAmount, reason?}`. FM-only; category must be a claim category; no existing
+    ClaimClose; **every non-REJECTED receive document on the job card must be APPROVED**
+    (409 otherwise). One transaction writes the immutable `claim_close` row **and** flips
+    `settled = true` on every open receive document (freezing their receipts), audits
+    SETTLED per doc + CLOSED on the job card. `overridden = finalAmount ≠ Σ lines`; reason
+    required when overridden. Post-close locks (already wired Stage 4, now covered by
+    tests): `PATCH /job-cards` category/status → 409, `POST /receipts` → 409,
+    `pending_amount` = 0.
+  - **Decisions (confirmed):** FM query/reject → **QUERIED** (back to the cashier), not the
+    mockup's SUBMITTED. close-claim needs all receive docs **APPROVED**. FM maker-checker
+    is against `created_by` / `last_modified_by` only (role separation already guarantees
+    three people).
+  - **Override Audit** — `GET /api/v1/override-audit?userId=&branchId=&from=&to=` (OWNER +
+    FM). One feed merging the Accountant's line overrides (`OVERRIDE` audit rows) **and**
+    the FM's claim-close overrides (`claim_close.overridden` — `kind: "claim"`,
+    `amountBefore` = Σ received, `amountAfter` = final amount). Dates default to the last 90
+    days, resolved in the org timezone.
+  - `JobCardResponse` + `ReceiveDocumentResponse` gain `claimOverridden` /
+    `claimOverrideReason` (+ `claimClosedByName` / `claimClosedAt` on the job card) for the
+    "Overridden · Final" summary.
+  - Frontend: `review/reviewShared.tsx` (extracted `RecordCard` / `QueryRejectBox` so the
+    Accountant and FM pages share the record view); `finance/FmQueuePage.tsx` (FM home —
+    three-section queue, Approve / Query / Reject, Close-claim modal with live override
+    detection, closed-claim summary); `overrideaudit/OverrideAuditPage.tsx`
+    (`/override-audit`, nav for OWNER + FM — filter by date / branch / user, merged table).
+    `api/review.ts` (+`approve`, `fmQueue`), `api/overrideAudit.ts`, `api/jobCards.ts`
+    (+`closeClaim`). *Known gap:* the user filter's dropdown is Owner-only (`GET /users` is
+    OWNER-gated); FM filters by date + branch.
+  - Help stubs: `finance-manager/approving-entries.md`, `closing-a-claim.md`,
+    `override-audit.md`.
+  - Tests: backend **118 pass / 2 skipped** (`ReviewGuardTest` +2, `ReviewServiceTest`
+    reworked to 19 incl. FM cases, `ClaimCloseServiceTest` ×7, `OverrideAuditServiceTest`
+    ×2). Frontend tsc · lint · vitest · build green.
+
+- **rev 13 (2026-08-30)** — Stage 7 (Accountant review queue) built + verified on Neon.
+  **No migration** — the line override columns (V11/V14), the workflow-status and
+  `audit_event.event_type` CHECKs, and the `(org_id, branch_id, workflow_status)` queue
+  indexes were all provisioned in earlier stages.
+  - New `com.dams.review` package — `ReviewGuard` (ACCOUNTANT only, branch in scope,
+    maker-checker: actor ≠ `created_by` and ≠ `last_modified_by`), `ReviewService`
+    (verify / query / reject / line-override on SUBMITTED receipts and expenses; explicit
+    expense `close`), `ReviewController`.
+  - **Review actions never touch `last_modified_by`** — it tracks the maker's last edit, so
+    one accountant may override a line and still verify the same document (matches
+    `review-close.html`). The override trail is the line's own `original_amount` /
+    `overridden_by` / `overridden_at` columns plus an `OVERRIDE` audit row (detail carries
+    `amountBefore/After`, and for expenses `overLimitBefore/After` + a human summary).
+  - **`closeExpense`**: allowed from VERIFIED or APPROVED — **but an over-limit expense
+    requires APPROVED** (FM sign-off), so it cannot be closed until Stage 8 ships the FM
+    approve step. Intended. Ordinary expenses still close from VERIFIED.
+  - **`overrideExpenseLine` recomputes `over_limit`** via the same
+    `ExpenseDocumentService.recomputeOverLimit` the cashier-side edits use (made public);
+    `overrideReceiptLine` re-runs auto-settle via a new `ReceiveDocumentService.refreshSettlement`.
+  - **Detail GET is now branch-scoped for every role** (`ReceiveDocumentService.get` /
+    `ExpenseDocumentService.get` → `BranchScope.canSeeBranch`): a cashier sees only their
+    home branch (org-wide with the multi-branch toggle), an accountant their assigned
+    branches, FM / Owner everything. Previously any signed-in org user could GET any
+    document by id.
+  - **`history` on both document responses** — an oldest-first list of humanised audit
+    events (`DocumentHistoryService`), driving the review pane's History card and the
+    cashier's "Query from the accountant" banner on a queried entry.
+  - Mockup deviations (flagged, built per AGENT.md): expense-close exists though
+    `review-close.html` has no UI for it; query sets status to **QUERIED** (not the
+    mockup's `SUBMITTED`) to match the Stage-4/6 resubmit loop; no Accountant/FM role
+    toggle; the mockup's "Date of Inception" header field stays dropped (rev 10).
+  - Frontend: `accountant/ReviewQueuePage.tsx` (`/`, Accountant home + "Review Queue" nav)
+    — two-pane queue + overview + record detail with inline override / query / reject
+    boxes; `api/review.ts`. Query-note banner added to New Receipt / New Expense.
+  - Help stubs: `accountant/reviewing-the-queue.md`, `overriding-an-amount.md`,
+    `closing-an-expense.md`.
+  - Tests: backend 102 pass / 2 skipped (`ReviewGuardTest` ×6, `ReviewServiceTest` ×14).
+    Frontend tsc · lint · vitest · build green.
+
+- **rev 12 (2026-08-30)** — Frontend date-display consistency (no backend / migration
+  change). All dates render identically for every viewer regardless of their machine's
+  timezone or locale:
+  - Four helpers in `frontend/src/shell/ui.tsx` — `fmtDate` (`7 August 2026`),
+    `fmtDateShort` (`7 Aug 2026`), `fmtDateTime` (`7 August 2026, 3:12 pm IST` — instants
+    converted to Asia/Kolkata), `istToday` (`yyyy-mm-dd` for India, for form defaults and
+    `max=` guards).
+  - Calendar dates are formatted from the ISO string's parts, never via `new Date(str)`
+    (which parses as UTC midnight and slips a day for viewers west of UTC).
+  - Storage and the wire format stay ISO; `<input type="date">` stays native.
+  - Call sites moved off `new Date().toISOString().slice(0,10)` (was UTC "today", wrong
+    for a cashier working the 00:00–05:30 IST window or overseas): New Receipt / New
+    Expense line defaults, Add Payment, Cash page `todayStr`. Prose dates now via helper:
+    Cash close-day modal, cashier-home payment timeline.
+
+- **rev 11 (2026-08-30)** — Stage 6 (Cash document + day close) built + verified on Neon:
+  - **`CashWorkflowStatus` is the full six** — DRAFT / SUBMITTED / VERIFIED / APPROVED /
+    QUERIED / REJECTED, matching Receipt and Expense (plan.md's earlier 4-value note is
+    superseded — there was no reason cash lacked a correction path). Cashier `resubmit`
+    (QUERIED → SUBMITTED) and header edit while DRAFT / QUERIED are wired.
+  - **`is_cash` flag on `settlement_mode` + `expense_mode`** (V16, back-filled): the drawer
+    math asks the mode, never matches its name. Seeded true for **Cash** + **Adv-Cash**
+    (settlement) and **Cash** (expense).
+  - **`cash_document`** — one IN-from-bank / OUT-to-bank movement, single amount, no
+    sub-lines, no customer/vehicle/job-card. `{branch}-{MONKEY}-C-{seq}` on submit
+    (`DocType.C`, gap-free). No branch field — posts under the cashier's home branch
+    (`CashPostingGuard`).
+  - **Drawer position** (`DrawerService`, the one implementation): `opening + cash-mode
+    receipts + cash IN − cash-mode expenses − cash OUT` for a branch/date (Asia/Kolkata).
+    Counts every non-DRAFT, non-REJECTED contributor — the cash is physically in the drawer
+    regardless of review state; REJECTED is the one exclusion (returned / never received),
+    stated as a code comment. Opening chain: latest `cash_day_close.counted_amount` before
+    the date → else the Accountant's one-time `branch_cash_opening` → else 0 with
+    `openingSet = false`.
+  - **`cash_day_close`** — counted amount, auto `variance = counted − computed`,
+    `variance_remark` mandatory when non-zero, future dates and re-closing refused. Its
+    existence locks the `(branch, date)`.
+  - **Lock widened (this was a real gap).** A close doesn't only block new `cash_document`
+    rows — a new `CashDateLock` (depends only on `CashDayCloseRepository`, no service cycle:
+    `DrawerService` reads receive/expense *repos*, and those services read `CashDateLock`)
+    is consulted by `ReceiveDocumentService` and `ExpenseDocumentService`: any **cash-mode**
+    settlement or expense line dated on/before the branch's latest close — added, edited, or
+    deleted — is refused (409). Non-cash lines on a closed date are still fine.
+  - **`branch_cash_opening`** — ACCOUNTANT only, one per branch ever, for a branch within
+    their access.
+  - **My Entries** now merges receipts + expenses + **cash** (`kind = "CASH"`, "Cash IN /
+    OUT from bank"); a queried cash movement opens at `/cash?editDoc=` for fix-and-resubmit.
+  - `audit_event` CHECK unchanged (CLOSED covers the day-close; CREATED / SUBMITTED cover
+    movements). `OrganizationPurgeService` extended (cash documents / closes / openings).
+  - Frontend: `CashPage` (`/cash`, `Cash` in the cashier nav + a home quick-card) — drawer
+    breakdown card, movements table, Cash In / Cash Out modal, Close Day modal (live
+    variance, conditional remark), `?editDoc=` fix-and-resubmit. Built from AGENT.md — no
+    HTML mockup for this screen.
+- **rev 10 (2026-08-30)** — Stage 5 (Expense document) built + verified on Neon:
+  - **Three master-flag gaps in plan.md, folded in as V13** (flag columns, not name matching —
+    AGENT.md "nothing hard-coded"): `expense_mode` gains `requires_bank` / `requires_ref`
+    (the same flags `settlement_mode` already had — the expense form asks the mode, never
+    matches its name); `expense_business_status` gains `triggers_claim`, marking the one
+    status ("Transfer to Claim") the service keys on. Demo rows back-filled.
+  - **`date_of_inception` dropped** — same call as Stage 4's "Date of Entry": each line has
+    its own `transaction_date`, `created_at` covers "when entered". Not in the schema.
+  - **`POST /api/v1/expenses`** — receiver by `receiverId` OR inline `receiverName` (deduped
+    on name, like Customer); optional `jobCardId`; `lines[]`; optional `submit`. **No branch
+    field** — posts under the cashier's home branch. `ExpensePostingGuard` mirrors the
+    receive-side cross-branch block (409 naming both branches); when a `jobCardId` is given it
+    must be in the cashier's home branch.
+  - **New Expense always creates a fresh document** — no one-open-doc invariant (that exists
+    on the receive side only to keep Pending Amount unambiguous; expenses aggregate toward
+    nothing).
+  - **`over_limit`** — stored on the document, recomputed on every line change: true when any
+    line's amount exceeds its sub-category `limit_amount`. Flags, never blocks. Per-line
+    `overLimit` is also in the response for the row warning.
+  - **Lines stay addable until CLOSED** — Add Expense (`POST /expenses/{id}/lines`) is refused
+    only once the document is CLOSED (Accountant, Stage 7) or REJECTED. `ExpenseWorkflowStatus`
+    carries the extra `CLOSED` value.
+  - **Transfer to Claim** (`POST /expenses/{id}/transfer-to-claim`, and the plain create/patch
+    path) — allowed only when the expense sits on a job card whose category is a claim category
+    (`receive_category.is_claim`); else 400. Sets the business status to the `triggers_claim`
+    row; audited as a new `TRANSFERRED_TO_CLAIM` event (audit CHECK extended in V14).
+  - **Doc numbers** — `{branchCode}-{MONKEY}-E-{seq:03d}` (`OOR-AUG26-E-001`), same gap-free
+    machinery and on-submit-only timing as the receive side; line ids `{docNo}-L{n}`.
+  - **My Entries now merges receipts + expenses** — `MyEntryResponse.kind` is `RECEIPT` |
+    `EXPENSE`, sorted newest-first across both; `overLimit` flag for expenses. Seed has an
+    over-limit expense (E-002), an unnumbered draft, a CLOSED one, and one at "Transfer to
+    Claim" (E-001, on the Kalaivani AMC job card).
+  - **Universal search now matches `document_no`** (receive + expense), branch-scoped,
+    resolved to the job card's customer — the plan.md cross-cutting search spec listed it but
+    Stage 4 hadn't wired it. A standalone overhead expense (no job card) has no customer, so
+    its number surfaces via the Accountant queue (Stage 7), not here.
+  - `AttachmentService` handles `EXPENSE_DOCUMENT` / `EXPENSE_LINE` parents (freeze on
+    close/approve, Stage 7). `OrganizationPurgeService` extended (expense lines / docs).
+  - Frontend: `NewExpensePage` (`/new-expense`, incl. `?customerId=` / `?jobCardId=` prefill
+    and `?editDoc=` resubmit mode), category→sub-category cascade, per-line limit warnings,
+    Transfer to Claim button; `MyEntriesPage` shows both kinds; Cashier home "New Expense"
+    (quick-action + history card) wired.
 - **rev 9 (2026-08-30)** — Stage 4 (Receive document) built + verified on Neon:
   - **B2B / GST restored.** The Receive Entry mockup's B2C/B2B toggle + mandatory GST# was
     dropped in the Stage 4 plan as "mockup embellishment" — that was wrong, it's a real
@@ -366,10 +697,14 @@ Flyway callback / profile guard and instead runs a masters-only seed.
 | V10 | `job_card` add `is_b2b` / `gst_no` (Receive Entry's B2C/B2B toggle + mandatory GST — a spec gap in plan.md, folded in before Stage 4) | 4 ✅ |
 | V11 | `receive_document` (incl. `settled`, `last_modified_by`, partial unique index), `settlement_line`, `claim_close` (keyed by `job_card_id`), `attachment` | 4 ✅ |
 | V12 | **seed** — one receive document + lines per mockup job card (R-011…R-022), one `claim_close` (Kalaivani, shortfall-accepted), JUL26 `document_sequence` rows | 4 ✅ |
-| V13 | `expense_document` (incl. `last_modified_by`), `expense_line` | 5 |
-| V14 | **seed** — sample expense documents | 5 |
-| V15 | `cash_document` (single-movement), `cash_day_close`, `branch_cash_opening` | 6 |
-| V16 | **seed** — sample cash documents / opening balances | 6 |
+| V13 | `expense_mode` add `requires_bank` / `requires_ref`; `expense_business_status` add `triggers_claim`; back-fill demo rows (form asks the mode/status, never matches its name) | 5 ✅ |
+| V14 | `expense_document` (incl. `over_limit`, `last_modified_by`), `expense_line`; `audit_event` CHECK += `TRANSFERRED_TO_CLAIM`; `lower(document_no)` indexes on `receive_document` + `expense_document` | 5 ✅ |
+| V15 | **seed** — 5 expense documents (over-limit, unnumbered draft, CLOSED, Transfer-to-Claim, within-limits multi-line), JUL26 `E` `document_sequence` rows | 5 ✅ |
+| V16 | `settlement_mode` + `expense_mode` add `is_cash`; back-fill Cash / Adv-Cash (drawer math asks the mode, never matches its name) | 6 ✅ |
+| V17 | `cash_document` (single-movement), `branch_cash_opening`, `cash_day_close` | 6 ✅ |
+| V18 | **seed** — OOR opening ₹10,000, cash docs C-001…C-004 (one QUERIED), one historical `cash_day_close` | 6 ✅ |
+| V19 | `audit_event` add `branch_id` (nullable, FK), backfilled from each row's document; index `(org_id, event_type, created_at DESC)` for Override Audit | 8 ✅ |
+| ~~V20~~ | **dropped (rev 15)** — full demo seed. Owner asked to skip; testers add their own data. | — |
 
 ---
 
@@ -561,66 +896,119 @@ Each stage adds its own indexes for the query paths it introduces (search, my-en
 - Help stubs: `cashier/creating-a-receipt.md`, `cashier/adding-a-payment.md`, `cashier/fixing-a-queried-entry.md`
 - Tests: backend 56 pass / 2 skipped (Testcontainers — run in CI). Frontend tsc · lint · vitest · build all green.
 
-### Stage 5 — Expense document
-**Demo:** Cashier creates an expense, picks category/sub-category, sees the limit warning, submits. Transfer-to-Claim available on qualifying job cards.
+### Stage 5 — Expense document ✅ (verified on Neon)
+**Demo:** Cashier creates an expense (inline receiver, optional job-card tag), picks category/sub-category, sees the limit warning, submits. Add Expense appends lines until the Accountant closes it. Transfer-to-Claim works on warranty/AMC/goodwill job cards. My Entries lists receipts + expenses together.
 
-- V13 migration (ExpenseDocument incl. `last_modified_by`, ExpenseLine); V14 seed migration (sample expense docs)
-- Expense CRUD + submit + add-line endpoints; lines can be added until the Accountant closes the document
-- Over-limit detection against `expense_sub_category.limit_amount`
-- Transfer-to-claim endpoint (status change only, no new document)
-- Frontend: New Expense form (category → sub-category cascade, limit warning)
+- V13 (`expense_mode` + `requires_bank` / `requires_ref`; `expense_business_status` + `triggers_claim`; demo rows back-filled) · V14 (`expense_document` incl. `over_limit` / `last_modified_by`, `expense_line`; `audit_event` CHECK gains `TRANSFERRED_TO_CLAIM`; `lower(document_no)` search indexes on both document tables) · V15 seed (5 expense docs — over-limit, unnumbered draft, CLOSED, Transfer-to-Claim, plus a within-limits multi-line; JUL26 `E` sequence rows). See rev 10.
+- `POST /api/v1/expenses` — one flow: `receiverId` OR inline `receiverName` (deduped), optional `jobCardId`, `lines[]`, optional `submit`. No branch field — posts under the cashier's home branch. `PATCH /expenses/{id}` edits the header while DRAFT/QUERIED; `submit` / `resubmit` / `lines` (Add Expense) / line edit+delete; `transfer-to-claim`; document + line attachments.
+- New Expense always creates a fresh document — no one-open-doc invariant (nothing aggregates toward a figure the way Pending Amount does).
+- `over_limit` — stored, recomputed on every line change (`amount > expense_sub_category.limit_amount`); flags for FM approval, never blocks. Per-line `overLimit` in the response.
+- Lines addable until CLOSED (Stage 7) or REJECTED. `ExpenseWorkflowStatus` adds `CLOSED`.
+- Transfer to Claim — endpoint **and** the plain status path require the expense to sit on a claim-category job card (`receive_category.is_claim`), else 400. Sets the `triggers_claim` status; `TRANSFERRED_TO_CLAIM` audit event.
+- Doc numbers — `{branchCode}-{MONKEY}-E-{seq:03d}` (`OOR-AUG26-E-001`), on submit, gap-free (`DocumentNumberService`, `DocType.E`); line ids `{doc}-L{n}`.
+- Cross-branch write block — `ExpensePostingGuard` (mirrors `ReceivePaymentGuard`): `role == CASHIER`, home-branch only; a `jobCardId` must be in that branch. 409 names both branches.
+- `GET /api/v1/my-entries` now merges receipts + expenses (`kind`), newest-first, `overLimit` flag. `SearchService` matches receive + expense `document_no` (branch-scoped → customer).
+- `AttachmentService` handles expense parents (freeze on close/approve — Stage 7). `OrganizationPurgeService` extended (expense lines / docs).
+- Masters: `expense-modes` expose `requiresBank` / `requiresRef`; `expense-statuses` expose `triggersClaim` (all editable via `/masters/{type}`).
+- Frontend: `NewExpensePage` (`/new-expense`, incl. `?customerId=` / `?jobCardId=` prefill, `?editDoc=` resubmit), category→sub-category cascade, per-line limit warnings, Transfer to Claim button; `MyEntriesPage` shows both kinds; Cashier home "New Expense" (quick-action + history card) wired.
 - Help stub: `cashier/recording-an-expense.md`
+- Tests: backend 68 pass / 2 skipped (Testcontainers — CI). `ExpenseDocumentServiceTest`, `ExpensePostingGuardTest`, `AttachmentServiceTest` (+ expense cases). Frontend tsc · lint · vitest · build all green.
 
-### Stage 6 — Cash document + day close
-**Demo:** Cashier opens the Cash page, sees the live drawer position, adds Cash In / Out movements (each its own C-numbered doc), closes the day with a variance remark. Closing locks the date.
+### Stage 6 — Cash document + day close ✅ (verified on Neon)
+**Demo:** Cashier opens the Cash page, sees the live drawer position + breakdown, adds Cash In / Out movements (each its own C-numbered doc), closes the day with a variance remark. Closing locks the date against new cash movements *and* backdated cash-mode receipt/expense lines. My Entries lists receipts + expenses + cash together.
 
-- V15 migration (CashDocument single-movement, CashDayClose, BranchCashOpening); V16 seed migration (sample cash docs / openings)
-- Cash movement endpoints (single amount, maker-checker) + `/cash/opening` (Accountant) + `/cash/close-day` (Cashier)
-- Drawer-position computation (opening + cash-mode receipts + cash IN − cash-mode expenses − cash OUT), Asia/Kolkata day boundary
-- Day-close: counted amount, auto variance, remark mandatory when variance ≠ 0, date lock
-- Frontend: Cash page — drawer summary, movements table, Close Day button
+- V16 (`settlement_mode` + `expense_mode` `is_cash` flag, back-filled Cash / Adv-Cash) · V17 (`cash_document` single-movement + `branch_cash_opening` + `cash_day_close`) · V18 seed (OOR opening ₹10,000, four cash docs C-001…C-004 incl. a QUERIED one, one historical `cash_day_close`). See rev 11.
+- `CashWorkflowStatus` = DRAFT / SUBMITTED / VERIFIED / APPROVED / QUERIED / REJECTED (full six, like every other document).
+- `POST /api/v1/cash-documents` — one IN or OUT movement, single amount, no sub-lines, no branch field (posts under the cashier's home branch). `PATCH` (draft/queried) · `submit` · `resubmit` · delete-a-draft. Verify + approve land with the Stage 7 queue.
+- `GET /api/v1/cash/drawer?branchId=&date=` — `DrawerService`: `opening + cash-mode receipts + cash IN − cash-mode expenses − cash OUT`, counting non-DRAFT/non-REJECTED contributors (a comment states the REJECTED-means-returned assumption). Response bundles the breakdown, the close state, and the day's movements.
+- `POST /api/v1/cash/opening` — ACCOUNTANT, once per branch, for a branch in their access.
+- `POST /api/v1/cash/close-day` — CASHIER: counted amount → auto `variance`; remark mandatory when variance ≠ 0; future date and re-closing refused. `cash_day_close` locks the `(branch, date)`.
+- **`CashDateLock`** — a close refuses any *cash-mode* settlement / expense line dated on/before the branch's latest close (add / edit / delete), not just new cash documents. Small component, `CashDayCloseRepository` only — no service cycle.
+- `is_cash` exposed on `settlement-modes` / `expense-modes` masters (Owner-editable).
+- `GET /api/v1/my-entries` merges cash (`kind = "CASH"`); a queried cash movement opens at `/cash?editDoc=`.
+- `OrganizationPurgeService` extended (cash documents / closes / openings).
+- Frontend: `CashPage` (`/cash`, cashier nav + home quick-card) — drawer breakdown card, movements table, Cash In / Cash Out modal, Close Day modal (live variance, conditional remark), `?editDoc=` fix-and-resubmit. No HTML mockup — built from AGENT.md.
 - Help stubs: `cashier/cash-in-and-out.md`, `cashier/closing-the-day.md`
+- Tests: backend 82 pass / 2 skipped (Testcontainers — CI). `DrawerServiceTest`, `CashCloseServiceTest`, `CashDocumentServiceTest`. Frontend tsc · lint · vitest · build all green.
 
-### Stage 7 — Accountant review queue
+### Stage 7 — Accountant review queue ✅ (verified on Neon)
 **Demo:** Accountant sees the queue, verifies / overrides / queries / rejects. Cashier sees queried items in My Entries and fixes + resubmits. Matches `review-close.html` Accountant view.
 
-- Accountant workflow endpoints: verify, override-line, query, reject
-- Resubmit endpoint (CASHIER)
-- Maker-checker guard: actor ≠ `created_by` and ≠ `last_modified_by`
-- Override recorded with actor + reason + timestamp; AuditEvent at every transition
-- Frontend: two-pane layout (queue + detail), action bar, fix-and-resubmit flow
+- No migration — override columns, workflow / event-type CHECKs, and queue indexes all pre-existed (V11/V14). See rev 13.
+- `com.dams.review`: `ReviewGuard` (ACCOUNTANT + branch scope + maker-checker), `ReviewService`, `ReviewController`.
+- Endpoints: `GET /api/v1/review/{receipts,expenses}`; `POST /api/v1/{receipts,expenses}/{id}/verify` · `/query` · `/reject` · `/lines/{lineNo}/override`; `POST /api/v1/expenses/{id}/close`. (`/resubmit` for CASHIER already shipped Stage 4/6.)
+- Review actions do not set `last_modified_by`. `closeExpense` needs APPROVED when over-limit. Line override recomputes `over_limit` (expense) / re-runs auto-settle (receipt).
+- Detail GET (`/{receipts,expenses}/{id}`) is now branch-scoped for every role via `BranchScope`.
+- `history` (humanised audit events) added to both document responses.
+- Frontend: `accountant/ReviewQueuePage.tsx` (Accountant home) — two-pane queue + overview + detail with inline override/query/reject; `api/review.ts`; query-note banner on New Receipt / New Expense.
 - Help stubs: `accountant/reviewing-the-queue.md`, `accountant/overriding-an-amount.md`, `accountant/closing-an-expense.md`
+- Tests: backend 102 pass / 2 skipped (`ReviewGuardTest`, `ReviewServiceTest`). Frontend tsc · lint · vitest · build green.
 
-### Stage 8 — FM approval, claim closing, override audit
-**Demo:** FM approves / queries / rejects. FM closes Warranty/AMC/CG claims via `POST /job-cards/{id}/close-claim` with an optional final override ("Overridden · Final" badge everywhere after). Owner/FM see the org-wide Override Audit screen. Matches `review-close.html` FM view.
+### Stage 8 — FM approval, claim closing, Override Audit ✅ (verified on Neon)
+**Demo:** FM approves / queries / rejects. FM closes Warranty/AMC/CG claims via `POST /job-cards/{id}/close-claim` with an optional final override ("Overridden · Final" everywhere after). Owner/FM see the org-wide Override Audit screen. Matches `review-close.html` FM view.
 
-- FM workflow endpoints: approve, close-claim — one transaction writes the immutable ClaimClose per job card **and** flips `settled = true` on every still-open ReceiveDocument of that job card (tested: shortfall-accepted claim → no doc left "open", `pending_amount` 0)
-- Once ClaimClose exists: `PATCH /job-cards/{id}` rejects `category_id` / `business_status_id` (409), `POST /receipts` on that job card is refused (409), and `pending_amount` reports 0 — all covered by tests
-- Override audit endpoint (filter by user / branch / date)
-- Frontend: FM queue, claim-close modal, closed-claim summary, Override Audit screen
-- Help stubs: `finance-manager/approving-entries.md`, `finance-manager/closing-a-claim.md`, `finance-manager/override-audit.md`
+- **V19** — `audit_event.branch_id` (nullable), backfilled; index for the override-audit query. See rev 14.
+- **FM queue = every VERIFIED receipt and expense** ("Awaiting Final Approval"), plus (receipts) open claims + recently closed. `GET /api/v1/review/fm/{receipts,expenses}`.
+- Endpoints: `POST /api/v1/{receipts,expenses}/{id}/approve`; `query` / `reject` now dispatch on role (Accountant SUBMITTED→QUERIED/REJECTED, FM VERIFIED→QUERIED/REJECTED); `POST /api/v1/job-cards/{id}/close-claim {finalAmount, reason?}` (FM only, claim category, all receive docs APPROVED, one txn: immutable `claim_close` + `settled=true` on every open doc + freeze + SETTLED/CLOSED audit; reason required when `finalAmount ≠ Σ lines`).
+- Post-close locks (now test-covered): `PATCH /job-cards` category/status → 409, `POST /receipts` → 409, `pending_amount` = 0.
+- **Override Audit** — `GET /api/v1/override-audit?userId=&branchId=&from=&to=` (OWNER + FM). Merges Accountant line overrides (`OVERRIDE` audit rows) **and** FM claim-close overrides (`claim_close.overridden`, `kind: "claim"`) in one newest-first feed; 90-day default.
+- `JobCardResponse` / `ReceiveDocumentResponse` gain `claimOverridden` / `claimOverrideReason` (+ `claimClosedByName` / `claimClosedAt`).
+- Decisions: FM query/reject → **QUERIED** (to the cashier). close-claim needs all receive docs **APPROVED**. FM maker-checker is against `created_by` / `last_modified_by` only.
+- Frontend: `review/reviewShared.tsx` (`RecordCard` / `QueryRejectBox` shared by both queues); `finance/FmQueuePage.tsx` (FM home — 3-section queue, Approve/Query/Reject, claim-close modal, closed-claim summary); `overrideaudit/OverrideAuditPage.tsx` (`/override-audit`, OWNER + FM nav).
+- Help stubs: `finance-manager/approving-entries.md`, `closing-a-claim.md`, `override-audit.md`
+- Tests: backend 118 pass / 2 skipped (`ClaimCloseServiceTest` ×7, `OverrideAuditServiceTest` ×2, `ReviewServiceTest` FM cases, `ReviewGuardTest` FM). Frontend tsc · lint · vitest · build green.
 
-### Stage 9 — Owner dashboard
-**Demo:** Owner sees KPI cards, trend chart, donut, branch comparison, expenses, outstanding, activity feed — filterable by branch and period. Matches `owner-dashboard.html` dashboard tab.
+### Stage 8.5 — Cash review ✅ (built; backend green on Neon)
+**Why:** AGENT.md decision #1 says cash documents use "the same maker-checker workflow (Submitted → Verified → Approved) as every other document", and the plan's endpoint list has `POST /api/v1/cash-documents/{id}/verify` · `/approve`. Stage 6 built `CashWorkflowStatus` with all six values *and said "verify + approve land with the Stage 7 queue"* — then Stages 7–8 only wired receipts and expenses. A new cash document currently can't move past SUBMITTED. This closes that.
 
-- Dashboard aggregate endpoints (read-only); Cash In/Out excluded from Collections & Expenses figures
-- Frontend: KPI row with count-up, SVG trend chart, donut (recharts), branch-comparison table, horizontal bars, outstanding list, activity feed
+- **No migration** — `CashWorkflowStatus` and the `audit_event` CHECK already cover all six.
+- `CashDocumentService` gains `verify` (ACCOUNTANT, SUBMITTED→VERIFIED), `approve` (FM, VERIFIED→APPROVED), and role-dispatched `query` / `reject` (Accountant from SUBMITTED, FM from VERIFIED → QUERIED / REJECTED) — reusing `ReviewGuard` (role + branch scope + maker-checker). Cash has no lines, so no override. Audit each transition with `branch_id`.
+- Endpoints: `POST /api/v1/cash-documents/{id}/verify` · `/approve` · `/query` · `/reject`.
+- Queue: a **Cash** tab in `ReviewQueuePage` (Accountant) and `FmQueuePage` (FM) alongside Receipts / Expenses — `GET /api/v1/review/cash` (SUBMITTED, in the accountant's branches) and the cash arm of `GET /api/v1/review/fm/cash` (VERIFIED, org-wide). A lightweight cash detail panel (direction / date / amount / bank / ref / remark + History + action bar) — `RecordCard` is line-oriented, cash gets its own compact view.
+- Cashier side already works: the Cash page movements table shows the status badge and "Fix & Resubmit" on QUERIED; add the query-note banner to the movement modal (parity with New Receipt / New Expense).
+- Tests: `CashDocumentServiceTest` gains verify / approve / query / reject cases (maker-checker, wrong-state, role).
+
+### Stage 9 — Owner dashboard ✅ (built; backend green on Neon; perf-tuned rev 15)
+**Demo:** Owner sees KPI cards, trend chart, donut, branch comparison, expenses-by-category, outstanding, activity feed — filterable by branch and by period (Today / Month-to-date). Matches `owner-dashboard.html` dashboard tab. (Team & Branches is already its own screen since Stage 2.)
+
+- **No migration.** Also wires `branch_id` into the maker-side audit calls (`ReceiveDocumentService` / `ExpenseDocumentService` / `CashDocumentService` / `JobCardService` — CREATED / SUBMITTED / LINE_ADDED / SETTLED / CATEGORY_CHANGED) so the activity feed filters by branch for new data (V19 backfilled history).
+- **Money figures count APPROVED documents only** (dashboard = verified, Tally-grade numbers); **Cash In/Out (`cash_document`) is excluded from Collections and Expenses** everywhere (AGENT.md decision #1) — it only affects the cash-in-hand KPI.
+- `DashboardService` + endpoints (OWNER + FINANCE_MANAGER):
+  - `GET /api/v1/dashboard/summary?branchId=&period=today|mtd` → `{ kpis: {collections, expenses, net, cashInHand, pendingReview}, trend: [{date, collections, expenses}] (14-day), byMode: [{mode, amount}], byCategory: [{category, amount}], branchComparison: [{branchCode, branchName, collections, expenses, net, cashInHand, lastClosed, variance, pendingReview}] }`
+  - `GET /api/v1/dashboard/outstanding?branchId=` → job cards with `pending_amount > 0` + open claims (APPROVED claim, no `claim_close`) — B2B credit, part-paid jobs, warranty claims "awaiting Eicher settlement"
+  - `GET /api/v1/dashboard/activity?branchId=&limit=` → recent audit events joined to doc + actor
+  - `cashInHand` reuses `DrawerService.position(branch, today)`; new grouped `sum…` queries on `SettlementLineRepository` / `ExpenseLineRepository` (by branch, by mode/category, by day) for the rest.
+- Frontend: `owner/DashboardPage.tsx` (Owner home) — branch + period segments, KPI row with count-up, Collections-vs-Expenses trend (`recharts` area/line), collections-by-mode donut (`recharts` pie), expenses-by-category horizontal bars, branch-comparison table, outstanding list, activity feed; `api/dashboard.ts`. `recharts` is already a dependency.
 - Help stubs: `owner/reading-the-dashboard.md`, `owner/comparing-branches.md`
+- Tests: `DashboardServiceTest` — KPI math (only APPROVED, `cash_document` excluded), by-mode / by-category grouping, branch + period filter, outstanding includes open claims.
 
-### Stage 10 — Super Admin panel
+### V20 — full demo seed (accompanies Stage 8.5 + 9)
+One additive Flyway migration (`DO $$`, guarded on the demo org) so **every screen for every role has realistic content** and every workflow state is visible somewhere, across all three branches. Supersedes the earlier "top up the seed" idea.
+
+- +~4 customers / vehicles / job cards spread across OOJ / OOB / OOR (some B2B with GST).
+- **Receipts** — a part-paid one (Pending > 0), a fully-settled one, one each SUBMITTED / QUERIED / VERIFIED / REJECTED, and **2 open warranty / AMC claims** (APPROVED, `is_claim`, no `claim_close`: one no-payment, one part-paid) for the FM to close live.
+- **Expenses** — 2 VERIFIED (one over-limit) for the FM queue, one "Awaiting Receipt", one "Received Receipt", one REJECTED (keep the existing SUBMITTED / DRAFT / CLOSED).
+- **Claims** — fix `OOB-JUL26-R-022`'s settlement line to the full ₹23,101 billed so its existing close reads correctly as an override (`₹23,101 → ₹22,875`); + one non-overridden closed claim so "Recently closed" has two.
+- **Cash** — OOB + OOJ get an opening, ~3 movements, a day-close and one QUERIED movement each; plus a VERIFIED and an (review-)APPROVED cash doc so the Stage-8.5 cash lane isn't empty; OOR gets a more recent close so "today's drawer" isn't stale.
+- **Override Audit** — one settlement-line override + one expense-line override (each with its `OVERRIDE` audit row + `original_amount`, `branch_id` set).
+- **Audit history** — CREATED → SUBMITTED → VERIFIED → APPROVED trails (with `branch_id`) on the seeded docs so review "History" panels read as a timeline.
+- `document_sequence` counters bumped so live submits don't collide.
+- **Not seeded:** attachments (need a real stored object — testers upload their own).
+
+### Stage 10 — Super Admin panel ✅ (frontend only — built rev 15)
 **Demo:** Super Admin sees all orgs, onboards a new one, toggles active. Same visual language.
 
 - Super Admin frontend panel (no new backend)
 - Org list table, onboard modal (shows the invite link to copy), active toggle
 - Help stubs: `super-admin/onboarding-an-organization.md`
 
-### Stage 11 — Help Center
-**Demo:** Every role opens Help from the shell and sees a clean, role-scoped table of contents; each article is short, numbered steps with a screenshot per step; screens have a contextual "?" that jumps to the right article.
+### Stage 11 — Help Center ✅ (framework rev 15; layout fix + full content rewrite rev 16; text-only by owner decision; contextual "?" deferred)
+**Demo:** Every role opens Help from the shell and sees a clean, role-scoped table of contents that starts with a "Your role in DAMS" orientation article, then task walkthroughs in plain language. (Original plan had a screenshot per step + a contextual "?" per screen — screenshots dropped in rev 15, "?" deferred.)
 
 - Help framework: `frontend/src/help/<role>/*.md` + a manifest per role (slug, title, order, which screen(s) link to it)
 - `HelpDrawer` / `/help` route: role-scoped TOC, article renderer (`react-markdown` + `remark-gfm`), in-help search over titles + body
-- Contextual `?` control wired into each screen header → deep-links to its article
-- Quality pass on every stub written in Stages 2–10: rewrite for dealership staff (minimal prose, numbered steps), capture screenshots against the seeded dummy data, consistent voice
+- Contextual `?` control wired into each screen header → deep-links to its article *(deferred)*
+- ~~Quality pass~~ ✅ **rev 16** — all 19 task articles rewritten in a fuller plain-language voice + a "Your role in DAMS" orientation article per role; drawer layout bug fixed. ~~capture screenshots~~ — dropped, text-only (rev 15)
 - Articles: Cashier (finding a customer, creating a receipt, adding a payment, recording an expense, cash in/out, closing the day, fixing a queried entry), Accountant (reviewing the queue, overriding an amount, closing an expense), Finance Manager (approving entries, closing a claim, override audit), Owner (team & branches, masters, reading the dashboard, comparing branches), Super Admin (onboarding an organization)
 - No backend, no migration
 

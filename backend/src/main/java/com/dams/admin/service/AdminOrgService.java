@@ -2,6 +2,7 @@ package com.dams.admin.service;
 
 import com.dams.common.exception.DamsException;
 import com.dams.email.EmailService;
+import com.dams.masters.service.MasterProvisioningService;
 import com.dams.organization.entity.Organization;
 import com.dams.organization.repository.OrganizationRepository;
 import com.dams.user.entity.AppUser;
@@ -39,6 +40,7 @@ public class AdminOrgService {
     private final AppUserRepository userRepo;
     private final EmailService emailService;
     private final OrganizationPurgeService purgeService;
+    private final MasterProvisioningService masterProvisioningService;
 
     /** Frontend origin used to build the accept-invite link. */
     private final String appBaseUrl;
@@ -47,11 +49,13 @@ public class AdminOrgService {
                            AppUserRepository userRepo,
                            EmailService emailService,
                            OrganizationPurgeService purgeService,
+                           MasterProvisioningService masterProvisioningService,
                            @Value("${dams.app.base-url:http://localhost:5173}") String appBaseUrl) {
         this.orgRepo = orgRepo;
         this.userRepo = userRepo;
         this.emailService = emailService;
         this.purgeService = purgeService;
+        this.masterProvisioningService = masterProvisioningService;
         this.appBaseUrl = appBaseUrl;
     }
 
@@ -92,6 +96,9 @@ public class AdminOrgService {
 
         Organization org = new Organization(orgName);
         org = orgRepo.save(org);
+
+        // Ship the standard master catalogue so the new Owner has working dropdowns on day one.
+        masterProvisioningService.provisionDefaults(org.getId());
 
         String inviteToken = UUID.randomUUID().toString();
         Instant expiresAt = Instant.now().plus(INVITE_EXPIRY_DAYS, ChronoUnit.DAYS);

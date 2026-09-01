@@ -4,7 +4,12 @@ import com.dams.attachment.repository.AttachmentRepository;
 import com.dams.audit.repository.AuditEventRepository;
 import com.dams.branch.repository.BranchRepository;
 import com.dams.branch.repository.DocumentSequenceRepository;
+import com.dams.cash.repository.BranchCashOpeningRepository;
+import com.dams.cash.repository.CashDayCloseRepository;
+import com.dams.cash.repository.CashDocumentRepository;
 import com.dams.customer.repository.CustomerRepository;
+import com.dams.expense.repository.ExpenseDocumentRepository;
+import com.dams.expense.repository.ExpenseLineRepository;
 import com.dams.jobcard.repository.ClaimCloseRepository;
 import com.dams.jobcard.repository.JobCardRepository;
 import com.dams.masters.service.MastersService;
@@ -46,6 +51,11 @@ public class OrganizationPurgeService {
     private final SettlementLineRepository settlementLineRepo;
     private final ClaimCloseRepository claimCloseRepo;
     private final ReceiveDocumentRepository receiveDocumentRepo;
+    private final ExpenseLineRepository expenseLineRepo;
+    private final ExpenseDocumentRepository expenseDocumentRepo;
+    private final CashDocumentRepository cashDocumentRepo;
+    private final CashDayCloseRepository cashDayCloseRepo;
+    private final BranchCashOpeningRepository branchCashOpeningRepo;
 
     public OrganizationPurgeService(AppUserRepository userRepo,
                                     DocumentSequenceRepository documentSequenceRepo,
@@ -59,7 +69,12 @@ public class OrganizationPurgeService {
                                     AttachmentRepository attachmentRepo,
                                     SettlementLineRepository settlementLineRepo,
                                     ClaimCloseRepository claimCloseRepo,
-                                    ReceiveDocumentRepository receiveDocumentRepo) {
+                                    ReceiveDocumentRepository receiveDocumentRepo,
+                                    ExpenseLineRepository expenseLineRepo,
+                                    ExpenseDocumentRepository expenseDocumentRepo,
+                                    CashDocumentRepository cashDocumentRepo,
+                                    CashDayCloseRepository cashDayCloseRepo,
+                                    BranchCashOpeningRepository branchCashOpeningRepo) {
         this.userRepo = userRepo;
         this.documentSequenceRepo = documentSequenceRepo;
         this.mastersService = mastersService;
@@ -73,6 +88,11 @@ public class OrganizationPurgeService {
         this.settlementLineRepo = settlementLineRepo;
         this.claimCloseRepo = claimCloseRepo;
         this.receiveDocumentRepo = receiveDocumentRepo;
+        this.expenseLineRepo = expenseLineRepo;
+        this.expenseDocumentRepo = expenseDocumentRepo;
+        this.cashDocumentRepo = cashDocumentRepo;
+        this.cashDayCloseRepo = cashDayCloseRepo;
+        this.branchCashOpeningRepo = branchCashOpeningRepo;
     }
 
     /**
@@ -94,6 +114,11 @@ public class OrganizationPurgeService {
         long settlementLines = settlementLineRepo.deleteByOrgId(orgId);
         long claimCloses = claimCloseRepo.deleteByOrgId(orgId);
         long receiveDocuments = receiveDocumentRepo.deleteByOrgId(orgId);
+        long expenseLines = expenseLineRepo.deleteByOrgId(orgId);
+        long expenseDocuments = expenseDocumentRepo.deleteByOrgId(orgId);
+        long cashDocuments = cashDocumentRepo.deleteByOrgId(orgId);
+        long cashDayCloses = cashDayCloseRepo.deleteByOrgId(orgId);
+        long cashOpenings = branchCashOpeningRepo.deleteByOrgId(orgId);
 
         long jobCards = jobCardRepo.deleteByOrgId(orgId);
         long auditEvents = auditEventRepo.deleteByOrgId(orgId);
@@ -106,9 +131,11 @@ public class OrganizationPurgeService {
         long branches = branchRepo.deleteByOrgId(orgId);
 
         log.info("Org purge: orgId={} deleted attachments={} settlementLines={} claimCloses={} "
-                + "receiveDocuments={} jobCards={} auditEvents={} users={} branches={} "
-                + "customers={} vehicles={} receivers={} sequences={} + all masters",
-            orgId, attachments, settlementLines, claimCloses, receiveDocuments,
-            jobCards, auditEvents, users, branches, customers, vehicles, receivers, seqs);
+                + "receiveDocuments={} expenseLines={} expenseDocuments={} cashDocuments={} cashDayCloses={} "
+                + "cashOpenings={} jobCards={} auditEvents={} users={} branches={} customers={} vehicles={} "
+                + "receivers={} sequences={} + all masters",
+            orgId, attachments, settlementLines, claimCloses, receiveDocuments, expenseLines, expenseDocuments,
+            cashDocuments, cashDayCloses, cashOpenings, jobCards, auditEvents, users, branches, customers,
+            vehicles, receivers, seqs);
     }
 }

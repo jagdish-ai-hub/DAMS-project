@@ -20,6 +20,7 @@ export interface MasterRow {
   isClaim?: boolean
   requiresBank?: boolean
   requiresRef?: boolean
+  triggersClaim?: boolean
   expenseCategoryId?: number
   limitAmount?: number | null
 }
@@ -31,6 +32,7 @@ export interface MasterRequest {
   isClaim?: boolean
   requiresBank?: boolean
   requiresRef?: boolean
+  triggersClaim?: boolean
   expenseCategoryId?: number
   limitAmount?: number | null
 }

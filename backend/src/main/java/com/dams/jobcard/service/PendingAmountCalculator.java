@@ -6,6 +6,11 @@ import com.dams.receive.repository.SettlementLineRepository;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * The one place Pending Amount is computed. It is job-card-wide, never per-document
@@ -49,6 +54,32 @@ public class PendingAmountCalculator {
         BigDecimal pending = invoiceAmount.subtract(received);
         // An overpayment is not a negative balance.
         return pending.signum() < 0 ? BigDecimal.ZERO : pending;
+    }
+
+    /**
+     * Pending amount for many job cards at once, in two queries total instead of two per card
+     * ({@link #existsByOrgIdAndJobCardId} + the Σ). Same rules as {@link #forJobCard}. Used by
+     * list screens (My Entries, the review queues) that would otherwise fan out.
+     */
+    public Map<Long, BigDecimal> forJobCards(Long orgId, Collection<JobCard> jobCards) {
+        Map<Long, BigDecimal> out = new HashMap<>();
+        if (jobCards.isEmpty()) {
+            return out;
+        }
+        Set<Long> closed = new HashSet<>(claimCloseRepo.findJobCardIdsByOrgId(orgId));
+        Map<Long, BigDecimal> received = new HashMap<>();
+        for (Object[] r : settlementLineRepo.sumAmountByJobCard(orgId)) {
+            received.put(((Number) r[0]).longValue(), (BigDecimal) r[1]);
+        }
+        for (JobCard jc : jobCards) {
+            if (closed.contains(jc.getId()) || jc.getInvoiceAmount() == null) {
+                out.put(jc.getId(), BigDecimal.ZERO);
+                continue;
+            }
+            BigDecimal pending = jc.getInvoiceAmount().subtract(received.getOrDefault(jc.getId(), BigDecimal.ZERO));
+            out.put(jc.getId(), pending.signum() < 0 ? BigDecimal.ZERO : pending);
+        }
+        return out;
     }
 
     /** True once a claim has been closed for this job card (drives the PATCH 409 guard). */

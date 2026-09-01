@@ -8,6 +8,7 @@ import com.dams.branch.entity.Branch;
 import com.dams.branch.entity.DocType;
 import com.dams.branch.repository.BranchRepository;
 import com.dams.branch.service.DocumentNumberService;
+import com.dams.cash.service.CashDateLock;
 import com.dams.common.exception.DamsException;
 import com.dams.config.TenantContext;
 import com.dams.customer.entity.Customer;
@@ -89,8 +90,11 @@ class ReceiveDocumentServiceTest {
     @Mock private DocumentNumberService documentNumberService;
     @Mock private PendingAmountCalculator pendingAmountCalculator;
     @Mock private ReceivePaymentGuard paymentGuard;
+    @Mock private CashDateLock cashDateLock;
     @Mock private AuditService auditService;
     @Mock private AttachmentService attachmentService;
+    @Mock private com.dams.audit.service.DocumentHistoryService documentHistoryService;
+    @Mock private com.dams.common.security.BranchScope branchScope;
 
     private ReceiveDocumentService service;
 
@@ -99,8 +103,10 @@ class ReceiveDocumentServiceTest {
         service = new ReceiveDocumentService(receiveDocumentRepo, settlementLineRepo, jobCardRepo,
             jobCardService, customerRepo, vehicleRepo, branchRepo, categoryRepo, statusRepo,
             settlementModeRepo, bankRepo, userRepo, claimCloseRepo, attachmentRepo,
-            documentNumberService, pendingAmountCalculator, paymentGuard, auditService, attachmentService);
+            documentNumberService, pendingAmountCalculator, paymentGuard, cashDateLock, auditService,
+            attachmentService, documentHistoryService, branchScope);
         TenantContext.setOrgId(ORG);
+        lenient().when(branchScope.canSeeBranch(anyLong())).thenReturn(true);
 
         lenient().when(jobCardRepo.findByIdAndOrgId(JOB_CARD_ID, ORG)).thenReturn(Optional.of(jobCard(new BigDecimal("15431"))));
         lenient().when(paymentGuard.requireCanPost(eq(ORG), any(JobCard.class))).thenReturn(cashier());
@@ -198,7 +204,7 @@ class ReceiveDocumentServiceTest {
         assertThat(draft.getDocumentNo()).isEqualTo("OOR-AUG26-R-001");
         assertThat(draft.getWorkflowStatus()).isEqualTo(WorkflowStatus.SUBMITTED);
         assertThat(l1.getLineId()).isEqualTo("OOR-AUG26-R-001-L1");
-        verify(auditService).recordUserEvent(eq("ReceiveDocument"), eq(500L), eq(EventType.SUBMITTED),
+        verify(auditService).recordUserEvent(eq("ReceiveDocument"), eq(500L), any(), eq(EventType.SUBMITTED),
             eq(CASHIER_ID), any());
     }
 
@@ -213,7 +219,7 @@ class ReceiveDocumentServiceTest {
         service.addLine(500L, lineInput(new BigDecimal("3133")));
 
         assertThat(open.isSettled()).isTrue();
-        verify(auditService).recordSystemEvent(eq("ReceiveDocument"), eq(500L), eq(EventType.SETTLED), any());
+        verify(auditService).recordSystemEvent(eq("ReceiveDocument"), eq(500L), any(), eq(EventType.SETTLED), any());
         verify(attachmentService).freezeReceiveDocument(eq(ORG), eq(500L), any());
     }
 

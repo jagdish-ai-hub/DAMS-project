@@ -31,9 +31,13 @@ public class MasterRequest {
     // receive-categories only
     private Boolean isClaim;
 
-    // settlement-modes only
+    // settlement-modes / expense-modes only
     private Boolean requiresBank;
     private Boolean requiresRef;
+    private Boolean isCash;
+
+    // expense-statuses only
+    private Boolean triggersClaim;
 
     // expense-sub-categories only
     private Long expenseCategoryId;

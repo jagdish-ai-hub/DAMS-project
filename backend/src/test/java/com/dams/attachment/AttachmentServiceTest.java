@@ -8,6 +8,10 @@ import com.dams.attachment.storage.StorageService;
 import com.dams.common.exception.DamsException;
 import com.dams.common.security.BranchScope;
 import com.dams.config.TenantContext;
+import com.dams.expense.entity.ExpenseDocument;
+import com.dams.expense.entity.ExpenseWorkflowStatus;
+import com.dams.expense.repository.ExpenseDocumentRepository;
+import com.dams.expense.repository.ExpenseLineRepository;
 import com.dams.receive.entity.ReceiveDocument;
 import com.dams.receive.entity.WorkflowStatus;
 import com.dams.receive.repository.ReceiveDocumentRepository;
@@ -40,6 +44,8 @@ class AttachmentServiceTest {
     @Mock private AttachmentRepository attachmentRepo;
     @Mock private ReceiveDocumentRepository receiveDocumentRepo;
     @Mock private SettlementLineRepository settlementLineRepo;
+    @Mock private ExpenseDocumentRepository expenseDocumentRepo;
+    @Mock private ExpenseLineRepository expenseLineRepo;
     @Mock private StorageService storage;
     @Mock private BranchScope branchScope;
 
@@ -47,7 +53,8 @@ class AttachmentServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AttachmentService(attachmentRepo, receiveDocumentRepo, settlementLineRepo, storage, branchScope);
+        service = new AttachmentService(attachmentRepo, receiveDocumentRepo, settlementLineRepo,
+            expenseDocumentRepo, expenseLineRepo, storage, branchScope);
         TenantContext.setOrgId(ORG);
         lenient().when(branchScope.currentUserId()).thenReturn(7L);
         lenient().when(storage.put(any(), any(), any())).thenReturn("org/1/receive_document/500/abc");
@@ -97,6 +104,30 @@ class AttachmentServiceTest {
     }
 
     @Test
+    void upload_storesAPdf_onAnOpenExpenseDocument() {
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG))
+            .thenReturn(Optional.of(expenseDoc(ExpenseWorkflowStatus.SUBMITTED)));
+        MockMultipartFile file = new MockMultipartFile("file", "bill.pdf", "application/pdf", new byte[] {1, 2});
+
+        var response = service.upload(ParentType.EXPENSE_DOCUMENT, DOC_ID, file);
+
+        assertThat(response.filename()).isEqualTo("bill.pdf");
+        verify(attachmentRepo).save(any(Attachment.class));
+    }
+
+    @Test
+    void upload_rejectedWhenExpenseDocumentIsClosed() {
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG))
+            .thenReturn(Optional.of(expenseDoc(ExpenseWorkflowStatus.CLOSED)));
+        MockMultipartFile file = new MockMultipartFile("file", "bill.pdf", "application/pdf", new byte[] {1});
+
+        assertThatThrownBy(() -> service.upload(ParentType.EXPENSE_DOCUMENT, DOC_ID, file))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("frozen");
+        verify(storage, never()).put(any(), any(), any());
+    }
+
+    @Test
     void delete_rejectsAFrozenAttachment() {
         Attachment frozen = new Attachment();
         ReflectionTestUtils.setField(frozen, "id", 77L);
@@ -121,6 +152,20 @@ class AttachmentServiceTest {
         d.setDocumentNo("OOR-JUL26-R-011");
         d.setWorkflowStatus(status);
         d.setSettled(settled);
+        d.setCreatedBy(7L);
+        return d;
+    }
+
+    private static ExpenseDocument expenseDoc(ExpenseWorkflowStatus status) {
+        ExpenseDocument d = new ExpenseDocument();
+        ReflectionTestUtils.setField(d, "id", DOC_ID);
+        d.setOrgId(ORG);
+        d.setBranchId(3L);
+        d.setReceiverId(9L);
+        d.setExpenseCategoryId(2L);
+        d.setBusinessStatusId(4L);
+        d.setDocumentNo("OOR-JUL26-E-002");
+        d.setWorkflowStatus(status);
         d.setCreatedBy(7L);
         return d;
     }

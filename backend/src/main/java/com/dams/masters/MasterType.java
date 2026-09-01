@@ -7,8 +7,8 @@ import java.util.Arrays;
 /**
  * The eight Owner-editable master lists, addressed by URL slug:
  *   /api/v1/masters/{slug}
- * Each maps to one table/entity. `hasClaimFlag` / `hasModeFlags` / `isExpenseSubCategory`
- * tell the service which request fields apply.
+ * Each maps to one table/entity. `hasClaimFlag` / `hasModeFlags` /
+ * `hasClaimTriggerFlag` / `isExpenseSubCategory` tell the service which request fields apply.
  */
 public enum MasterType {
 
@@ -35,8 +35,14 @@ public enum MasterType {
         return this == RECEIVE_CATEGORIES;
     }
 
+    /** requires_bank / requires_ref — carried by both settlement and expense modes. */
     public boolean hasModeFlags() {
-        return this == SETTLEMENT_MODES;
+        return this == SETTLEMENT_MODES || this == EXPENSE_MODES;
+    }
+
+    /** triggers_claim — the expense business status that moves an expense onto a claim. */
+    public boolean hasClaimTriggerFlag() {
+        return this == EXPENSE_STATUSES;
     }
 
     public boolean isExpenseSubCategory() {

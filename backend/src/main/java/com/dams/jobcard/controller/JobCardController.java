@@ -1,8 +1,10 @@
 package com.dams.jobcard.controller;
 
+import com.dams.jobcard.dto.CloseClaimRequest;
 import com.dams.jobcard.dto.JobCardCreateRequest;
 import com.dams.jobcard.dto.JobCardPatchRequest;
 import com.dams.jobcard.dto.JobCardResponse;
+import com.dams.jobcard.service.ClaimCloseService;
 import com.dams.jobcard.service.JobCardService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -24,9 +26,11 @@ import org.springframework.web.bind.annotation.*;
 public class JobCardController {
 
     private final JobCardService jobCardService;
+    private final ClaimCloseService claimCloseService;
 
-    public JobCardController(JobCardService jobCardService) {
+    public JobCardController(JobCardService jobCardService, ClaimCloseService claimCloseService) {
         this.jobCardService = jobCardService;
+        this.claimCloseService = claimCloseService;
     }
 
     @PostMapping
@@ -45,5 +49,11 @@ public class JobCardController {
     @Operation(summary = "Update invoice / dbm references, or category / business status while the claim is open")
     public JobCardResponse patch(@PathVariable Long id, @Valid @RequestBody JobCardPatchRequest request) {
         return jobCardService.patch(id, request);
+    }
+
+    @PostMapping("/{id}/close-claim")
+    @Operation(summary = "Finance Manager: finalise a warranty / AMC / CG claim (immutable; optional final override)")
+    public JobCardResponse closeClaim(@PathVariable Long id, @Valid @RequestBody CloseClaimRequest request) {
+        return claimCloseService.closeClaim(id, request);
     }
 }

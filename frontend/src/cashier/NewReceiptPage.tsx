@@ -3,8 +3,18 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { mastersApi, type MasterRow } from '../api/masters'
 import { customersApi } from '../api/customers'
 import { jobCardsApi } from '../api/jobCards'
-import { receiptsApi, type CreateReceiptRequest, type ReceiveDocument } from '../api/receipts'
-import { card, ErrorBanner, inr, primaryBtn, ghostBtn, inputStyle } from '../shell/ui'
+import { receiptsApi, type CreateReceiptRequest, type DocumentHistoryEntry, type ReceiveDocument } from '../api/receipts'
+import { card, ErrorBanner, inr, primaryBtn, ghostBtn, inputStyle, Spinner, istToday } from '../shell/ui'
+import AttachmentsPanel, { type LineTarget } from './AttachmentsPanel'
+
+/** The most recent accountant question / rejection reason, for the fix-and-resubmit banner. */
+function queryNote(history: DocumentHistoryEntry[]): string | null {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const h = history[i]
+    if ((h.action === 'Queried' || h.action === 'Rejected') && h.note) return h.note
+  }
+  return null
+}
 
 /**
  * Receive Entry (intial ui prototypes/cashier-home.html). One continuous flow: the header
@@ -23,9 +33,8 @@ type LineRow = {
   remark: string
 }
 
-const today = () => new Date().toISOString().slice(0, 10)
 const freshLine = (modeId: number | ''): LineRow => ({
-  transactionDate: today(), settlementModeId: modeId, amount: '', bankId: '', transactionRef: '', remark: '',
+  transactionDate: istToday(), settlementModeId: modeId, amount: '', bankId: '', transactionRef: '', remark: '',
 })
 
 function apiError(err: unknown, fallback: string) {
@@ -147,6 +156,17 @@ export default function NewReceiptPage() {
     return inv ? Math.max(0, inv - totalReceived) : 0
   }, [invoiceAmount, totalReceived])
 
+  // Documents can be tagged to the whole receipt or to one saved settlement line.
+  const attachLineTargets: LineTarget[] = useMemo(
+    () => (loadedDoc?.lines ?? []).map((l, i) => ({
+      lineNo: l.lineNo,
+      label: `Line ${i + 1} · ${modes.find((m) => m.id === l.settlementModeId)?.name ?? 'payment'} · ${inr(l.amount)}`,
+    })),
+    [loadedDoc, modes],
+  )
+  const attachFrozen = loadedDoc != null
+    && (loadedDoc.settled || loadedDoc.workflowStatus === 'REJECTED')
+
   const modeById = (id: number | '') => modes.find((m) => m.id === id)
 
   function setLine(i: number, patch: Partial<LineRow>) {
@@ -186,15 +206,8 @@ export default function NewReceiptPage() {
     return null
   }
 
-  async function saveNew(submit: boolean) {
-    const problem = validate(submit)
-    if (problem) {
-      setError(problem)
-      return
-    }
-    setBusy(true)
-    setError('')
-    const body: CreateReceiptRequest = {
+  function buildBody(submit: boolean): CreateReceiptRequest {
+    return {
       customerId: customerId ?? undefined,
       customerName: customerId ? undefined : customerName.trim(),
       vehicleNo: vehicleNo.trim() || undefined,
@@ -208,11 +221,49 @@ export default function NewReceiptPage() {
       lines: buildLines(),
       submit,
     }
+  }
+
+  async function saveNew(submit: boolean) {
+    const problem = validate(submit)
+    if (problem) {
+      setError(problem)
+      return
+    }
+    setBusy(true)
+    setError('')
     try {
-      const { data } = await receiptsApi.create(body)
+      const { data } = await receiptsApi.create(buildBody(submit))
       finish(submit, data)
     } catch (e) {
       setError(apiError(e, 'Could not save the receipt.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * Save the form as a draft so the Documents panel has an id to attach to. Returns the new
+   * receipt id, or null if it could not be saved (validation, server error) — the error is
+   * already shown. Used only by AttachmentsPanel; a normal Save Draft still navigates home.
+   */
+  async function ensureDraft(): Promise<number | null> {
+    if (loadedDoc) return loadedDoc.id
+    const problem = validate(false)
+    if (problem) {
+      setError(problem)
+      return null
+    }
+    setBusy(true)
+    setError('')
+    try {
+      const { data } = await receiptsApi.create(buildBody(false))
+      setLoadedDoc(data)
+      setNotice(`Saved as draft ${data.documentNo ?? `#${data.id}`}. Add documents below, then Submit when ready.`)
+      navigate(`/app/new-receipt?editDoc=${data.id}`, { replace: true })
+      return data.id
+    } catch (e) {
+      setError(apiError(e, 'Could not save the draft.'))
+      return null
     } finally {
       setBusy(false)
     }
@@ -249,7 +300,7 @@ export default function NewReceiptPage() {
 
   function finish(submitted: boolean, doc: ReceiveDocument) {
     const ref = doc.documentNo ?? `draft #${doc.id}`
-    navigate(`/?flash=${encodeURIComponent(submitted ? `${ref} submitted for checking` : `${ref} saved as draft`)}`)
+    navigate(`/app?flash=${encodeURIComponent(submitted ? `${ref} submitted for checking` : `${ref} saved as draft`)}`)
   }
 
   const inEditMode = editDocId != null
@@ -265,7 +316,7 @@ export default function NewReceiptPage() {
       </button>
 
       {notice && (
-        <div style={{
+        <div className="dams-anim-notice" style={{
           background: 'var(--navy3)', border: '1px solid #C9D8F2', color: 'var(--navy)',
           borderRadius: 9, padding: '10px 14px', fontSize: '0.82rem', marginBottom: 14,
         }}>
@@ -273,6 +324,12 @@ export default function NewReceiptPage() {
         </div>
       )}
       <ErrorBanner message={error} />
+
+      {loadedDoc?.workflowStatus === 'QUERIED' && queryNote(loadedDoc.history) && (
+        <div style={{ background: 'var(--amber-bg)', border: '1px solid #EAD3AE', color: 'var(--amber)', borderRadius: 8, padding: '10px 13px', fontSize: '0.82rem', marginBottom: 12 }}>
+          <strong>Query from the accountant:</strong> {queryNote(loadedDoc.history)}
+        </div>
+      )}
 
       <section style={{ ...card, padding: 0, marginTop: 12 }}>
         <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -364,6 +421,16 @@ export default function NewReceiptPage() {
               <Row label="DAMS-Receive-ID">
                 <input readOnly value={loadedDoc?.documentNo ?? 'assigned on submit'} style={{ ...inputStyle, background: 'var(--bg)', color: 'var(--muted)', fontFamily: 'Consolas, monospace' }} />
               </Row>
+
+              {/* Documents live in the space under the ID field, in this column. */}
+              <AttachmentsPanel
+                docId={loadedDoc?.id ?? editDocId}
+                noun="receipt"
+                frozen={attachFrozen}
+                lineTargets={attachLineTargets}
+                api={receiptsApi}
+                ensureDraft={ensureDraft}
+              />
             </div>
           </div>
 
@@ -442,11 +509,15 @@ export default function NewReceiptPage() {
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 16, marginTop: 8, borderTop: '1px solid var(--line)' }}>
             <button type="button" onClick={() => navigate(-1)} style={ghostBtn} disabled={busy}>Cancel</button>
             {inEditMode ? (
-              <button type="button" onClick={resubmitEdited} style={primaryBtn(busy)} disabled={busy}>Resubmit</button>
+              <button type="button" onClick={resubmitEdited} style={primaryBtn(busy)} disabled={busy}>
+                {busy ? <><Spinner /> Resubmitting…</> : 'Resubmit'}
+              </button>
             ) : (
               <>
                 <button type="button" onClick={() => saveNew(false)} style={ghostBtn} disabled={busy}>Save Draft</button>
-                <button type="button" onClick={() => saveNew(true)} style={primaryBtn(busy)} disabled={busy}>Submit</button>
+                <button type="button" onClick={() => saveNew(true)} style={primaryBtn(busy)} disabled={busy}>
+                  {busy ? <><Spinner /> Submitting…</> : 'Submit'}
+                </button>
               </>
             )}
           </div>

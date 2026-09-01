@@ -24,8 +24,17 @@ export interface JobCard {
   pendingAmount: number
   settledViaClaimClose: boolean
   claimFinalAmount: number | null
+  claimOverridden: boolean
+  claimOverrideReason: string | null
+  claimClosedByName: string | null
+  claimClosedAt: string | null
   canRecordPayment: boolean
   createdAt: string
+}
+
+export interface CloseClaimRequest {
+  finalAmount: number
+  reason?: string
 }
 
 export interface JobCardCreateRequest {
@@ -63,5 +72,8 @@ export const jobCardsApi = {
   },
   patch(id: number, data: JobCardPatchRequest) {
     return api.patch<JobCard>(`/api/v1/job-cards/${id}`, data)
+  },
+  closeClaim(id: number, data: CloseClaimRequest) {
+    return api.post<JobCard>(`/api/v1/job-cards/${id}/close-claim`, data)
   },
 }
