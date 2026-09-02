@@ -49,45 +49,48 @@ export default function GlobalSearch() {
   }, [])
 
   return (
-    <div ref={boxRef} style={{ position: 'relative', marginBottom: 16 }}>
+    <div ref={boxRef} style={{ position: 'relative', width: 340, maxWidth: '100%', flexShrink: 0 }}>
       <span style={{
-        position: 'absolute', left: 12, top: 21, transform: 'translateY(-50%)',
-        color: 'var(--faint)', fontSize: '1rem', pointerEvents: 'none',
+        position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)',
+        color: 'var(--faint)', fontSize: '0.95rem', pointerEvents: 'none',
       }}>
         ⌕
       </span>
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Search customers, vehicles, job cards, invoices…"
+        placeholder="Search customers, vehicles, job cards…"
         autoComplete="off"
         aria-label="Search customers and transactions"
         style={{
-          width: '100%', border: '1.5px solid var(--line)', borderRadius: 10,
-          padding: '10px 12px 10px 34px', fontSize: '0.9rem',
+          width: '100%', border: '1.5px solid var(--line)', borderRadius: 9,
+          padding: '8px 11px 8px 32px', fontSize: '0.84rem',
           background: 'var(--surface)', outline: 'none', boxShadow: 'var(--shadow)',
         }}
       />
-      <div style={{ fontSize: '0.72rem', color: 'var(--faint)', margin: '4px 0 0', minHeight: 14 }}>
-        {loading ? 'Searching…' : q.trim().length === 1 ? 'Keep typing…' : ''}
-      </div>
 
       {error && <ErrorBanner message={error} />}
 
-      {hits != null && (
+      {(hits != null || loading) && (
         <div
           className="dams-anim-notice"
           style={{
-            position: 'absolute', top: 46, left: 0, right: 0, zIndex: 30,
+            position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 'min(380px, 92vw)', zIndex: 40,
             background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10,
             boxShadow: 'var(--shadow-lift)', overflow: 'hidden', maxHeight: 380, overflowY: 'auto',
           }}
         >
-          {hits.length === 0 ? (
+          {hits == null && loading && (
+            <div style={{ padding: 14, textAlign: 'center', color: 'var(--faint)', fontSize: '0.82rem' }}>
+              Searching…
+            </div>
+          )}
+          {hits != null && hits.length === 0 && (
             <div style={{ padding: 16, textAlign: 'center', color: 'var(--faint)', fontSize: '0.84rem' }}>
               Nothing matches “{q.trim()}”
             </div>
-          ) : hits.map((h) => (
+          )}
+          {hits != null && hits.map((h) => (
             <button
               key={h.customerId}
               type="button"

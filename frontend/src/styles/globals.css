@@ -60,6 +60,17 @@
     font-size: 0.86rem;
     color: var(--ink);
   }
+
+  /* Number inputs: drop the spinner arrows; the wheel-nudge is killed in main.tsx. */
+  input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
 }
 
 /* Login: show the brand panel only on wide screens, the inline mini-brand only on narrow */

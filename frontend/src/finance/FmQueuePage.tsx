@@ -64,12 +64,15 @@ export default function FmQueuePage() {
 
   return (
     <div style={{ maxWidth: 1180, margin: '0 auto' }}>
-      <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)', marginBottom: 4 }}>Approvals & Claims</h1>
-      <div style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: 14 }}>
-        Give each verified entry final approval, and close warranty / AMC / CG claims.
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
+        <div>
+          <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)', marginBottom: 4 }}>Approvals & Claims</h1>
+          <div style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
+            Give each verified entry final approval, and close warranty / AMC / CG claims.
+          </div>
+        </div>
+        <GlobalSearch />
       </div>
-
-      <GlobalSearch />
 
       <ErrorBanner message={error} />
       {flash && (

@@ -9,6 +9,7 @@ import {
   type DashboardPeriod, type DashboardSummary, type OutstandingItem, type ActivityItem,
 } from '../api/dashboard'
 import { card, ErrorBanner, Skeleton, inr, fmtDate, fmtDateTime } from '../shell/ui'
+import GlobalSearch from '../shared/GlobalSearch'
 
 /**
  * Owner dashboard (intial ui prototypes/owner-dashboard.html, dashboard tab). Read-only
@@ -60,11 +61,14 @@ export default function DashboardPage() {
 
   return (
     <div style={{ maxWidth: 1180, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap', marginBottom: 4 }}>
-        <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)' }}>Dashboard</h1>
-        <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
-          Verified numbers · cash In/Out excluded from collections &amp; expenses
-        </span>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap' }}>
+          <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)' }}>Dashboard</h1>
+          <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+            Verified numbers · cash In/Out excluded from collections &amp; expenses
+          </span>
+        </div>
+        <GlobalSearch />
       </div>
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', margin: '12px 0 18px' }}>

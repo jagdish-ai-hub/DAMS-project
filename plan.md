@@ -7,15 +7,20 @@
 
 ## Revision log
 
-- **rev 18 (2026-08-31)** — Global search on the Accountant & Finance Manager home screens
-  (frontend only — `/api/v1/search` and `/api/v1/customers/{id}/history` are already open to
-  all roles, and search is already branch-scoped per role). New
-  `frontend/src/shared/GlobalSearch.tsx`: compact search bar in the blank strip under the page
-  subtitle, same debounced `searchApi.query` the cashier uses, results dropdown, and a
-  **read-only** customer drawer (shared `Modal`, new optional `maxWidth` prop → 720) showing
-  totals / job cards / payment timeline + a per-job-card "View documents" button
-  (`ViewReceiptsModal`). No create / pay actions for reviewers. Wired into `ReviewQueuePage`
-  and `FmQueuePage` under the subtitle. Cashier home untouched.
+- **rev 18 (2026-08-31)** — Global search for reviewers + owner, and killed the number-input
+  wheel-scroll. Frontend only — `/api/v1/search` and `/api/v1/customers/{id}/history` are
+  already open to all roles and search is already branch-scoped per role.
+  - `frontend/src/shared/GlobalSearch.tsx`: a **fixed-width (340px) box on the page-title
+    row, right-aligned** (owner asked for it beside the title, not a full-width line and not
+    in the navy topbar). Same debounced `searchApi.query` the cashier uses; results dropdown
+    anchored to the box's right edge; picking a hit opens a **read-only** customer drawer
+    (shared `Modal`, new optional `maxWidth` prop → 720) with totals / job cards / payment
+    timeline + a per-job-card "View documents" button (`ViewReceiptsModal`). No create / pay
+    actions. Wired into `ReviewQueuePage`, `FmQueuePage`, and the owner `DashboardPage`
+    (title rows restructured to `space-between` flex). Cashier home untouched.
+  - `main.tsx`: a global `wheel` listener blurs any focused `<input type=number>` on scroll,
+    so trackpad/mouse-wheel no longer nudges amounts. `globals.css`: number inputs also lose
+    their spinner arrows.
 
 - **rev 17 (2026-08-31)** — CI/CD deploy pipeline (no app code change). Owner chose:
   auto-deploy on push to `main`, health-check with automatic rollback to the previous GHCR

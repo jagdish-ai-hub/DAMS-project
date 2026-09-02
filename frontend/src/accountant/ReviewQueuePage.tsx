@@ -66,12 +66,15 @@ export default function ReviewQueuePage() {
 
   return (
     <div style={{ maxWidth: 1180, margin: '0 auto' }}>
-      <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)', marginBottom: 4 }}>Review Queue</h1>
-      <div style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: 14 }}>
-        Verify, query, reject or adjust each submitted entry. A verified entry moves on to the Finance Manager.
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
+        <div>
+          <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)', marginBottom: 4 }}>Review Queue</h1>
+          <div style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
+            Verify, query, reject or adjust each submitted entry. A verified entry moves on to the Finance Manager.
+          </div>
+        </div>
+        <GlobalSearch />
       </div>
-
-      <GlobalSearch />
 
       <ErrorBanner message={error} />
       {flash && (
