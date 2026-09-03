@@ -13,7 +13,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Branch CRUD, always scoped to the caller's org (TenantContext). Branches are
@@ -39,9 +41,28 @@ public class BranchService {
     @Transactional(readOnly = true)
     public List<BranchResponse> list() {
         Long orgId = TenantContext.requireOrgId();
-        return branchRepo.findByOrgIdOrderByCodeAsc(orgId).stream()
-            .map(b -> BranchResponse.of(b, assignedUserCount(b.getId())))
+        List<Branch> branches = branchRepo.findByOrgIdOrderByCodeAsc(orgId);
+        if (branches.isEmpty()) {
+            return List.of();
+        }
+
+        // Two grouped queries for the whole list instead of two per branch (N+1).
+        Map<Long, Long> homeCounts = groupToMap(userRepo.countByHomeBranchGrouped(orgId));
+        Map<Long, Long> accessCounts = groupToMap(
+            branchAccessRepo.countByBranchIdGrouped(branches.stream().map(Branch::getId).toList()));
+
+        return branches.stream()
+            .map(b -> BranchResponse.of(b,
+                homeCounts.getOrDefault(b.getId(), 0L) + accessCounts.getOrDefault(b.getId(), 0L)))
             .toList();
+    }
+
+    private static Map<Long, Long> groupToMap(List<Object[]> rows) {
+        Map<Long, Long> m = new HashMap<>();
+        for (Object[] r : rows) {
+            m.put((Long) r[0], ((Number) r[1]).longValue());
+        }
+        return m;
     }
 
     @Transactional(readOnly = true)

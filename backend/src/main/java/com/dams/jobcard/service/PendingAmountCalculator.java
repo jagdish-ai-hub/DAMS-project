@@ -41,6 +41,17 @@ public class PendingAmountCalculator {
         return forJobCard(jobCard.getOrgId(), jobCard.getId(), jobCard.getInvoiceAmount());
     }
 
+    /** Same as {@link #forJobCard(JobCard)} but the caller already knows the claim-close state,
+     *  so skip re-querying it (saves a round-trip in the document read model). */
+    public BigDecimal forJobCard(JobCard jobCard, boolean hasClaimClose) {
+        if (hasClaimClose || jobCard.getInvoiceAmount() == null) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal received = settlementLineRepo.sumAmountForJobCard(jobCard.getOrgId(), jobCard.getId());
+        BigDecimal pending = jobCard.getInvoiceAmount().subtract(received);
+        return pending.signum() < 0 ? BigDecimal.ZERO : pending;
+    }
+
     public BigDecimal forJobCard(Long orgId, Long jobCardId, BigDecimal invoiceAmount) {
         // Claim settled at its final amount — no shortfall balance, ever.
         if (claimCloseRepo.existsByOrgIdAndJobCardId(orgId, jobCardId)) {

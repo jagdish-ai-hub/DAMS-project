@@ -51,6 +51,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -520,10 +521,10 @@ public class ReceiveDocumentService {
 
         BigDecimal totalReceived = lines.stream()
             .map(SettlementLine::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal pending = pendingAmountCalculator.forJobCard(jc);
         boolean claimClosed = claimClose != null;
+        BigDecimal pending = pendingAmountCalculator.forJobCard(jc, claimClosed);
 
-        String createdByName = userRepo.findById(doc.getCreatedBy()).map(AppUser::getName).orElse(null);
+        String createdByName = userRepo.findNameById(doc.getCreatedBy()).orElse(null);
         String branchCode = branch != null ? branch.getCode() : "?";
 
         return new ReceiveDocumentResponse(
@@ -572,6 +573,15 @@ public class ReceiveDocumentService {
         Map<Long, String> bankNames = bankRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId).stream()
             .collect(Collectors.toMap(b -> b.getId(), b -> b.getName()));
 
+        // One grouped count instead of one query per line.
+        Map<Long, Integer> attachmentCounts = new HashMap<>();
+        if (!lines.isEmpty()) {
+            for (Object[] row : attachmentRepo.countByParentIdIn(
+                    orgId, ParentType.SETTLEMENT_LINE, lines.stream().map(SettlementLine::getId).toList())) {
+                attachmentCounts.put((Long) row[0], ((Number) row[1]).intValue());
+            }
+        }
+
         return lines.stream().map(l -> new SettlementLineResponse(
             l.getId(),
             l.getLineNo(),
@@ -588,7 +598,7 @@ public class ReceiveDocumentService {
             l.getOverriddenBy() != null,
             l.getOverrideReason(),
             l.getOverriddenAt(),
-            (int) attachmentRepo.countByOrgIdAndParentTypeAndParentId(orgId, ParentType.SETTLEMENT_LINE, l.getId()),
+            attachmentCounts.getOrDefault(l.getId(), 0),
             l.getCreatedAt()
         )).toList();
     }

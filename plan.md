@@ -7,6 +7,67 @@
 
 ## Revision log
 
+- **rev 20 (2026-09-03)** — Query-fan-out fixes after the owner reported 20–40s per entry
+  from a local (India) dev machine. **Root cause proven by trace, not guessed**: not Neon
+  latency per se — the app fires many small sequential queries per request, and each
+  India→Singapore round-trip is ~80–100ms (vs ~2–5ms on the same-region Singapore VPS).
+  Fixed:
+  - **`BranchService.list`** N+1: was `count(app_user)` + `count(user_branch_access)` **per
+    branch** (2×N queries); now two `GROUP BY branch_id` queries for the whole list.
+    `GET /branches` 2.26s → **0.33s** locally. New repo methods
+    `AppUserRepository.countByHomeBranchGrouped`, `UserBranchAccessRepository.countByBranchIdGrouped`.
+  - **`ReceiveDocumentService` read model**: `toLineDtos` per-line attachment count → one
+    grouped `AttachmentRepository.countByParentIdIn`; `assemble` reuses the already-loaded
+    `claimClose` for the pending calc (`PendingAmountCalculator.forJobCard(jc, hasClaimClose)`);
+    `createdByName` via a `select u.name` projection (`AppUserRepository.findNameById`) instead
+    of loading the whole `AppUser` + its org join.
+  - **HikariCP**: fixed-size pool (`minimum-idle = maximum-pool-size = 8`), `keepalive-time`
+    60s, `max-lifetime` 25 min — stop discarding warm connections and re-paying the ~0.5–2.4s
+    Neon connect on the next click. (Stale-pool request cost was 2.26s vs 0.65s on a fresh
+    pool.)
+  - **Still ~3s per `POST /receipts` locally** — the create path is ~30 sequential
+    round-trips (single-row `findByIdAndOrgId` lookups + `IDENTITY`-id inserts that can't
+    batch). On the Singapore VPS that's ~30 × ~3ms ≈ 90ms. Cutting it further needs
+    `SEQUENCE` ids (Flyway migration) + grouped projection reads in `assemble` — deferred as
+    an explicit opt-in.
+  - 128 backend tests green; response bodies verified unchanged.
+
+
+- **rev 19 (2026-09-02)** — Demo seed as a repeatable script, not a Flyway migration (V20
+  stays dropped). `scripts/seed-demo.mjs` — Node, zero-dep, drives the real API as
+  owner → cashier → accountant → finance manager so every derived value (document numbers,
+  pending amounts, drawer, audit, dashboard) is computed by the app. **Option A**: additive
+  to the existing org (`OORIBA MOTORS DEMO`, id 1), all rows name-prefixed `DEMO-`, guarded
+  against a double run.
+  - Seeded: 24 customers (8/branch × OOJ/OOB/OOR), 30 vehicles, 36 job cards, 33 receipts
+    (17 approved · 3 verified · 3 submitted · 3 queried · 1 rejected · 3 draft · 6 claim
+    receipts closed), 15 expenses (over-limit, transfer-to-claim, closed), 12 cash docs,
+    3 day-closes. Created 2 branch cashiers (`cashier.ooj@` / `cashier.oob@jjmotors.demo`,
+    pw `Demo@12345`) and widened the accountant to all 3 branches.
+  - `cash/opening` needs the accountant role (cashier gets 403) — set for OOJ/OOB after.
+  - **`SEED_TOPUP=1`** mode: the main batch dates transactions 2–10 days back, which on a
+    machine clock early in a month all land in the previous month → dashboard MTD reads ₹0.
+    Top-up adds ~12 receipts / 3 expenses / 3 cash on existing `DEMO-` customers dated the
+    last 2 days, all walked to APPROVED, so MTD populates (₹1.43L collections after).
+  - Env overrides for every login; defaults are the V5 demo passwords. Neon MCP was down
+    this session so the DB was inspected via the running backend's API instead.
+
+
+- **rev 19 (2026-08-31)** — `scripts/seed-demo.mjs` — the V20 demo seed, done as a
+  **one-shot API-driven Node script** instead of a Flyway migration (owner's call: a single
+  careful script, not field-by-field SQL). Additive to the existing org (Option A), every
+  name prefixed `DEMO-`, aborts if `DEMO-` data already present (`SEED_FORCE=1` to add
+  another batch). Drives the real endpoints as owner → per-branch cashier → accountant → FM,
+  so document numbers, pending amounts, drawer positions, the audit trail and dashboard
+  aggregates are all app-computed. Creates ~8 customers/branch (+ vehicles, job cards),
+  ~30 receipts across every workflow state, 2 closed claims (one short-settled → Override
+  Audit row), ~15 expenses (over-limit + transfer-to-claim), ~15 cash docs + a day-close per
+  branch, dated across the last ~12 days so the current-month dashboard populates. Auto-
+  creates a cashier for each non-Rayagada branch (`cashier.<code>@jjmotors.demo` / `Demo@12345`)
+  since V5 only seeds the OOR cashier. Zero deps, Node 18+. Run with the backend up:
+  `node scripts/seed-demo.mjs`. **V20 stays struck-through** — this is a repeatable script,
+  not a migration.
+
 - **rev 18 (2026-08-31)** — Global search for reviewers + owner, and killed the number-input
   wheel-scroll. Frontend only — `/api/v1/search` and `/api/v1/customers/{id}/history` are
   already open to all roles and search is already branch-scoped per role.

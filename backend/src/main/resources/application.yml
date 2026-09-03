@@ -8,16 +8,19 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME:}
     password: ${SPRING_DATASOURCE_PASSWORD:}
     hikari:
-      # Neon is a remote Postgres (~80 ms RTT from India). Keep a small warm pool and
-      # hold connections open — Neon's proxy drops idle sockets after ~5 min, and a cold
-      # reconnect (TLS + possible compute wake) is what makes the first click after a pause
-      # feel like a hang. auto-commit:false lets Hibernate skip a per-transaction round-trip.
+      # Neon is remote Postgres; establishing a fresh connection costs ~0.5-2.4s (TLS +
+      # backend spin-up), so the pool must NEVER let a warm connection go and re-pay that.
+      #  - fixed size (minimum-idle == maximum-pool-size): the pool never shrinks, so an
+      #    idle-period click reuses a live socket instead of reconnecting.
+      #  - keepalive < Neon's idle socket drop, so connections are validated/kept alive.
+      #  - max-lifetime long (25 min): retire connections rarely; each retirement = one
+      #    reconnect. (Neon's own server-side limit is generous on the pooled path.)
       auto-commit: false
       maximum-pool-size: 8
-      minimum-idle: 4
+      minimum-idle: 8
       connection-timeout: 15000
-      keepalive-time: 120000
-      max-lifetime: 280000
+      keepalive-time: 60000
+      max-lifetime: 1500000
   jpa:
     hibernate:
       ddl-auto: validate
