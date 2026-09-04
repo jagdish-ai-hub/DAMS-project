@@ -86,9 +86,9 @@ export default function AcceptInvitePage() {
           border: '1px solid var(--line)',
           borderRadius: 'var(--radius)',
           boxShadow: 'var(--shadow)',
-          padding: '36px 32px',
+          padding: '32px clamp(16px, 5vw, 32px)',
           width: '100%',
-          maxWidth: 400,
+          maxWidth: 'min(400px, 100%)',
         }}>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--navy)', marginBottom: 6 }}>
             Set your password
@@ -130,6 +130,7 @@ export default function AcceptInvitePage() {
                   padding: '9px 11px',
                   fontSize: '0.86rem',
                   outline: 'none',
+                  minHeight: 40,
                 }}
                 onFocus={e => (e.target.style.borderColor = 'var(--navy2)')}
                 onBlur={e => (e.target.style.borderColor = 'var(--line)')}
@@ -153,6 +154,7 @@ export default function AcceptInvitePage() {
                   padding: '9px 11px',
                   fontSize: '0.86rem',
                   outline: 'none',
+                  minHeight: 40,
                 }}
                 onFocus={e => (e.target.style.borderColor = 'var(--navy2)')}
                 onBlur={e => (e.target.style.borderColor = 'var(--line)')}
@@ -183,6 +185,7 @@ export default function AcceptInvitePage() {
                 padding: '11px',
                 fontWeight: 700,
                 fontSize: '0.9rem',
+                minHeight: 42,
                 cursor: loading || !token ? 'not-allowed' : 'pointer',
                 marginTop: 4,
                 opacity: loading || !token ? 0.7 : 1,
