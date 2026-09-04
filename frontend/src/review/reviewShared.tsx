@@ -83,7 +83,7 @@ export function RecordCard(props: {
           <Badge tone={wfTone(doc.workflowStatus)}>{doc.workflowStatus}</Badge>
           <Badge tone="gray">{doc.businessStatusName ?? '—'}</Badge>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 26px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '2px 26px' }}>
           <Kv k={expense ? 'Expenses category' : 'Category'} v={expense ? doc.expenseCategoryName ?? '—' : doc.categoryName ?? '—'} />
           <Kv k={expense ? 'Job ID / PO / SO' : 'Job card'} v={doc.jobCardReference ?? '—'} />
           <Kv k="Branch" v={doc.branchCode ?? '—'} />
@@ -127,7 +127,7 @@ export function RecordCard(props: {
                       </span>
                       {props.canOverride && !editing && (
                         <button type="button" onClick={() => { setEditLine(l.lineNo); setEditAmt(String(l.amount)); setEditReason(''); props.onError('') }}
-                          style={{ ...ghostBtn, marginLeft: 8, padding: '2px 7px', fontSize: '0.7rem' }}>
+                          style={{ ...ghostBtn, marginLeft: 8, padding: '4px 8px', fontSize: '0.74rem', minHeight: 32 }}>
                           Override
                         </button>
                       )}
@@ -135,13 +135,13 @@ export function RecordCard(props: {
                         <div style={{ fontSize: '0.68rem', color: 'var(--amber)', marginTop: 2 }}>Overridden — {l.overrideReason}</div>
                       )}
                       {editing && (
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, background: 'var(--amber-bg)', border: '1px solid #EAD3AE', borderRadius: 8, padding: 8 }}>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, background: 'var(--amber-bg)', border: '1px solid #EAD3AE', borderRadius: 8, padding: 8, flexWrap: 'wrap' }}>
                           <input type="number" value={editAmt} onChange={(e) => setEditAmt(e.target.value)}
                             style={{ ...inputStyle, width: 100, padding: '5px 8px' }} />
                           <input value={editReason} onChange={(e) => setEditReason(e.target.value)} placeholder="Reason (required)"
-                            style={{ ...inputStyle, flex: 1, padding: '5px 8px' }} />
-                          <button type="button" onClick={() => save(l.lineNo)} disabled={props.busy} style={{ ...primaryBtn(props.busy), padding: '5px 10px', fontSize: '0.76rem' }}>Save</button>
-                          <button type="button" onClick={() => setEditLine(null)} style={{ ...ghostBtn, padding: '5px 9px', fontSize: '0.76rem' }}>Cancel</button>
+                            style={{ ...inputStyle, flex: 1, minWidth: 140, padding: '5px 8px' }} />
+                          <button type="button" onClick={() => save(l.lineNo)} disabled={props.busy} style={{ ...primaryBtn(props.busy), padding: '5px 10px', fontSize: '0.76rem', minHeight: 32 }}>Save</button>
+                          <button type="button" onClick={() => setEditLine(null)} style={{ ...ghostBtn, padding: '5px 9px', fontSize: '0.76rem', minHeight: 32 }}>Cancel</button>
                         </div>
                       )}
                     </td>
@@ -157,7 +157,7 @@ export function RecordCard(props: {
             </tbody>
           </table>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 26, borderTop: '2px solid var(--line)', marginTop: 8, paddingTop: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 26, borderTop: '2px solid var(--line)', marginTop: 8, paddingTop: 10, flexWrap: 'wrap' }}>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: '0.68rem', textTransform: 'uppercase', color: 'var(--muted)' }}>{expense ? 'Total expenses' : 'Total received'}</div>
             <div style={{ fontSize: '1rem', fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: expense ? 'var(--red)' : 'var(--green)' }}>{inr(total)}</div>
@@ -210,7 +210,7 @@ export function CashRecordCard({ doc }: { doc: CashDocument }) {
             {doc.direction}
           </span>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 26px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '2px 26px' }}>
           <Kv k="Date" v={fmtDate(doc.transactionDate)} />
           <Kv k="Amount" v={inr(doc.amount)} />
           <Kv k="Branch" v={doc.branchCode ?? '—'} />
@@ -253,10 +253,10 @@ export function QueryRejectBox(props: {
       <textarea value={props.text} onChange={(e) => props.onText(e.target.value)} rows={2}
         placeholder={props.kind === 'query' ? "e.g. Amount doesn't match the invoice…" : ''}
         style={{ ...inputStyle, resize: 'vertical' }} />
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
-        <button type="button" onClick={props.onCancel} style={ghostBtn}>Cancel</button>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+        <button type="button" onClick={props.onCancel} style={{ ...ghostBtn, minHeight: 36, padding: '6px 14px' }}>Cancel</button>
         <button type="button" onClick={props.onSubmit} disabled={props.busy}
-          style={{ ...ghostBtn, color: props.kind === 'query' ? 'var(--amber)' : 'var(--red)', fontWeight: 700 }}>
+          style={{ ...ghostBtn, color: props.kind === 'query' ? 'var(--amber)' : 'var(--red)', fontWeight: 700, minHeight: 36, padding: '6px 14px' }}>
           {props.kind === 'query' ? 'Send query' : 'Reject'}
         </button>
       </div>
