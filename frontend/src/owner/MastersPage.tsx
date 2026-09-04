@@ -69,18 +69,22 @@ export default function MastersPage() {
         Every dropdown the app shows comes from these lists. Rows are deactivated, never deleted.
       </p>
 
-      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        {/* left rail */}
-        <nav style={{ ...card, padding: 8, minWidth: 210, display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <div className="flex flex-col md:flex-row gap-4 items-start">
+        {/* left rail on desktop, horizontal tab bar on mobile */}
+        <nav
+          style={{ ...card, padding: 8 }}
+          className="w-full md:w-56 flex flex-row md:flex-col gap-1 overflow-x-auto md:overflow-x-visible scrollbar-thin"
+        >
           {TABS.map((t) => (
             <button
               key={t.slug}
               onClick={() => switchTab(t)}
               style={{
-                textAlign: 'left', border: 'none', borderRadius: 8, padding: '9px 11px',
+                textAlign: 'left', border: 'none', borderRadius: 8, padding: '9px 12px',
                 fontSize: '0.83rem', fontWeight: 600, cursor: 'pointer',
                 background: t.slug === tab.slug ? 'var(--navy3)' : 'transparent',
                 color: t.slug === tab.slug ? 'var(--navy)' : 'var(--ink)',
+                minHeight: 38, whiteSpace: 'nowrap',
               }}
             >
               {t.label}
@@ -89,20 +93,20 @@ export default function MastersPage() {
         </nav>
 
         {/* table */}
-        <section style={{ ...card, flex: 1, minWidth: 320 }}>
+        <section style={{ ...card }} className="flex-1 w-full min-w-0">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
             <h2 style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--ink)', flex: 1 }}>{tab.label}</h2>
             {tab.extra === 'sub' && (
               <select
                 value={parentId ?? ''}
                 onChange={(e) => setParentId(Number(e.target.value))}
-                style={{ ...inputStyle, width: 'auto' }}
+                style={{ ...inputStyle, width: 'auto', minHeight: 36 }}
               >
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             )}
             <button
-              style={primaryBtn()}
+              style={{ ...primaryBtn(), minHeight: 36 }}
               disabled={tab.extra === 'sub' && parentId == null}
               onClick={() => setModal({ editing: null })}
             >
@@ -111,8 +115,8 @@ export default function MastersPage() {
           </div>
 
           <ErrorBanner message={error} />
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 500, fontSize: '0.84rem' }}>
               <thead>
                 <tr>
                   <th style={th}>Name</th>
@@ -135,7 +139,7 @@ export default function MastersPage() {
                     {tab.extra === 'sub' && <td style={td}>{r.limitAmount != null ? `₹${r.limitAmount}` : '—'}</td>}
                     <td style={td}>{r.active ? <Badge tone="green">Active</Badge> : <Badge>Inactive</Badge>}</td>
                     <td style={{ ...td, textAlign: 'right' }}>
-                      <button style={ghostBtn} onClick={() => setModal({ editing: r })}>Edit</button>
+                      <button style={{ ...ghostBtn, minHeight: 36, padding: '4px 12px' }} onClick={() => setModal({ editing: r })}>Edit</button>
                     </td>
                   </tr>
                 ))}
@@ -243,6 +247,8 @@ function MasterModal(props: {
                   key={String(v)} type="button" onClick={() => setActive(v)}
                   style={{
                     ...ghostBtn,
+                    minHeight: 36,
+                    padding: '6px 14px',
                     background: active === v ? 'var(--navy)' : 'transparent',
                     color: active === v ? '#fff' : 'var(--navy)',
                     borderColor: active === v ? 'var(--navy)' : 'var(--line)',
@@ -257,8 +263,8 @@ function MasterModal(props: {
 
         <ErrorBanner message={error} />
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button type="button" style={ghostBtn} onClick={props.onClose}>Cancel</button>
-          <button type="submit" style={primaryBtn(saving)} disabled={saving}>
+          <button type="button" style={{ ...ghostBtn, minHeight: 36 }} onClick={props.onClose}>Cancel</button>
+          <button type="submit" style={{ ...primaryBtn(saving), minHeight: 36 }} disabled={saving}>
             {saving ? 'Saving…' : editing ? 'Save changes' : 'Add'}
           </button>
         </div>
