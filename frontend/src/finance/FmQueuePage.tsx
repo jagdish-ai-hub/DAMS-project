@@ -41,11 +41,68 @@ export default function FmQueuePage() {
   useEffect(() => {
     if (selectedId == null) { setDoc(null); return }
     let live = true
-    const req = type === 'receipt' ? receiptsApi.get(selectedId)
-      : type === 'expense' ? expensesApi.get(selectedId)
-      : cashApi.get(selectedId)
-    req.then(({ data }) => { if (live) setDoc(data as DetailDoc) })
-      .catch((e) => { if (live) setError(apiError(e, 'Could not load that document.')) })
+    const load = async () => {
+      try {
+        const req = type === 'receipt' ? receiptsApi.get(selectedId)
+          : type === 'expense' ? expensesApi.get(selectedId)
+          : cashApi.get(selectedId)
+        const { data } = await req
+        if (live) setDoc(data as DetailDoc)
+      } catch (e) {
+        if (type === 'receipt') {
+          try {
+            const jcRes = await jobCardsApi.get(selectedId)
+            const jc = jcRes.data
+            if (jc && live) {
+              setDoc({
+                id: jc.id,
+                documentNo: jc.reference,
+                workflowStatus: 'CLOSED',
+                settled: true,
+                jobCardId: jc.id,
+                jobCardReference: jc.reference,
+                branchId: jc.branchId,
+                branchCode: jc.branchCode,
+                branchName: jc.branchName,
+                customerId: jc.customerId,
+                customerName: jc.customerName,
+                customerPhone: jc.customerPhone,
+                vehicleNo: jc.vehicleNo,
+                dbmId: jc.dbmId,
+                invoiceNo: jc.invoiceNo,
+                invoiceAmount: jc.invoiceAmount,
+                b2b: jc.b2b,
+                gstNo: jc.gstNo,
+                categoryId: jc.categoryId,
+                categoryName: jc.categoryName,
+                isClaim: jc.isClaim,
+                businessStatusId: jc.businessStatusId,
+                businessStatusName: jc.businessStatusName,
+                pendingAmount: jc.pendingAmount,
+                settledViaClaimClose: jc.settledViaClaimClose,
+                claimFinalAmount: jc.claimFinalAmount,
+                claimOverridden: jc.claimOverridden,
+                claimOverrideReason: jc.claimOverrideReason,
+                totalReceived: jc.claimFinalAmount ?? 0,
+                canRecordPayment: false,
+                createdBy: 0,
+                createdByName: jc.claimClosedByName,
+                lastModifiedBy: null,
+                createdAt: jc.createdAt,
+                submittedAt: jc.claimClosedAt,
+                lines: [],
+                history: [],
+              } as unknown as ReceiveDocument)
+              return
+            }
+          } catch {
+            // fallback to original error
+          }
+        }
+        if (live) setError(apiError(e, 'Could not load that document.'))
+      }
+    }
+    load()
     return () => { live = false }
   }, [selectedId, type, tick])
 
@@ -81,12 +138,8 @@ export default function FmQueuePage() {
         </div>
       )}
 
-      <div style={{
-        display: 'grid', gridTemplateColumns: '340px 1fr', gap: 0,
-        border: '1px solid var(--line)', borderRadius: 'var(--radius)', overflow: 'hidden',
-        background: 'var(--surface)', minHeight: '68vh',
-      }}>
-        <div style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+      <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] border border-[var(--line)] rounded-[var(--radius)] overflow-hidden bg-[var(--surface)] min-h-[68vh]">
+        <div className={selectedId != null ? 'hidden lg:flex flex-col overflow-y-auto' : 'flex flex-col overflow-y-auto'}>
           <div style={{ display: 'flex', padding: 12, gap: 4 }}>
             {(['receipt', 'expense', 'cash'] as const).map((t) => (
               <button key={t} type="button" onClick={() => pickType(t)}
@@ -110,15 +163,18 @@ export default function FmQueuePage() {
           )}
         </div>
 
-        <div style={{ borderLeft: '1px solid var(--line)', padding: '20px 24px', overflowY: 'auto' }}>
+        <div className={selectedId == null ? 'hidden lg:block border-t lg:border-t-0 lg:border-l border-[var(--line)] p-4 sm:p-6 overflow-y-auto' : 'block border-t lg:border-t-0 lg:border-l border-[var(--line)] p-4 sm:p-6 overflow-y-auto'}>
           {selectedId == null
             ? <Overview count={queue.awaitingApproval.length} total={total} openClaims={queue.openClaims.length} type={type} />
             : doc == null
               ? <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div className="lg:hidden mb-2">
+                    <button type="button" onClick={() => setSelectedId(null)} style={{ ...ghostBtn, minHeight: 36, fontWeight: 700 }}>← Back to Queue</button>
+                  </div>
                   <Skeleton width={200} height={20} />
                   <SkeletonRows rows={5} />
                 </div>
-              : <FmDetail type={type} doc={doc} onDone={afterAction} onError={setError} />}
+              : <FmDetail type={type} doc={doc} onDone={afterAction} onError={setError} onBack={() => setSelectedId(null)} />}
         </div>
       </div>
     </div>
@@ -149,8 +205,8 @@ function Section(props: {
             style={{
               textAlign: 'left', border: 'none', borderBottom: '1px solid var(--line)', cursor: 'pointer',
               borderLeft: `3px solid ${sel ? 'var(--navy)' : 'transparent'}`,
-              background: sel ? 'var(--navy3)' : 'transparent', padding: '10px 14px',
-              display: 'flex', flexDirection: 'column', gap: 3, opacity: props.plain ? 0.75 : 1,
+              background: sel ? 'var(--navy3)' : 'transparent', padding: '12px 14px', minHeight: 44,
+              display: 'flex', flexDirection: 'column', gap: 3, opacity: props.plain ? 0.75 : 1, width: '100%',
             }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
               <span style={{ fontFamily: 'Consolas, monospace', fontSize: '0.7rem', fontWeight: 700, color: 'var(--navy2)' }}>
@@ -177,7 +233,7 @@ function Overview({ count, total, openClaims, type }: { count: number; total: nu
       <div style={{ fontSize: '0.82rem', color: 'var(--muted)', marginBottom: 16 }}>
         Reviewing {type === 'receipt' ? 'receipts' : type === 'expense' ? 'expenses' : 'cash movements'}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 12 }}>
         <div style={{ ...card, borderTop: '3px solid var(--navy2)' }}>
           <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>Awaiting final approval</div>
           <div style={{ fontSize: '1.4rem', fontWeight: 800, marginTop: 4 }}>{count}</div>
@@ -205,6 +261,7 @@ function FmDetail(props: {
   doc: DetailDoc
   onDone: (message: string, keepOpen: boolean) => void
   onError: (msg: string) => void
+  onBack?: () => void
 }) {
   const { type, doc } = props
   const cash = type === 'cash'
@@ -244,6 +301,17 @@ function FmDetail(props: {
 
   return (
     <div>
+      {props.onBack && (
+        <div className="lg:hidden mb-3">
+          <button
+            type="button"
+            onClick={props.onBack}
+            style={{ ...ghostBtn, minHeight: 36, display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700 }}
+          >
+            ← Back to Queue
+          </button>
+        </div>
+      )}
       <ErrorBanner message={error} />
       {cash
         ? <CashRecordCard doc={doc as CashDocument} />
@@ -281,16 +349,16 @@ function FmDetail(props: {
             {canApprove && (
               <>
                 <button type="button" onClick={() => { setBox(box === 'query' ? null : 'query'); setBoxText(''); setError('') }}
-                  style={{ ...ghostBtn, color: 'var(--amber)' }}>Query</button>
+                  style={{ ...ghostBtn, color: 'var(--amber)', minHeight: 36 }}>Query</button>
                 <button type="button" onClick={() => { setBox(box === 'reject' ? null : 'reject'); setBoxText(''); setError('') }}
-                  style={{ ...ghostBtn, color: 'var(--red)' }}>Reject</button>
+                  style={{ ...ghostBtn, color: 'var(--red)', minHeight: 36 }}>Reject</button>
                 <button type="button" onClick={() => run(() => reviewApi.approve(type, doc.id), `${docNo} approved`)}
-                  disabled={busy} style={primaryBtn(busy)}>Approve</button>
+                  disabled={busy} style={{ ...primaryBtn(busy), minHeight: 36 }}>Approve</button>
               </>
             )}
             {isOpenClaim && (
               <button type="button" onClick={() => setClaimModal(true)} disabled={busy}
-                style={{ ...primaryBtn(busy), background: 'var(--purple, #6B3FA0)' }}>
+                style={{ ...primaryBtn(busy), background: 'var(--purple, #6B3FA0)', minHeight: 36 }}>
                 Close claim
               </button>
             )}
@@ -361,9 +429,9 @@ function ClaimCloseModal(props: {
         This is final and immutable. The job card's category and business status lock, and no new receipt can be opened against it.
       </div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 4 }}>
-        <button type="button" onClick={props.onClose} style={ghostBtn} disabled={busy}>Cancel</button>
+        <button type="button" onClick={props.onClose} style={{ ...ghostBtn, minHeight: 36 }} disabled={busy}>Cancel</button>
         <button type="button" onClick={confirm} disabled={busy}
-          style={{ ...primaryBtn(busy), background: 'var(--purple, #6B3FA0)' }}>Confirm &amp; close</button>
+          style={{ ...primaryBtn(busy), background: 'var(--purple, #6B3FA0)', minHeight: 36 }}>Confirm &amp; close</button>
       </div>
     </Modal>
   )
