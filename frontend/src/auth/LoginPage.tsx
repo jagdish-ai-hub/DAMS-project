@@ -86,8 +86,8 @@ export default function LoginPage() {
       </aside>
 
       {/* ── Form panel ── */}
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px' }}>
-        <div style={{ width: '100%', maxWidth: 380 }}>
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 16px' }}>
+        <div style={{ width: '100%', maxWidth: 'min(380px, 100%)' }}>
           <div className="dams-login-compact-brand" style={{ alignItems: 'center', gap: 10, marginBottom: 24 }}>
             <div style={{ ...brandMark, width: 30, height: 30, fontSize: '0.72rem', background: 'var(--navy)' }}>DA</div>
             <span style={{ fontWeight: 700, fontSize: '0.98rem', color: 'var(--navy)' }}>DAMS</span>
@@ -212,11 +212,13 @@ const fieldLabel: CSSProperties = { fontSize: '0.78rem', fontWeight: 600, color:
 const inputStyle: CSSProperties = {
   border: '1.5px solid var(--line)', borderRadius: 8, padding: '10px 12px',
   fontSize: '0.9rem', outline: 'none', transition: 'border-color .12s',
+  minHeight: 42,
 }
 
 const submitBtn: CSSProperties = {
   background: 'var(--navy)', color: '#fff', border: 'none', borderRadius: 8,
   padding: '11px', fontWeight: 700, fontSize: '0.92rem', marginTop: 4,
+  minHeight: 42, cursor: 'pointer',
 }
 
 const demoBtn: CSSProperties = {
@@ -224,4 +226,5 @@ const demoBtn: CSSProperties = {
   width: '100%', textAlign: 'left',
   border: '1px solid var(--line)', background: 'var(--surface)', borderRadius: 9,
   padding: '9px 12px', fontSize: '0.85rem',
+  minHeight: 42, cursor: 'pointer',
 }
