@@ -172,7 +172,7 @@ export default function AttachmentsPanel(props: {
             onChange={onPick}
             style={{ display: 'none' }}
           />
-          <button type="button" onClick={() => fileRef.current?.click()} style={ghostBtn} disabled={busy}>
+          <button type="button" onClick={() => fileRef.current?.click()} style={{ ...ghostBtn, minHeight: 36 }} disabled={busy}>
             📎 Add documents
           </button>
 
@@ -182,8 +182,11 @@ export default function AttachmentsPanel(props: {
               display: 'flex', flexDirection: 'column', gap: 8,
             }}>
               {staged.map((s) => (
-                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '0.82rem', fontWeight: 600, minWidth: 160, wordBreak: 'break-all' }}>
+                <div key={s.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+                  padding: '6px 0', borderBottom: '1px dashed var(--line)',
+                }}>
+                  <span style={{ fontSize: '0.82rem', fontWeight: 600, flex: '1 1 140px', minWidth: 0, wordBreak: 'break-all' }}>
                     {s.file.name}
                   </span>
                   {s.tooBig ? (
@@ -191,13 +194,14 @@ export default function AttachmentsPanel(props: {
                       over {MAX_MB} MB — remove it
                     </span>
                   ) : (
-                    <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '0.74rem', color: 'var(--faint)' }}>attach to</span>
                       <select
                         value={s.target === 'doc' ? 'doc' : String(s.target)}
                         onChange={(e) => setTarget(s.id, e.target.value === 'doc' ? 'doc' : Number(e.target.value))}
                         style={{
                           border: '1.5px solid var(--line)', borderRadius: 7, padding: '5px 8px', fontSize: '0.78rem',
+                          minHeight: 36, maxWidth: '100%',
                         }}
                       >
                         <option value="doc">Whole {noun} (top level)</option>
@@ -205,12 +209,17 @@ export default function AttachmentsPanel(props: {
                           <option key={lt.lineNo} value={lt.lineNo}>{lt.label}</option>
                         ))}
                       </select>
-                    </>
+                    </div>
                   )}
                   <button
                     type="button"
                     onClick={() => removeStaged(s.id)}
-                    style={{ border: 'none', background: 'none', color: 'var(--red)', fontWeight: 700, cursor: 'pointer' }}
+                    style={{
+                      border: 'none', background: 'none', color: 'var(--red)', fontWeight: 700, cursor: 'pointer',
+                      width: 36, height: 36, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '1.2rem', padding: 0, marginLeft: 'auto',
+                    }}
+                    aria-label={`Remove staged file ${s.file.name}`}
                   >
                     ×
                   </button>
@@ -221,7 +230,7 @@ export default function AttachmentsPanel(props: {
                   type="button"
                   onClick={uploadAll}
                   disabled={busy || staged.every((s) => s.tooBig)}
-                  style={primaryBtn(busy || staged.every((s) => s.tooBig))}
+                  style={{ ...primaryBtn(busy || staged.every((s) => s.tooBig)), minHeight: 36 }}
                 >
                   {busy ? <><Spinner /> Uploading…</> : `Upload ${staged.filter((s) => !s.tooBig).length || ''}`.trim()}
                 </button>
@@ -244,22 +253,25 @@ export default function AttachmentsPanel(props: {
               border: '1px solid var(--line)', borderRadius: 8, padding: '8px 10px',
             }}
           >
-            <span style={{ fontSize: '0.82rem', fontWeight: 600, wordBreak: 'break-all' }}>{a.filename}</span>
+            <span style={{ fontSize: '0.82rem', fontWeight: 600, wordBreak: 'break-all', flex: '1 1 140px', minWidth: 0 }}>
+              {a.filename}
+            </span>
             <span style={{
               fontSize: '0.68rem', fontWeight: 700, color: 'var(--navy)', background: 'var(--gray-bg)',
-              borderRadius: 999, padding: '2px 8px',
+              borderRadius: 999, padding: '2px 8px', whiteSpace: 'nowrap',
             }}>
               {a.where}
             </span>
-            <span style={{ fontSize: '0.72rem', color: 'var(--faint)' }}>{fmtSize(a.sizeBytes)}</span>
+            <span style={{ fontSize: '0.72rem', color: 'var(--faint)', whiteSpace: 'nowrap' }}>{fmtSize(a.sizeBytes)}</span>
             <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-              <button type="button" onClick={() => view(a.id)} style={ghostBtn}>View</button>
+              <button type="button" onClick={() => view(a.id)} style={{ ...ghostBtn, minHeight: 36 }} aria-label={`View attachment ${a.filename}`}>View</button>
               {!frozen && !a.frozen && (
                 <button
                   type="button"
                   onClick={() => remove(a.id)}
                   disabled={busy}
-                  style={{ ...ghostBtn, color: 'var(--red)', borderColor: '#EBC2C2' }}
+                  style={{ ...ghostBtn, color: 'var(--red)', borderColor: '#EBC2C2', minHeight: 36 }}
+                  aria-label={`Remove attachment ${a.filename}`}
                 >
                   Remove
                 </button>
