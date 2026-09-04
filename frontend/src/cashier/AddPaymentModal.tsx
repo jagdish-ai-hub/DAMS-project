@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { mastersApi, type MasterRow } from '../api/masters'
 import { receiptsApi, type ReceiveDocument } from '../api/receipts'
-import { Modal, Field, ErrorBanner, inputStyle, primaryBtn, ghostBtn, inr, istToday } from '../shell/ui'
+import { Modal, Field, ErrorBanner, inputStyle, primaryBtn, ghostBtn, inr, istToday, Spinner } from '../shell/ui'
 
 /**
  * Add Payment (intial ui prototypes/cashier-home.html). Appends ONE settlement line to the
@@ -138,8 +138,10 @@ export default function AddPaymentModal(props: {
       </label>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 9, paddingTop: 8, borderTop: '1px solid var(--line)' }}>
-        <button type="button" onClick={props.onClose} style={ghostBtn} disabled={busy}>Cancel</button>
-        <button type="button" onClick={save} style={primaryBtn(busy)} disabled={busy}>Add Payment</button>
+        <button type="button" onClick={props.onClose} style={{ ...ghostBtn, minHeight: 38 }} disabled={busy}>Cancel</button>
+        <button type="button" onClick={save} style={{ ...primaryBtn(busy), minHeight: 38, display: 'inline-flex', alignItems: 'center', gap: 6 }} disabled={busy}>
+          {busy ? <><Spinner /> Adding…</> : 'Add Payment'}
+        </button>
       </div>
     </Modal>
   )
