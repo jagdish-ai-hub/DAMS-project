@@ -269,6 +269,44 @@ export default function NewReceiptPage() {
     }
   }
 
+  async function syncLines(docId: number) {
+    if (!loadedDoc?.lines) return
+    for (let i = 0; i < loadedDoc.lines.length; i++) {
+      const existing = loadedDoc.lines[i]
+      const current = lines[i]
+      if (current && (
+        Number(current.amount) !== existing.amount ||
+        Number(current.settlementModeId) !== existing.settlementModeId ||
+        (current.bankId === '' ? null : Number(current.bankId)) !== existing.bankId ||
+        (current.transactionRef || null) !== existing.transactionRef ||
+        (current.remark || null) !== existing.remark ||
+        current.transactionDate !== existing.transactionDate
+      )) {
+        await receiptsApi.updateLine(docId, existing.lineNo, {
+          transactionDate: current.transactionDate,
+          settlementModeId: Number(current.settlementModeId),
+          amount: Number(current.amount),
+          bankId: current.bankId === '' ? null : Number(current.bankId),
+          transactionRef: current.transactionRef || undefined,
+          remark: current.remark || undefined,
+        })
+      }
+    }
+  }
+
+  async function patchHeader() {
+    if (!loadedDoc) return
+    await jobCardsApi.patch(loadedDoc.jobCardId, {
+      invoiceNo: invoiceNo.trim(),
+      invoiceAmount: invoiceAmount ? Number(invoiceAmount) : undefined,
+      dbmId: dbmId.trim(),
+      b2b,
+      gstNo: b2b ? gstNo.trim() : '',
+      categoryId: Number(categoryId),
+      businessStatusId: Number(businessStatusId),
+    })
+  }
+
   async function resubmitEdited() {
     if (!loadedDoc) return
     const problem = validate(true)
@@ -279,20 +317,53 @@ export default function NewReceiptPage() {
     setBusy(true)
     setError('')
     try {
-      // header fields live on the job card
-      await jobCardsApi.patch(loadedDoc.jobCardId, {
-        invoiceNo: invoiceNo.trim(),
-        invoiceAmount: invoiceAmount ? Number(invoiceAmount) : undefined,
-        dbmId: dbmId.trim(),
-        b2b,
-        gstNo: b2b ? gstNo.trim() : '',
-        categoryId: Number(categoryId),
-        businessStatusId: Number(businessStatusId),
-      })
+      await patchHeader()
+      await syncLines(loadedDoc.id)
       const { data } = await receiptsApi.resubmit(loadedDoc.id)
       finish(true, data)
     } catch (e) {
       setError(apiError(e, 'Could not resubmit.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function submitDraft() {
+    if (!loadedDoc) return
+    const problem = validate(true)
+    if (problem) {
+      setError(problem)
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      await patchHeader()
+      await syncLines(loadedDoc.id)
+      const { data } = await receiptsApi.submit(loadedDoc.id)
+      finish(true, data)
+    } catch (e) {
+      setError(apiError(e, 'Could not submit.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function saveDraftExisting() {
+    if (!loadedDoc) return
+    const problem = validate(false)
+    if (problem) {
+      setError(problem)
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      await patchHeader()
+      await syncLines(loadedDoc.id)
+      finish(false, loadedDoc)
+    } catch (e) {
+      setError(apiError(e, 'Could not save draft.'))
     } finally {
       setBusy(false)
     }
@@ -303,6 +374,7 @@ export default function NewReceiptPage() {
     navigate(`/app?flash=${encodeURIComponent(submitted ? `${ref} submitted for checking` : `${ref} saved as draft`)}`)
   }
 
+  const isQueried = loadedDoc?.workflowStatus === 'QUERIED'
   const inEditMode = editDocId != null
 
   return (
@@ -347,7 +419,7 @@ export default function NewReceiptPage() {
         </div>
 
         <div style={{ padding: '16px 18px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 32px' }}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-y-0 gap-x-8">
             {/* left column */}
             <div>
               <Row label="Customer Name" req>
@@ -435,12 +507,12 @@ export default function NewReceiptPage() {
           </div>
 
           {/* settlement lines */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '22px 0 10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '22px 0 10px', flexWrap: 'wrap' }}>
             <h4 style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--navy)' }}>Settlement Lines</h4>
             <span style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>one row per payment received against this job / cause</span>
           </div>
 
-          <div style={{ overflowX: 'auto' }}>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
               <thead>
                 <tr>
@@ -484,7 +556,18 @@ export default function NewReceiptPage() {
                       </td>
                       <td style={cellStyle}>
                         {lines.length > 1 && (
-                          <button type="button" onClick={() => removeLine(i)} style={{ border: 'none', background: 'none', color: 'var(--red)', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}>×</button>
+                          <button
+                            type="button"
+                            onClick={() => removeLine(i)}
+                            aria-label="Remove settlement line"
+                            style={{
+                              border: 'none', background: 'none', color: 'var(--red)', fontWeight: 700,
+                              fontSize: '1.1rem', cursor: 'pointer', minWidth: 36, minHeight: 36,
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            }}
+                          >
+                            ×
+                          </button>
                         )}
                       </td>
                     </tr>
@@ -496,22 +579,29 @@ export default function NewReceiptPage() {
           <button
             type="button"
             onClick={addLine}
-            style={{ border: '1.5px dashed var(--line)', background: 'var(--surface)', borderRadius: 7, padding: '8px 14px', fontSize: '0.8rem', fontWeight: 600, color: 'var(--navy2)', marginTop: 8, cursor: 'pointer' }}
+            style={{ border: '1.5px dashed var(--line)', background: 'var(--surface)', borderRadius: 7, padding: '8px 14px', fontSize: '0.8rem', fontWeight: 600, color: 'var(--navy2)', marginTop: 8, cursor: 'pointer', minHeight: 38 }}
           >
             ＋ Add settlement row
           </button>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 28, padding: '12px 6px 4px', borderTop: '2px solid var(--line)', marginTop: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 28, padding: '12px 6px 4px', borderTop: '2px solid var(--line)', marginTop: 12, flexWrap: 'wrap' }}>
             <Foot k="Total Received" v={inr(totalReceived)} tone="green" />
             <Foot k="Pending" v={invoiceAmount ? inr(pending) : '—'} tone={pending > 0 ? 'amber' : undefined} />
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 16, marginTop: 8, borderTop: '1px solid var(--line)' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 16, marginTop: 8, borderTop: '1px solid var(--line)', flexWrap: 'wrap' }}>
             <button type="button" onClick={() => navigate(-1)} style={ghostBtn} disabled={busy}>Cancel</button>
-            {inEditMode ? (
+            {isQueried ? (
               <button type="button" onClick={resubmitEdited} style={primaryBtn(busy)} disabled={busy}>
                 {busy ? <><Spinner /> Resubmitting…</> : 'Resubmit'}
               </button>
+            ) : loadedDoc != null ? (
+              <>
+                <button type="button" onClick={saveDraftExisting} style={ghostBtn} disabled={busy}>Save Draft</button>
+                <button type="button" onClick={submitDraft} style={primaryBtn(busy)} disabled={busy}>
+                  {busy ? <><Spinner /> Submitting…</> : 'Submit'}
+                </button>
+              </>
             ) : (
               <>
                 <button type="button" onClick={() => saveNew(false)} style={ghostBtn} disabled={busy}>Save Draft</button>
@@ -532,7 +622,7 @@ const cellInput = { border: '1.5px solid var(--line)', borderRadius: 6, padding:
 
 function Row({ label, req, children }: { label: string; req?: boolean; children: React.ReactNode }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--line)', gap: 10 }}>
+    <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] items-center py-2 border-b border-[var(--line)] gap-2 sm:gap-2.5">
       <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--muted)' }}>
         {label} {req && <span style={{ color: 'var(--red)' }}>*</span>}
       </label>
