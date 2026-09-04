@@ -308,6 +308,43 @@ export default function NewExpensePage() {
     }
   }
 
+  async function syncLines(docId: number) {
+    if (!loadedDoc?.lines) return
+    for (let i = 0; i < loadedDoc.lines.length; i++) {
+      const existing = loadedDoc.lines[i]
+      const current = lines[i]
+      if (current && (
+        Number(current.amount) !== existing.amount ||
+        Number(current.subCategoryId) !== existing.subCategoryId ||
+        Number(current.expenseModeId) !== existing.expenseModeId ||
+        (current.bankId === '' ? null : Number(current.bankId)) !== existing.bankId ||
+        (current.transactionRef || null) !== existing.transactionRef ||
+        (current.remark || null) !== existing.remark ||
+        current.transactionDate !== existing.transactionDate
+      )) {
+        await expensesApi.updateLine(docId, existing.lineNo, {
+          transactionDate: current.transactionDate,
+          subCategoryId: Number(current.subCategoryId),
+          expenseModeId: Number(current.expenseModeId),
+          amount: Number(current.amount),
+          bankId: current.bankId === '' ? null : Number(current.bankId),
+          transactionRef: current.transactionRef || undefined,
+          remark: current.remark || undefined,
+        })
+      }
+    }
+  }
+
+  async function patchHeader() {
+    if (!loadedDoc) return
+    await expensesApi.patch(loadedDoc.id, {
+      jobCardId: jobCardId === '' ? undefined : Number(jobCardId),
+      receiverName: receiverName.trim(),
+      expenseCategoryId: Number(expenseCategoryId),
+      businessStatusId: Number(businessStatusId),
+    })
+  }
+
   async function resubmitEdited() {
     if (!loadedDoc) return
     const problem = validate(true)
@@ -318,16 +355,53 @@ export default function NewExpensePage() {
     setBusy(true)
     setError('')
     try {
-      await expensesApi.patch(loadedDoc.id, {
-        jobCardId: jobCardId === '' ? undefined : Number(jobCardId),
-        receiverName: receiverName.trim(),
-        expenseCategoryId: Number(expenseCategoryId),
-        businessStatusId: Number(businessStatusId),
-      })
+      await patchHeader()
+      await syncLines(loadedDoc.id)
       const { data } = await expensesApi.resubmit(loadedDoc.id)
       finish(true, data)
     } catch (e) {
       setError(apiError(e, 'Could not resubmit.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function submitDraft() {
+    if (!loadedDoc) return
+    const problem = validate(true)
+    if (problem) {
+      setError(problem)
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      await patchHeader()
+      await syncLines(loadedDoc.id)
+      const { data } = await expensesApi.submit(loadedDoc.id)
+      finish(true, data)
+    } catch (e) {
+      setError(apiError(e, 'Could not submit.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function saveDraftExisting() {
+    if (!loadedDoc) return
+    const problem = validate(false)
+    if (problem) {
+      setError(problem)
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      await patchHeader()
+      await syncLines(loadedDoc.id)
+      finish(false, loadedDoc)
+    } catch (e) {
+      setError(apiError(e, 'Could not save draft.'))
     } finally {
       setBusy(false)
     }
@@ -352,6 +426,7 @@ export default function NewExpensePage() {
     navigate(`/app?flash=${encodeURIComponent(submitted ? `${ref} submitted for checking` : `${ref} saved as draft`)}`)
   }
 
+  const isQueried = loadedDoc?.workflowStatus === 'QUERIED'
   const inEditMode = editDocId != null
   const showTransferButton =
     inEditMode &&
@@ -403,7 +478,7 @@ export default function NewExpensePage() {
         </div>
 
         <div style={{ padding: '16px 18px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 32px' }}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-y-0 gap-x-8">
             {/* left column */}
             <div>
               <Row label="Receiver Name" req>
@@ -449,11 +524,11 @@ export default function NewExpensePage() {
                 <input readOnly value={loadedDoc?.documentNo ?? 'assigned on submit'} style={{ ...inputStyle, background: 'var(--bg)', color: 'var(--muted)', fontFamily: 'Consolas, monospace' }} />
               </Row>
 
-              {/* Documents live in the space under the ID field, in this column. */}
+              {/* Documents live under the ID field, in this column. */}
               <AttachmentsPanel
                 docId={loadedDoc?.id ?? editDocId}
                 noun="expense"
-                frozen={!!attachFrozen}
+                frozen={attachFrozen}
                 lineTargets={attachLineTargets}
                 api={expensesApi}
                 ensureDraft={ensureDraft}
@@ -462,13 +537,13 @@ export default function NewExpensePage() {
           </div>
 
           {/* expense lines */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '22px 0 10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '22px 0 10px', flexWrap: 'wrap' }}>
             <h4 style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--navy)' }}>Expense Lines</h4>
-            <span style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>one row per payment made to this receiver</span>
+            <span style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>breakdown by sub-category / mode</span>
           </div>
 
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 780 }}>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
               <thead>
                 <tr>
                   {['Date', 'Sub-category', 'Amount', 'Payment Mode', 'Bank Name', 'Transaction ID', 'Remark', ''].map((h) => (
@@ -523,7 +598,18 @@ export default function NewExpensePage() {
                       </td>
                       <td style={cellStyle}>
                         {lines.length > 1 && (
-                          <button type="button" onClick={() => removeLine(i)} style={{ border: 'none', background: 'none', color: 'var(--red)', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}>×</button>
+                          <button
+                            type="button"
+                            onClick={() => removeLine(i)}
+                            aria-label="Remove expense line"
+                            style={{
+                              border: 'none', background: 'none', color: 'var(--red)', fontWeight: 700,
+                              fontSize: '1.1rem', cursor: 'pointer', minWidth: 36, minHeight: 36,
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            }}
+                          >
+                            ×
+                          </button>
                         )}
                       </td>
                     </tr>
@@ -535,7 +621,7 @@ export default function NewExpensePage() {
           <button
             type="button"
             onClick={addLine}
-            style={{ border: '1.5px dashed var(--line)', background: 'var(--surface)', borderRadius: 7, padding: '8px 14px', fontSize: '0.8rem', fontWeight: 600, color: 'var(--navy2)', marginTop: 8, cursor: 'pointer' }}
+            style={{ border: '1.5px dashed var(--line)', background: 'var(--surface)', borderRadius: 7, padding: '8px 14px', fontSize: '0.8rem', fontWeight: 600, color: 'var(--navy2)', marginTop: 8, cursor: 'pointer', minHeight: 38 }}
           >
             ＋ Add expense row
           </button>
@@ -553,19 +639,26 @@ export default function NewExpensePage() {
             </div>
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 28, padding: '12px 6px 4px', borderTop: '2px solid var(--line)', marginTop: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 28, padding: '12px 6px 4px', borderTop: '2px solid var(--line)', marginTop: 12, flexWrap: 'wrap' }}>
             <Foot k="Total Expenses" v={inr(total)} />
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 16, marginTop: 8, borderTop: '1px solid var(--line)' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 16, marginTop: 8, borderTop: '1px solid var(--line)', flexWrap: 'wrap' }}>
             <button type="button" onClick={() => navigate(-1)} style={ghostBtn} disabled={busy}>Cancel</button>
             {showTransferButton && (
               <button type="button" onClick={transferToClaim} style={ghostBtn} disabled={busy}>Transfer to Claim</button>
             )}
-            {inEditMode ? (
+            {isQueried ? (
               <button type="button" onClick={resubmitEdited} style={primaryBtn(busy)} disabled={busy}>
                 {busy ? <><Spinner /> Resubmitting…</> : 'Resubmit'}
               </button>
+            ) : loadedDoc != null ? (
+              <>
+                <button type="button" onClick={saveDraftExisting} style={ghostBtn} disabled={busy}>Save Draft</button>
+                <button type="button" onClick={submitDraft} style={primaryBtn(busy)} disabled={busy}>
+                  {busy ? <><Spinner /> Submitting…</> : 'Submit'}
+                </button>
+              </>
             ) : (
               <>
                 <button type="button" onClick={() => saveNew(false)} style={ghostBtn} disabled={busy}>Save Draft</button>
@@ -586,7 +679,7 @@ const cellInput = { border: '1.5px solid var(--line)', borderRadius: 6, padding:
 
 function Row({ label, req, children }: { label: string; req?: boolean; children: React.ReactNode }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--line)', gap: 10 }}>
+    <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] items-center py-2 border-b border-[var(--line)] gap-2 sm:gap-2.5">
       <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--muted)' }}>
         {label} {req && <span style={{ color: 'var(--red)' }}>*</span>}
       </label>
