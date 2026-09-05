@@ -20,5 +20,6 @@ The balance updates immediately. When it reaches zero the receipt **settles itse
 
 ## If there's no Add Payment button
 
-- The balance is already **zero** — nothing left to pay, or
-- the job card belongs to **another branch** — only that branch's cashier can take the payment.
+- The balance is already **zero** — nothing left to pay,
+- the job card belongs to **another branch** — only that branch's cashier can take the payment, or
+- the previous receipt was **rejected** — rejected receipts cannot accept further payments; use **New Receipt** to start a fresh receipt.

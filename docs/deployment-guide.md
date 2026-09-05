@@ -20,8 +20,8 @@ required for both. Then do Part 2 *or* Part 3.
 ```
                  ┌─────────────── VPS (Ubuntu) ───────────────┐
 Browser ──HTTPS──▶ nginx + certbot                             │
-                 │   /       → 127.0.0.1:8081  frontend (nginx SPA, container)
-                 │   /api/   → 127.0.0.1:8080  backend  (Spring Boot, container)
+                 │   /       → 127.0.0.1:8083  frontend (nginx SPA, container)
+                 │   /api/   → 127.0.0.1:8082  backend  (Spring Boot, container)
                  └───────────────┬───────────────┬────────────┘
                                  │               │
                           Neon (Postgres)   Cloudflare R2 (attachments)

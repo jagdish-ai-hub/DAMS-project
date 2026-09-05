@@ -397,6 +397,8 @@ Where this lives in this repo (verified):
   service + `ReceivePaymentGuard` (+ `ReceivePaymentGuardTest`).
   A cashier can only touch job cards in their own home branch — cross-branch
   Add Payment is refused even when org-wide search is on.
+  A REJECTED document is terminal and cannot accept payments (`addLine` throws 409);
+  creating a receipt against that job card opens a fresh draft (`ReceiveDocumentRepository.findByOrgIdAndJobCardIdAndSettledFalseAndWorkflowStatusNot`).
 - Frontend: `frontend/src/cashier/AddPaymentModal.tsx` (appends a line),
   customer history card on `CashierHomePage.tsx`.
 
