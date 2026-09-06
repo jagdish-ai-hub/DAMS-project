@@ -7,6 +7,18 @@
 
 ## Revision log
 
+- **rev 23 (2026-09-06)** — Removed the **Reject** action from the Accountant and Finance
+  Manager review screens at the owner's request: Query already returns a record to the
+  cashier for a fix-and-resubmit, and Reject (a terminal, unrecoverable state) was judged
+  unnecessary alongside it. UI-only change, deliberately reversible:
+  `ReviewQueuePage.tsx` / `FmQueuePage.tsx` no longer render the Reject button and their
+  `box` state is narrowed to `'query' | null`. Left untouched — so the action can be restored
+  by re-adding the button alone: the `REJECTED` workflow-status value (DB enum, all three
+  document types), `POST /{receipts,expenses,cash-documents}/{id}/reject` endpoints,
+  `reviewApi.reject`, and `QueryRejectBox`'s `'reject'` kind. Existing REJECTED documents
+  (if any) keep displaying correctly everywhere (badges, My Entries, dashboards) — this only
+  stops a reviewer from creating new ones.
+
 - **rev 22 (2026-09-06)** — Fixed a data-loss bug reported by a cashier: reopening an
   already-saved receipt/expense from My Entries, adding a new settlement/expense row, then
   Save Draft / Submit / Resubmit reported success but silently dropped the new row (never
