@@ -139,7 +139,9 @@ public class JobCardService {
         if (request.getInvoiceNo() != null) {
             jc.setInvoiceNo(blankToNull(request.getInvoiceNo()));
         }
-        if (request.getInvoiceAmount() != null) {
+        if (Boolean.TRUE.equals(request.getClearInvoiceAmount())) {
+            jc.setInvoiceAmount(null);
+        } else if (request.getInvoiceAmount() != null) {
             jc.setInvoiceAmount(request.getInvoiceAmount());
         }
         if (request.getDbmId() != null) {
@@ -150,6 +152,21 @@ public class JobCardService {
         }
         if (request.getGstNo() != null) {
             jc.setGstNo(blankToNull(request.getGstNo()));
+        }
+        if (request.getVehicleNo() != null) {
+            String normalised = Vehicle.normalise(request.getVehicleNo());
+            if (normalised == null || normalised.isBlank()) {
+                jc.setVehicleId(null);
+            } else {
+                Vehicle v = vehicleRepo.findByOrgIdAndVehicleNo(orgId, normalised).orElseGet(() -> {
+                    Vehicle nv = new Vehicle();
+                    nv.setOrgId(orgId);
+                    nv.setCustomerId(jc.getCustomerId());
+                    nv.setVehicleNo(normalised);
+                    return vehicleRepo.save(nv);
+                });
+                jc.setVehicleId(v.getId());
+            }
         }
         // Validate against the effective (post-patch) values.
         requireGstWhenB2b(jc.isB2b(), jc.getGstNo());

@@ -90,6 +90,14 @@ export default function AddPaymentModal(props: {
       title="Add Payment"
       subtitle={`${props.customerName} · ${props.jobReference}${props.documentNo ? ` · ${props.documentNo}` : ''}`}
       onClose={props.onClose}
+      footer={
+        <>
+          <button type="button" onClick={props.onClose} style={{ ...ghostBtn, minHeight: 38 }} disabled={busy}>Cancel</button>
+          <button type="button" onClick={save} style={{ ...primaryBtn(busy), minHeight: 38, display: 'inline-flex', alignItems: 'center', gap: 6 }} disabled={busy}>
+            {busy ? <><Spinner /> Adding…</> : 'Add Payment'}
+          </button>
+        </>
+      }
     >
       <div style={{ background: 'var(--amber-bg)', color: 'var(--amber)', borderRadius: 8, padding: '9px 12px', fontSize: '0.82rem', fontWeight: 600 }}>
         Balance due: {inr(props.balanceDue)} — this adds a line to {nextLineLabel}.
@@ -136,13 +144,6 @@ export default function AddPaymentModal(props: {
           style={{ display: 'none' }}
         />
       </label>
-
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 9, paddingTop: 8, borderTop: '1px solid var(--line)' }}>
-        <button type="button" onClick={props.onClose} style={{ ...ghostBtn, minHeight: 38 }} disabled={busy}>Cancel</button>
-        <button type="button" onClick={save} style={{ ...primaryBtn(busy), minHeight: 38, display: 'inline-flex', alignItems: 'center', gap: 6 }} disabled={busy}>
-          {busy ? <><Spinner /> Adding…</> : 'Add Payment'}
-        </button>
-      </div>
     </Modal>
   )
 }

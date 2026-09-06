@@ -328,15 +328,17 @@ export default function NewExpensePage() {
         (current.remark || null) !== existing.remark ||
         current.transactionDate !== existing.transactionDate
       ) {
-        await expensesApi.updateLine(docId, existing.lineNo, {
-          transactionDate: current.transactionDate,
-          subCategoryId: Number(current.subCategoryId),
-          expenseModeId: Number(current.expenseModeId),
-          amount: Number(current.amount),
-          bankId: current.bankId === '' ? null : Number(current.bankId),
-          transactionRef: current.transactionRef || undefined,
-          remark: current.remark || undefined,
-        })
+        if (Number(current.amount) > 0 && current.subCategoryId !== '' && current.expenseModeId !== '') {
+          await expensesApi.updateLine(docId, existing.lineNo, {
+            transactionDate: current.transactionDate,
+            subCategoryId: Number(current.subCategoryId),
+            expenseModeId: Number(current.expenseModeId),
+            amount: Number(current.amount),
+            bankId: current.bankId === '' ? null : Number(current.bankId),
+            transactionRef: current.transactionRef || undefined,
+            remark: current.remark || undefined,
+          })
+        }
       }
     }
     // 2) post brand-new rows (skip empty/incomplete ones, same filter as create)
@@ -426,7 +428,23 @@ export default function NewExpensePage() {
     try {
       await patchHeader()
       await syncLines(loadedDoc.id)
-      finish(false, loadedDoc)
+      const { data } = await expensesApi.get(loadedDoc.id)
+      setLoadedDoc(data)
+      setLines(
+        data.lines.length
+          ? data.lines.map((l) => ({
+              lineNo: l.lineNo,
+              transactionDate: l.transactionDate,
+              subCategoryId: l.subCategoryId,
+              expenseModeId: l.expenseModeId,
+              amount: String(l.amount),
+              bankId: l.bankId ?? '',
+              transactionRef: l.transactionRef ?? '',
+              remark: l.remark ?? '',
+            }))
+          : [freshLine()],
+      )
+      setNotice(`Draft ${data.documentNo ?? `#${data.id}`} saved successfully. Continue editing, attach documents, or Submit when ready.`)
     } catch (e) {
       setError(apiError(e, 'Could not save draft.'))
     } finally {

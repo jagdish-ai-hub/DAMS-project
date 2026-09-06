@@ -288,14 +288,16 @@ export default function NewReceiptPage() {
         (current.remark || null) !== existing.remark ||
         current.transactionDate !== existing.transactionDate
       ) {
-        await receiptsApi.updateLine(docId, existing.lineNo, {
-          transactionDate: current.transactionDate,
-          settlementModeId: Number(current.settlementModeId),
-          amount: Number(current.amount),
-          bankId: current.bankId === '' ? null : Number(current.bankId),
-          transactionRef: current.transactionRef || undefined,
-          remark: current.remark || undefined,
-        })
+        if (Number(current.amount) > 0 && current.settlementModeId !== '') {
+          await receiptsApi.updateLine(docId, existing.lineNo, {
+            transactionDate: current.transactionDate,
+            settlementModeId: Number(current.settlementModeId),
+            amount: Number(current.amount),
+            bankId: current.bankId === '' ? null : Number(current.bankId),
+            transactionRef: current.transactionRef || undefined,
+            remark: current.remark || undefined,
+          })
+        }
       }
     }
     // 2) post brand-new rows (skip empty/incomplete ones, same filter as create)
@@ -325,6 +327,8 @@ export default function NewReceiptPage() {
     await jobCardsApi.patch(loadedDoc.jobCardId, {
       invoiceNo: invoiceNo.trim(),
       invoiceAmount: invoiceAmount ? Number(invoiceAmount) : undefined,
+      clearInvoiceAmount: invoiceAmount ? false : true,
+      vehicleNo: vehicleNo.trim(),
       dbmId: dbmId.trim(),
       b2b,
       gstNo: b2b ? gstNo.trim() : '',
@@ -387,7 +391,22 @@ export default function NewReceiptPage() {
     try {
       await patchHeader()
       await syncLines(loadedDoc.id)
-      finish(false, loadedDoc)
+      const { data } = await receiptsApi.get(loadedDoc.id)
+      setLoadedDoc(data)
+      setLines(
+        data.lines.length
+          ? data.lines.map((l) => ({
+              lineNo: l.lineNo,
+              transactionDate: l.transactionDate,
+              settlementModeId: l.settlementModeId,
+              amount: String(l.amount),
+              bankId: l.bankId ?? '',
+              transactionRef: l.transactionRef ?? '',
+              remark: l.remark ?? '',
+            }))
+          : [freshLine('')],
+      )
+      setNotice(`Draft ${data.documentNo ?? `#${data.id}`} saved successfully. Continue editing, attach documents, or Submit when ready.`)
     } catch (e) {
       setError(apiError(e, 'Could not save draft.'))
     } finally {

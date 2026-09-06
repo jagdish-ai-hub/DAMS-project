@@ -188,7 +188,7 @@ export function ErrorBanner({ message }: { message: string }) {
   )
 }
 
-export function Modal(props: { title: string; subtitle?: string; onClose: () => void; children: ReactNode; maxWidth?: number }) {
+export function Modal(props: { title: string; subtitle?: string; onClose: () => void; children: ReactNode; footer?: ReactNode; maxWidth?: number }) {
   const { onClose } = props
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -210,8 +210,8 @@ export function Modal(props: { title: string; subtitle?: string; onClose: () => 
       onMouseDown={props.onClose}
       style={{
         position: 'fixed', inset: 0, background: 'rgba(16,24,40,.45)',
-        display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-        padding: 'clamp(16px, 5vh, 60px) clamp(10px, 3vw, 16px)', zIndex: 50, overflowY: 'auto',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 'clamp(12px, 3vh, 32px) clamp(10px, 3vw, 16px)', zIndex: 50, overflowY: 'auto',
       }}
     >
       <div
@@ -220,7 +220,7 @@ export function Modal(props: { title: string; subtitle?: string; onClose: () => 
         style={{
           background: 'var(--surface)', borderRadius: 12, boxShadow: 'var(--shadow-lift)',
           width: '100%', maxWidth: props.maxWidth ?? 460,
-          maxHeight: 'calc(100vh - 32px)', display: 'flex', flexDirection: 'column',
+          maxHeight: 'min(calc(100vh - 32px), 720px)', display: 'flex', flexDirection: 'column',
         }}
       >
         <div style={{
@@ -246,9 +246,18 @@ export function Modal(props: { title: string; subtitle?: string; onClose: () => 
             ✕
           </button>
         </div>
-        <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto' }}>
+        <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto', flex: 1, minHeight: 0 }}>
           {props.children}
         </div>
+        {props.footer && (
+          <div style={{
+            padding: '12px 20px', borderTop: '1px solid var(--line)', flexShrink: 0,
+            display: 'flex', justifyContent: 'flex-end', gap: 9, background: 'var(--surface)',
+            borderBottomLeftRadius: 12, borderBottomRightRadius: 12,
+          }}>
+            {props.footer}
+          </div>
+        )}
       </div>
     </div>
   )

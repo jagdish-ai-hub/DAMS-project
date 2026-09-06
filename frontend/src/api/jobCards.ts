@@ -56,6 +56,8 @@ export interface JobCardCreateRequest {
 export interface JobCardPatchRequest {
   invoiceNo?: string
   invoiceAmount?: number
+  clearInvoiceAmount?: boolean
+  vehicleNo?: string
   dbmId?: string
   b2b?: boolean
   gstNo?: string
