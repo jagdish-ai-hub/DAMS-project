@@ -24,6 +24,15 @@ Thumbs.db
 .agents/
 .kiro/
 .claude/
+.clinerules
+.cursorrules
+.cursor/
+.windsurfrules
+.windsurf/
+.github/copilot-instructions.md
+.github/instructions/
+AGENTS.md
+GEMINI.md
 
 # Logs
 *.log
