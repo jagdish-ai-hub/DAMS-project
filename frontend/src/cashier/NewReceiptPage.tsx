@@ -25,6 +25,8 @@ function queryNote(history: DocumentHistoryEntry[]): string | null {
  */
 
 type LineRow = {
+  // lineNo tracks the saved server line this row was loaded from (undefined = new unsaved row).
+  lineNo?: number
   transactionDate: string
   settlementModeId: number | ''
   amount: string
@@ -129,6 +131,7 @@ export default function NewReceiptPage() {
         setLines(
           data.lines.length
             ? data.lines.map((l) => ({
+                lineNo: l.lineNo,
                 transactionDate: l.transactionDate,
                 settlementModeId: l.settlementModeId,
                 amount: String(l.amount),
@@ -271,17 +274,20 @@ export default function NewReceiptPage() {
 
   async function syncLines(docId: number) {
     if (!loadedDoc?.lines) return
-    for (let i = 0; i < loadedDoc.lines.length; i++) {
-      const existing = loadedDoc.lines[i]
-      const current = lines[i]
-      if (current && (
+    const originalByNo = new Map(loadedDoc.lines.map((l) => [l.lineNo, l]))
+    // 1) patch rows that map to a saved line and changed
+    for (const current of lines) {
+      if (current.lineNo == null) continue
+      const existing = originalByNo.get(current.lineNo)
+      if (!existing) continue
+      if (
         Number(current.amount) !== existing.amount ||
         Number(current.settlementModeId) !== existing.settlementModeId ||
         (current.bankId === '' ? null : Number(current.bankId)) !== existing.bankId ||
         (current.transactionRef || null) !== existing.transactionRef ||
         (current.remark || null) !== existing.remark ||
         current.transactionDate !== existing.transactionDate
-      )) {
+      ) {
         await receiptsApi.updateLine(docId, existing.lineNo, {
           transactionDate: current.transactionDate,
           settlementModeId: Number(current.settlementModeId),
@@ -290,6 +296,26 @@ export default function NewReceiptPage() {
           transactionRef: current.transactionRef || undefined,
           remark: current.remark || undefined,
         })
+      }
+    }
+    // 2) post brand-new rows (skip empty/incomplete ones, same filter as create)
+    for (const current of lines) {
+      if (current.lineNo != null) continue
+      if (!(Number(current.amount) > 0 && current.settlementModeId !== '')) continue
+      await receiptsApi.addLine(docId, {
+        transactionDate: current.transactionDate,
+        settlementModeId: Number(current.settlementModeId),
+        amount: Number(current.amount),
+        bankId: current.bankId === '' ? null : Number(current.bankId),
+        transactionRef: current.transactionRef || undefined,
+        remark: current.remark || undefined,
+      })
+    }
+    // 3) delete saved lines the user removed
+    const kept = new Set(lines.map((l) => l.lineNo).filter((n): n is number => n != null))
+    for (const existing of loadedDoc.lines) {
+      if (!kept.has(existing.lineNo)) {
+        await receiptsApi.deleteLine(docId, existing.lineNo)
       }
     }
   }

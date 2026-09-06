@@ -63,7 +63,7 @@ class AdminOrgServiceTest {
 
     @Test
     void createOrganization_createsOrgAndOwnerUser_withInviteToken() {
-        when(userRepo.findByEmail("owner@testorg.com")).thenReturn(Optional.empty());
+        when(userRepo.findByEmailIgnoreCase("owner@testorg.com")).thenReturn(Optional.empty());
 
         Organization savedOrg = new Organization("Test Org");
         ReflectionTestUtils.setField(savedOrg, "id", 42L);
@@ -98,7 +98,7 @@ class AdminOrgServiceTest {
 
     @Test
     void createOrganization_doesNotProvisionMasters_whenEmailAlreadyExists() {
-        when(userRepo.findByEmail("existing@dams.local")).thenReturn(Optional.of(new AppUser()));
+        when(userRepo.findByEmailIgnoreCase("existing@dams.local")).thenReturn(Optional.of(new AppUser()));
 
         assertThatThrownBy(() ->
             service.createOrganization("Org X", "Owner X", "existing@dams.local"))
@@ -109,7 +109,7 @@ class AdminOrgServiceTest {
 
     @Test
     void createOrganization_handsInviteLinkToEmailService() {
-        when(userRepo.findByEmail("owner@testorg.com")).thenReturn(Optional.empty());
+        when(userRepo.findByEmailIgnoreCase("owner@testorg.com")).thenReturn(Optional.empty());
         Organization savedOrg = new Organization("Test Org");
         ReflectionTestUtils.setField(savedOrg, "id", 1L);
         when(orgRepo.save(any(Organization.class))).thenReturn(savedOrg);
@@ -123,7 +123,7 @@ class AdminOrgServiceTest {
 
     @Test
     void createOrganization_inviteTokenExpiresAboutSevenDaysOut() {
-        when(userRepo.findByEmail("owner@testorg.com")).thenReturn(Optional.empty());
+        when(userRepo.findByEmailIgnoreCase("owner@testorg.com")).thenReturn(Optional.empty());
         Organization savedOrg = new Organization("Test Org");
         ReflectionTestUtils.setField(savedOrg, "id", 1L);
         when(orgRepo.save(any(Organization.class))).thenReturn(savedOrg);
@@ -142,7 +142,7 @@ class AdminOrgServiceTest {
 
     @Test
     void createOrganization_throwsConflict_whenEmailAlreadyExists() {
-        when(userRepo.findByEmail("existing@dams.local")).thenReturn(Optional.of(new AppUser()));
+        when(userRepo.findByEmailIgnoreCase("existing@dams.local")).thenReturn(Optional.of(new AppUser()));
 
         assertThatThrownBy(() ->
             service.createOrganization("Org X", "Owner X", "existing@dams.local"))

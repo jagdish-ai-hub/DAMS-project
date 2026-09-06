@@ -50,8 +50,11 @@ public class AuthService {
      */
     @Transactional(readOnly = true)
     public LoginResponse login(LoginRequest request) {
-        AppUser user = userRepo.findByEmail(request.getEmail())
-            .orElseThrow(() -> DamsException.notFound("AppUser", "email", request.getEmail()));
+        // Emails are stored lowercased (see UserService/AdminOrgService) — normalise here so
+        // mixed-case login attempts resolve to the same account.
+        String email = request.getEmail().trim().toLowerCase();
+        AppUser user = userRepo.findByEmailIgnoreCase(email)
+            .orElseThrow(() -> DamsException.notFound("AppUser", "email", email));
 
         if (!user.isActive()) {
             throw DamsException.forbidden("AppUser " + user.getId() + " is deactivated");

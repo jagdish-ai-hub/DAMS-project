@@ -47,6 +47,12 @@ public class VehicleService {
 
     @Transactional
     public VehicleResponse create(VehicleRequest request) {
+        return createOrGet(request).response();
+    }
+
+    /** Idempotent create: {@code created} is false when the number already existed (dedup hit). */
+    @Transactional
+    public CreateResult createOrGet(VehicleRequest request) {
         Long orgId = TenantContext.requireOrgId();
         String normalised = Vehicle.normalise(request.getVehicleNo());
         if (normalised == null || normalised.isBlank()) {
@@ -59,7 +65,8 @@ public class VehicleService {
         // Dedup: an existing number wins, no duplicate row.
         Optional<Vehicle> existing = vehicleRepo.findByOrgIdAndVehicleNo(orgId, normalised);
         if (existing.isPresent()) {
-            return VehicleResponse.of(existing.get(), customerName(orgId, existing.get().getCustomerId()));
+            return new CreateResult(
+                VehicleResponse.of(existing.get(), customerName(orgId, existing.get().getCustomerId())), false);
         }
 
         Vehicle v = new Vehicle();
@@ -68,8 +75,10 @@ public class VehicleService {
         v.setVehicleNo(normalised);
         v = vehicleRepo.save(v);
         log.info("Vehicle created: orgId={} vehicleId={} no={}", orgId, v.getId(), normalised);
-        return VehicleResponse.of(v, customer.getName());
+        return new CreateResult(VehicleResponse.of(v, customer.getName()), true);
     }
+
+    public record CreateResult(VehicleResponse response, boolean created) {}
 
     private String customerName(Long orgId, Long customerId) {
         return customerRepo.findByIdAndOrgId(customerId, orgId).map(Customer::getName).orElse(null);

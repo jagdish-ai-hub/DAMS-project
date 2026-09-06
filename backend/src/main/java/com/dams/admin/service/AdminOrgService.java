@@ -89,9 +89,11 @@ public class AdminOrgService {
      */
     @Transactional
     public OrgCreationResult createOrganization(String orgName, String ownerName, String ownerEmail) {
-        if (userRepo.findByEmail(ownerEmail).isPresent()) {
+        // Normalise like UserService so login (case-insensitive) always resolves this account.
+        String email = ownerEmail.trim().toLowerCase();
+        if (userRepo.findByEmailIgnoreCase(email).isPresent()) {
             throw DamsException.conflict(
-                "AppUser with email '" + ownerEmail + "' already exists");
+                "AppUser with email '" + email + "' already exists");
         }
 
         Organization org = new Organization(orgName);
@@ -106,7 +108,7 @@ public class AdminOrgService {
         AppUser owner = new AppUser();
         owner.setOrganization(org);
         owner.setName(ownerName);
-        owner.setEmail(ownerEmail);
+        owner.setEmail(email);
         owner.setRole(Role.OWNER);
         owner.setActive(true);
         owner.setInviteToken(inviteToken);
@@ -116,9 +118,9 @@ public class AdminOrgService {
         String inviteLink = buildInviteLink(inviteToken);
 
         log.info("Org created: orgId={} orgName='{}' ownerUserId={} ownerEmail='{}' inviteExpiresAt={}",
-            org.getId(), orgName, owner.getId(), ownerEmail, expiresAt);
+            org.getId(), orgName, owner.getId(), email, expiresAt);
 
-        emailService.sendOwnerInvite(ownerEmail, orgName, inviteLink);
+        emailService.sendOwnerInvite(email, orgName, inviteLink);
 
         return new OrgCreationResult(org.getId(), orgName, inviteToken, inviteLink);
     }
