@@ -81,6 +81,7 @@ export interface CashDocumentPatchRequest {
   transactionDate?: string
   amount?: number
   bankId?: number | null
+  clearBank?: boolean
   transactionRef?: string
   remark?: string
 }

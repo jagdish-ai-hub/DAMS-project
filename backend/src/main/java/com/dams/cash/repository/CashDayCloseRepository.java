@@ -13,6 +13,8 @@ public interface CashDayCloseRepository extends JpaRepository<CashDayClose, Long
 
     boolean existsByOrgIdAndBranchIdAndCloseDate(Long orgId, Long branchId, LocalDate closeDate);
 
+    boolean existsByOrgIdAndBranchId(Long orgId, Long branchId);
+
     /** The branch's most recent close (its {@code closeDate} is the date lock; its {@code countedAmount} is the next opening). */
     Optional<CashDayClose> findFirstByOrgIdAndBranchIdOrderByCloseDateDesc(Long orgId, Long branchId);
 

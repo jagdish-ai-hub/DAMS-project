@@ -23,6 +23,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -127,8 +129,17 @@ public class AttachmentService {
             throw DamsException.conflict("Attachment '" + a.getFilename()
                 + "' is frozen (its document is approved or closed) and cannot be deleted");
         }
-        storage.delete(a.getObjectKey());
         attachmentRepo.delete(a);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    storage.delete(a.getObjectKey());
+                }
+            });
+        } else {
+            storage.delete(a.getObjectKey());
+        }
         log.info("Attachment deleted: orgId={} attachmentId={}", orgId, attachmentId);
     }
 
@@ -188,7 +199,8 @@ public class AttachmentService {
     }
 
     private static OwningDoc receiveOwner(ReceiveDocument doc) {
-        boolean frozen = doc.isSettled() || doc.getWorkflowStatus() == WorkflowStatus.REJECTED;
+        boolean frozen = doc.getWorkflowStatus() == WorkflowStatus.APPROVED
+            || doc.getWorkflowStatus() == WorkflowStatus.REJECTED;
         return new OwningDoc(frozen, doc.getDocumentNo() != null ? doc.getDocumentNo() : "#" + doc.getId());
     }
 

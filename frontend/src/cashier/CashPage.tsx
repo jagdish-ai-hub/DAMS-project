@@ -126,7 +126,13 @@ export default function CashPage() {
                 − Cash Out
               </button>
               <span style={{ flex: 1 }} />
-              <button type="button" onClick={() => setCloseModal(true)} style={{ ...primaryBtn(), minHeight: 38 }}>
+              <button
+                type="button"
+                onClick={() => setCloseModal(true)}
+                disabled={!drawer.openingSet}
+                title={!drawer.openingSet ? 'Opening balance must be set by an Accountant before closing the day' : undefined}
+                style={{ ...primaryBtn(!drawer.openingSet), minHeight: 38 }}
+              >
                 Close Day
               </button>
             </div>
@@ -318,8 +324,9 @@ function MovementModal(props: {
       transactionDate,
       amount: Number(amount),
       bankId: bankId === '' ? null : Number(bankId),
-      transactionRef: transactionRef.trim() || undefined,
-      remark: remark.trim() || undefined,
+      clearBank: edit ? bankId === '' : undefined,
+      transactionRef: transactionRef.trim(),
+      remark: remark.trim(),
     }
   }
 
@@ -424,6 +431,7 @@ function CloseDayModal(props: { drawer: CashDrawer; onClose: () => void; onDone:
   const needRemark = variance !== 0
 
   async function confirm() {
+    if (!props.drawer.openingSet) { setError('Cannot close the day: the branch opening balance must be set by an Accountant first'); return }
     if (counted === '' || Number(counted) < 0) { setError('Enter the counted cash amount'); return }
     if (needRemark && !remark.trim()) { setError('A variance remark is required when the counted amount differs'); return }
     setBusy(true)
