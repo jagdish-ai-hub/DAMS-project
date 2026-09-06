@@ -271,7 +271,7 @@ function FmDetail(props: {
 
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [box, setBox] = useState<'query' | 'reject' | null>(null)
+  const [box, setBox] = useState<'query' | null>(null)
   const [boxText, setBoxText] = useState('')
   const [claimModal, setClaimModal] = useState(false)
 
@@ -294,9 +294,8 @@ function FmDetail(props: {
 
   function submitBox() {
     const text = boxText.trim()
-    if (!text) { setError(box === 'query' ? 'Type the question for the cashier' : 'A reason is required'); return }
-    if (box === 'query') run(() => reviewApi.query(type, doc.id, text), `${docNo} queried — sent back to the cashier`)
-    else run(() => reviewApi.reject(type, doc.id, text), `${docNo} rejected`)
+    if (!text) { setError('Type the question for the cashier'); return }
+    run(() => reviewApi.query(type, doc.id, text), `${docNo} queried — sent back to the cashier`)
   }
 
   return (
@@ -350,8 +349,6 @@ function FmDetail(props: {
               <>
                 <button type="button" onClick={() => { setBox(box === 'query' ? null : 'query'); setBoxText(''); setError('') }}
                   style={{ ...ghostBtn, color: 'var(--amber)', minHeight: 36 }}>Query</button>
-                <button type="button" onClick={() => { setBox(box === 'reject' ? null : 'reject'); setBoxText(''); setError('') }}
-                  style={{ ...ghostBtn, color: 'var(--red)', minHeight: 36 }}>Reject</button>
                 <button type="button" onClick={() => run(() => reviewApi.approve(type, doc.id), `${docNo} approved`)}
                   disabled={busy} style={{ ...primaryBtn(busy), minHeight: 36 }}>Approve</button>
               </>

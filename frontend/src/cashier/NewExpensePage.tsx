@@ -34,8 +34,7 @@ function queryNote(history: DocumentHistoryEntry[]): string | null {
  */
 
 type LineRow = {
-  // lineNo tracks the saved server line this row was loaded from (undefined = new unsaved row).
-  lineNo?: number
+  lineNo: number | null // null = not yet saved to the server (a new row added on this page)
   transactionDate: string
   subCategoryId: number | ''
   amount: string
@@ -46,7 +45,7 @@ type LineRow = {
 }
 
 const freshLine = (): LineRow => ({
-  transactionDate: istToday(), subCategoryId: '', amount: '', expenseModeId: '', bankId: '', transactionRef: '', remark: '',
+  lineNo: null, transactionDate: istToday(), subCategoryId: '', amount: '', expenseModeId: '', bankId: '', transactionRef: '', remark: '',
 })
 
 function apiError(err: unknown, fallback: string) {
@@ -349,25 +348,30 @@ export default function NewExpensePage() {
     }
   }
 
+  /**
+   * Reconcile the on-screen rows against the server for an already-saved document — by
+   * lineNo, never by array position, so rows added or removed on this visit don't get
+   * silently dropped or matched to the wrong existing line.
+   */
   async function syncLines(docId: number) {
-    if (!loadedDoc?.lines) return
-    const originalByNo = new Map(loadedDoc.lines.map((l) => [l.lineNo, l]))
-    // 1) patch rows that map to a saved line and changed
+    if (!loadedDoc) return
+    const existingByLineNo = new Map(loadedDoc.lines.map((l) => [l.lineNo, l]))
+    const keptLineNos = new Set<number>()
+
     for (const current of lines) {
-      if (current.lineNo == null) continue
-      const existing = originalByNo.get(current.lineNo)
-      if (!existing) continue
-      if (
-        Number(current.amount) !== existing.amount ||
-        Number(current.subCategoryId) !== existing.subCategoryId ||
-        Number(current.expenseModeId) !== existing.expenseModeId ||
-        (current.bankId === '' ? null : Number(current.bankId)) !== existing.bankId ||
-        (current.transactionRef || null) !== existing.transactionRef ||
-        (current.remark || null) !== existing.remark ||
-        current.transactionDate !== existing.transactionDate
-      ) {
-        if (Number(current.amount) > 0 && current.subCategoryId !== '' && current.expenseModeId !== '') {
-          await expensesApi.updateLine(docId, existing.lineNo, {
+      if (current.lineNo != null) {
+        keptLineNos.add(current.lineNo)
+        const existing = existingByLineNo.get(current.lineNo)
+        if (existing && (
+          Number(current.amount) !== existing.amount ||
+          Number(current.subCategoryId) !== existing.subCategoryId ||
+          Number(current.expenseModeId) !== existing.expenseModeId ||
+          (current.bankId === '' ? null : Number(current.bankId)) !== existing.bankId ||
+          (current.transactionRef || null) !== existing.transactionRef ||
+          (current.remark || null) !== existing.remark ||
+          current.transactionDate !== existing.transactionDate
+        )) {
+          await expensesApi.updateLine(docId, current.lineNo, {
             transactionDate: current.transactionDate,
             subCategoryId: Number(current.subCategoryId),
             expenseModeId: Number(current.expenseModeId),
@@ -377,31 +381,22 @@ export default function NewExpensePage() {
             remark: current.remark || undefined,
           })
         }
+      } else if (Number(current.amount) > 0 && current.subCategoryId !== '' && current.expenseModeId !== '') {
+        // A row added on this visit — never sent to the server before.
+        await expensesApi.addLine(docId, {
+          transactionDate: current.transactionDate,
+          subCategoryId: Number(current.subCategoryId),
+          expenseModeId: Number(current.expenseModeId),
+          amount: Number(current.amount),
+          bankId: current.bankId === '' ? null : Number(current.bankId),
+          transactionRef: current.transactionRef || undefined,
+          remark: current.remark || undefined,
+        })
       }
     }
-    // 2) post brand-new rows (skip empty/incomplete ones, same filter as create)
-    for (const current of lines) {
-      if (current.lineNo != null) continue
-      if (!(Number(current.amount) > 0 && current.subCategoryId !== '' && current.expenseModeId !== '')) continue
-      await expensesApi.addLine(docId, {
-        transactionDate: current.transactionDate,
-        subCategoryId: Number(current.subCategoryId),
-        expenseModeId: Number(current.expenseModeId),
-        amount: Number(current.amount),
-        bankId: current.bankId === '' ? null : Number(current.bankId),
-        transactionRef: current.transactionRef || undefined,
-        remark: current.remark || undefined,
-      })
-    }
-    // 3) delete saved lines the user removed or cleared
-    const kept = new Set(
-      lines
-        .filter((l) => Number(l.amount) > 0 && l.subCategoryId !== '' && l.expenseModeId !== '')
-        .map((l) => l.lineNo)
-        .filter((n): n is number => n != null),
-    )
+
     for (const existing of loadedDoc.lines) {
-      if (!kept.has(existing.lineNo)) {
+      if (!keptLineNos.has(existing.lineNo)) {
         await expensesApi.deleteLine(docId, existing.lineNo)
       }
     }
