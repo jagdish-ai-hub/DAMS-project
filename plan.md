@@ -21,6 +21,22 @@
     `findByOrgIdAndJobCardIdAndSettledFalseAndWorkflowStatusNot(..., WorkflowStatus.REJECTED)`
     so that when a previous receipt document for a job card is `REJECTED`, creating a receipt
     opens a clean new draft instead of appending lines or resurrecting the terminal rejected document.
+  - **`BUG-04`**: Fixed FM "recently closed claims" queue in `ReviewService.recentlyClosedClaims`:
+    resolve the real receive-document id and `documentNo` for each closed claim (batch
+    `findByOrgIdAndJobCardIdInOrderByCreatedAtDesc`, latest doc per job card) instead of emitting
+    a synthetic `code-JC-<id>` ref and the job-card id as the item id.
+  - Frontend surgical fixes carried in with the responsive pass: draft submit vs save-draft split
+    on New Receipt / New Expense (`submitDraft` validates and posts, never double-creates a
+    document); loaded-line sync guard so editing a queried draft no longer clobbers unedited lines;
+    `frozen` prop respected on rejected docs in Cashier Home and on New Receipt; `GlobalSearch`
+    nested-modal Escape clash fixed and a clear button added.
+  - **Responsive overhaul** — every cashier / owner / accountant / FM / auth / shell screen made
+    mobile-usable: `AppShell` mobile nav drawer, fluid container padding, custom breakpoints and
+    purple tokens in `tailwind.config.ts`, touch-target sizing, horizontal table scroll wrappers,
+    master–detail responsive toggles on the review and FM queues, `HelpDrawer` mobile drill-down.
+    Styling only — no logic or API changes. See `docs/RESPONSIVE_OVERHAUL_PLAN.md`.
+  - `frontend/.dockerignore` no longer excludes `src/help/**/*.md`, so in-app help articles ship
+    in the frontend image.
   - Full test suite green (129 backend tests, frontend lint & build 0 errors).
 
 - **rev 20 (2026-09-03)** — Query-fan-out fixes after the owner reported 20–40s per entry
