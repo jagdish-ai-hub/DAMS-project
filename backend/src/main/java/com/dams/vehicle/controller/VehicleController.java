@@ -38,7 +38,8 @@ public class VehicleController {
     @PostMapping
     @Operation(summary = "Register a vehicle for a customer (deduped on the number)")
     public ResponseEntity<VehicleResponse> create(@Valid @RequestBody VehicleRequest request) {
-        VehicleResponse result = vehicleService.create(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(result);
+        VehicleService.CreateResult result = vehicleService.createOrGet(request);
+        return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK)
+            .body(result.response());
     }
 }

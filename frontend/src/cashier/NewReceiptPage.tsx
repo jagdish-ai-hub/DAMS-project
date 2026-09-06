@@ -114,6 +114,7 @@ export default function NewReceiptPage() {
 
   useEffect(() => {
     if (!editDocId) return
+    if (loadedDoc?.id === editDocId) return
     receiptsApi.get(editDocId)
       .then(({ data }) => {
         setLoadedDoc(data)
@@ -147,7 +148,7 @@ export default function NewReceiptPage() {
         )
       })
       .catch((e) => setError(apiError(e, 'Could not load this document.')))
-  }, [editDocId])
+  }, [editDocId, loadedDoc?.id])
 
   const totalReceived = useMemo(
     () => lines.reduce((a, l) => a + (Number(l.amount) || 0), 0),
@@ -178,7 +179,7 @@ export default function NewReceiptPage() {
     setLines((prev) => [...prev, freshLine(modes.find((m) => m.active)?.id ?? '')])
   }
   function removeLine(i: number) {
-    setLines((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev))
+    setLines((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : [freshLine('')]))
   }
 
   function buildLines() {
@@ -200,7 +201,9 @@ export default function NewReceiptPage() {
     if (categoryId === '' || businessStatusId === '') return 'Category and status are required'
     if (requireLine && buildLines().length === 0) return 'Add at least one settlement row with an amount'
     for (const l of lines) {
+      if (l.amount !== '' && !(Number(l.amount) > 0)) return 'Line amount must be greater than 0'
       if (Number(l.amount) > 0) {
+        if (l.settlementModeId === '') return 'Select a settlement mode for each payment row with an amount'
         const m = modeById(l.settlementModeId)
         if (m?.requiresBank && l.bankId === '') return `${m.name} needs a bank`
       }
@@ -235,7 +238,26 @@ export default function NewReceiptPage() {
     setError('')
     try {
       const { data } = await receiptsApi.create(buildBody(submit))
-      finish(submit, data)
+      if (submit) {
+        finish(true, data)
+      } else {
+        setLoadedDoc(data)
+        if (data.lines.length) {
+          setLines(
+            data.lines.map((l) => ({
+              lineNo: l.lineNo,
+              transactionDate: l.transactionDate,
+              settlementModeId: l.settlementModeId,
+              amount: String(l.amount),
+              bankId: l.bankId ?? '',
+              transactionRef: l.transactionRef ?? '',
+              remark: l.remark ?? '',
+            }))
+          )
+        }
+        setNotice(`Saved as draft ${data.documentNo ?? `#${data.id}`}. Add documents below, then Submit when ready.`)
+        navigate(`/app/new-receipt?editDoc=${data.id}`, { replace: true })
+      }
     } catch (e) {
       setError(apiError(e, 'Could not save the receipt.'))
     } finally {
@@ -260,6 +282,19 @@ export default function NewReceiptPage() {
     try {
       const { data } = await receiptsApi.create(buildBody(false))
       setLoadedDoc(data)
+      if (data.lines.length) {
+        setLines(
+          data.lines.map((l) => ({
+            lineNo: l.lineNo,
+            transactionDate: l.transactionDate,
+            settlementModeId: l.settlementModeId,
+            amount: String(l.amount),
+            bankId: l.bankId ?? '',
+            transactionRef: l.transactionRef ?? '',
+            remark: l.remark ?? '',
+          }))
+        )
+      }
       setNotice(`Saved as draft ${data.documentNo ?? `#${data.id}`}. Add documents below, then Submit when ready.`)
       navigate(`/app/new-receipt?editDoc=${data.id}`, { replace: true })
       return data.id
@@ -327,6 +362,8 @@ export default function NewReceiptPage() {
     await jobCardsApi.patch(loadedDoc.jobCardId, {
       invoiceNo: invoiceNo.trim(),
       invoiceAmount: invoiceAmount ? Number(invoiceAmount) : undefined,
+      clearInvoiceAmount: invoiceAmount ? false : true,
+      vehicleNo: vehicleNo.trim(),
       dbmId: dbmId.trim(),
       b2b,
       gstNo: b2b ? gstNo.trim() : '',
@@ -389,7 +426,22 @@ export default function NewReceiptPage() {
     try {
       await patchHeader()
       await syncLines(loadedDoc.id)
-      finish(false, loadedDoc)
+      const { data } = await receiptsApi.get(loadedDoc.id)
+      setLoadedDoc(data)
+      setLines(
+        data.lines.length
+          ? data.lines.map((l) => ({
+              lineNo: l.lineNo,
+              transactionDate: l.transactionDate,
+              settlementModeId: l.settlementModeId,
+              amount: String(l.amount),
+              bankId: l.bankId ?? '',
+              transactionRef: l.transactionRef ?? '',
+              remark: l.remark ?? '',
+            }))
+          : [freshLine('')],
+      )
+      setNotice(`Draft ${data.documentNo ?? `#${data.id}`} saved successfully. Continue editing, attach documents, or Submit when ready.`)
     } catch (e) {
       setError(apiError(e, 'Could not save draft.'))
     } finally {

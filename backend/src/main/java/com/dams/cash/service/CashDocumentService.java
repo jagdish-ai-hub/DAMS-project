@@ -162,17 +162,20 @@ public class CashDocumentService {
             throw DamsException.conflict("A cash movement can only be edited while it is a draft or"
                 + " queried (document " + describe(doc) + " is " + doc.getWorkflowStatus() + ")");
         }
+        cashDateLock.requireCashDateOpen(orgId, doc.getBranchId(), doc.getTransactionDate());
         if (request.getDirection() != null) {
             doc.setDirection(request.getDirection());
         }
-        if (request.getTransactionDate() != null) {
+        if (request.getTransactionDate() != null && !request.getTransactionDate().equals(doc.getTransactionDate())) {
             cashDateLock.requireCashDateOpen(orgId, doc.getBranchId(), request.getTransactionDate());
             doc.setTransactionDate(request.getTransactionDate());
         }
         if (request.getAmount() != null) {
             doc.setAmount(request.getAmount());
         }
-        if (request.getBankId() != null) {
+        if (request.isClearBank()) {
+            doc.setBankId(null);
+        } else if (request.getBankId() != null) {
             doc.setBankId(resolveBank(orgId, request.getBankId()));
         }
         if (request.getTransactionRef() != null) {

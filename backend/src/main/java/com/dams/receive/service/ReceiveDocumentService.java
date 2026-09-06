@@ -250,6 +250,10 @@ public class ReceiveDocumentService {
         if (doc.getWorkflowStatus() == WorkflowStatus.REJECTED) {
             throw DamsException.conflict("Document " + describe(doc) + " was rejected — add the payment to a new receipt");
         }
+        if (claimCloseRepo.existsByOrgIdAndJobCardId(orgId, jobCard.getId())) {
+            throw DamsException.conflict("Job card " + jobCard.getJobCardNo()
+                + " already has a closed claim — no new receipts or payments can be recorded against it");
+        }
 
         SettlementLine line = appendLines(orgId, doc, List.of(input), me.getId()).get(0);
         doc.setLastModifiedBy(me.getId());
@@ -309,6 +313,11 @@ public class ReceiveDocumentService {
         SettlementLine line = settlementLineRepo
             .findByOrgIdAndReceiveDocumentIdAndLineNo(orgId, documentId, lineNo)
             .orElseThrow(() -> DamsException.notFound("Settlement line", "lineNo", lineNo));
+
+        // Editing a cash-mode line on an already-closed cash day would rewrite its drawer — refuse.
+        SettlementMode existingMode = settlementModeRepo.findByIdAndOrgId(line.getSettlementModeId(), orgId).orElse(null);
+        cashDateLock.requireCashLineDateOpen(orgId, doc.getBranchId(), line.getTransactionDate(),
+            existingMode != null && existingMode.isCash(), "settlement");
 
         applyLineInput(orgId, doc.getBranchId(), line, input);
         settlementLineRepo.save(line);

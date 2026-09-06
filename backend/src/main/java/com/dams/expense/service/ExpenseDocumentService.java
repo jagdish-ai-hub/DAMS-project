@@ -316,6 +316,12 @@ public class ExpenseDocumentService {
 
         ExpenseLine line = expenseLineRepo.findByOrgIdAndExpenseDocumentIdAndLineNo(orgId, documentId, lineNo)
             .orElseThrow(() -> DamsException.notFound("Expense line", "lineNo", lineNo));
+
+        // Editing a cash-mode line on an already-closed cash day would rewrite its drawer — refuse.
+        ExpenseMode existingMode = expenseModeRepo.findByIdAndOrgId(line.getExpenseModeId(), orgId).orElse(null);
+        cashDateLock.requireCashLineDateOpen(orgId, doc.getBranchId(), line.getTransactionDate(),
+            existingMode != null && existingMode.isCash(), "expense");
+
         applyLineInput(orgId, doc.getBranchId(), line, input, doc.getExpenseCategoryId());
         expenseLineRepo.save(line);
         doc.setLastModifiedBy(me.getId());

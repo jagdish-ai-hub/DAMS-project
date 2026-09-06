@@ -126,7 +126,13 @@ export default function CashPage() {
                 − Cash Out
               </button>
               <span style={{ flex: 1 }} />
-              <button type="button" onClick={() => setCloseModal(true)} style={{ ...primaryBtn(), minHeight: 38 }}>
+              <button
+                type="button"
+                onClick={() => setCloseModal(true)}
+                disabled={!drawer.openingSet}
+                title={!drawer.openingSet ? 'Opening balance must be set by an Accountant before closing the day' : undefined}
+                style={{ ...primaryBtn(!drawer.openingSet), minHeight: 38 }}
+              >
                 Close Day
               </button>
             </div>
@@ -318,8 +324,9 @@ function MovementModal(props: {
       transactionDate,
       amount: Number(amount),
       bankId: bankId === '' ? null : Number(bankId),
-      transactionRef: transactionRef.trim() || undefined,
-      remark: remark.trim() || undefined,
+      clearBank: edit ? bankId === '' : undefined,
+      transactionRef: transactionRef.trim(),
+      remark: remark.trim(),
     }
   }
 
@@ -354,6 +361,19 @@ function MovementModal(props: {
       title={edit ? `Edit ${edit.documentNo ?? 'draft movement'}` : direction === 'IN' ? 'Cash In from bank' : 'Cash Out to bank'}
       subtitle={edit ? undefined : 'internal money movement — no customer or job card'}
       onClose={props.onClose}
+      footer={
+        <>
+          <button type="button" onClick={props.onClose} style={ghostBtn} disabled={busy}>Cancel</button>
+          {queried ? (
+            <button type="button" onClick={() => save(true)} style={primaryBtn(busy)} disabled={busy}>Save & Resubmit</button>
+          ) : (
+            <>
+              <button type="button" onClick={() => save(false)} style={ghostBtn} disabled={busy}>Save Draft</button>
+              <button type="button" onClick={() => save(true)} style={primaryBtn(busy)} disabled={busy}>Submit</button>
+            </>
+          )}
+        </>
+      }
     >
       <ErrorBanner message={error} />
 
@@ -394,18 +414,6 @@ function MovementModal(props: {
       <label style={fieldLabel}>Remark
         <input value={remark} onChange={(e) => setRemark(e.target.value)} style={inputStyle} />
       </label>
-
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 4 }}>
-        <button type="button" onClick={props.onClose} style={ghostBtn} disabled={busy}>Cancel</button>
-        {queried ? (
-          <button type="button" onClick={() => save(true)} style={primaryBtn(busy)} disabled={busy}>Save & Resubmit</button>
-        ) : (
-          <>
-            <button type="button" onClick={() => save(false)} style={ghostBtn} disabled={busy}>Save Draft</button>
-            <button type="button" onClick={() => save(true)} style={primaryBtn(busy)} disabled={busy}>Submit</button>
-          </>
-        )}
-      </div>
     </Modal>
   )
 }
@@ -423,6 +431,7 @@ function CloseDayModal(props: { drawer: CashDrawer; onClose: () => void; onDone:
   const needRemark = variance !== 0
 
   async function confirm() {
+    if (!props.drawer.openingSet) { setError('Cannot close the day: the branch opening balance must be set by an Accountant first'); return }
     if (counted === '' || Number(counted) < 0) { setError('Enter the counted cash amount'); return }
     if (needRemark && !remark.trim()) { setError('A variance remark is required when the counted amount differs'); return }
     setBusy(true)
@@ -438,7 +447,17 @@ function CloseDayModal(props: { drawer: CashDrawer; onClose: () => void; onDone:
   }
 
   return (
-    <Modal title="Close the day" subtitle={`${props.drawer.branchName ?? ''} · ${fmtDate(props.drawer.date)}`} onClose={props.onClose}>
+    <Modal
+      title="Close the day"
+      subtitle={`${props.drawer.branchName ?? ''} · ${fmtDate(props.drawer.date)}`}
+      onClose={props.onClose}
+      footer={
+        <>
+          <button type="button" onClick={props.onClose} style={ghostBtn} disabled={busy}>Cancel</button>
+          <button type="button" onClick={confirm} style={primaryBtn(busy)} disabled={busy}>Close Day</button>
+        </>
+      }
+    >
       <ErrorBanner message={error} />
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem', padding: '4px 0' }}>
         <span style={{ color: 'var(--muted)' }}>Computed position</span>
@@ -460,10 +479,6 @@ function CloseDayModal(props: { drawer: CashDrawer; onClose: () => void; onDone:
       </label>
       <div style={{ fontSize: '0.74rem', color: 'var(--faint)' }}>
         Closing locks {fmtDate(props.drawer.date)} — no new or backdated cash entries for this branch after this.
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 4 }}>
-        <button type="button" onClick={props.onClose} style={ghostBtn} disabled={busy}>Cancel</button>
-        <button type="button" onClick={confirm} style={primaryBtn(busy)} disabled={busy}>Close Day</button>
       </div>
     </Modal>
   )

@@ -38,4 +38,10 @@ public class JobCardPatchRequest {
     private Long categoryId;
 
     private Long businessStatusId;
+
+    @Size(max = 20, message = "Vehicle number must be at most 20 characters")
+    private String vehicleNo;
+
+    /** If true, clears the invoice amount on the job card (sets it to null). */
+    private Boolean clearInvoiceAmount;
 }

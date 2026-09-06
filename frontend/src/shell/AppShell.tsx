@@ -91,6 +91,7 @@ export default function AppShell() {
   return (
     <div className="dams-app" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
       <header style={{
+        position: 'sticky', top: 0, zIndex: 40,
         background: 'var(--navy)', color: '#fff', padding: '0 clamp(10px, 2.5vw, 20px)',
         display: 'flex', alignItems: 'center', gap: 'clamp(10px, 2vw, 22px)', height: 52,
       }}>

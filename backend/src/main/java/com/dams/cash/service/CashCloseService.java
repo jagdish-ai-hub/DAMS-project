@@ -109,10 +109,11 @@ public class CashCloseService {
         Long orgId = TenantContext.requireOrgId();
         AppUser me = guard.requireAccountantForBranch(orgId, request.getBranchId());
 
-        if (branchCashOpeningRepo.existsByOrgIdAndBranchId(orgId, request.getBranchId())) {
+        if (branchCashOpeningRepo.existsByOrgIdAndBranchId(orgId, request.getBranchId())
+            || cashDayCloseRepo.existsByOrgIdAndBranchId(orgId, request.getBranchId())) {
             throw DamsException.conflict("Branch "
                 + branchRepo.findByIdAndOrgId(request.getBranchId(), orgId).map(Branch::getCode).orElse("?")
-                + " already has an opening cash balance — every day after that is the previous day's counted close");
+                + " already has an opening cash balance or recorded closes — the opening balance cannot be set after day closes have started");
         }
         BranchCashOpening opening = new BranchCashOpening();
         opening.setOrgId(orgId);
@@ -150,6 +151,10 @@ public class CashCloseService {
         });
 
         DrawerService.DrawerPosition p = drawerService.position(orgId, branchId, closeDate);
+        if (!p.openingSet()) {
+            throw DamsException.conflict("Cannot close cash for " + closeDate
+                + " — the opening balance for this branch has not been set yet. Ask an Accountant to configure it.");
+        }
         BigDecimal computed = p.computedPosition();
         BigDecimal counted = request.getCountedAmount();
         BigDecimal variance = counted.subtract(computed);

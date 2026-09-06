@@ -26,6 +26,11 @@ public class CashDocumentPatchRequest {
     private BigDecimal amount;
 
     private Long bankId;
+    private Boolean clearBank;
+
+    public boolean isClearBank() {
+        return Boolean.TRUE.equals(clearBank);
+    }
 
     @Size(max = 80, message = "Transaction reference must be at most 80 characters")
     private String transactionRef;

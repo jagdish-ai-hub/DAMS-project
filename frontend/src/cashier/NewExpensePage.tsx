@@ -151,6 +151,7 @@ export default function NewExpensePage() {
   // edit / fix-and-resubmit load
   useEffect(() => {
     if (!editDocId) return
+    if (loadedDoc?.id === editDocId) return
     expensesApi.get(editDocId)
       .then(({ data }) => {
         setLoadedDoc(data)
@@ -184,7 +185,7 @@ export default function NewExpensePage() {
         )
       })
       .catch((e) => setError(apiError(e, 'Could not load this document.')))
-  }, [editDocId])
+  }, [editDocId, loadedDoc?.id])
 
   const total = useMemo(() => lines.reduce((a, l) => a + (Number(l.amount) || 0), 0), [lines])
 
@@ -222,7 +223,7 @@ export default function NewExpensePage() {
     setLines((prev) => [...prev, { ...freshLine(), subCategoryId: subCats[0]?.id ?? '', expenseModeId: modes.find((m) => m.active)?.id ?? '' }])
   }
   function removeLine(i: number) {
-    setLines((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev))
+    setLines((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : [freshLine()]))
   }
 
   function buildLines() {
@@ -244,7 +245,10 @@ export default function NewExpensePage() {
     if (expenseCategoryId === '' || businessStatusId === '') return 'Category and status are required'
     if (requireLine && buildLines().length === 0) return 'Add at least one expense row with an amount'
     for (const l of lines) {
+      if (l.amount !== '' && !(Number(l.amount) > 0)) return 'Line amount must be greater than 0'
       if (Number(l.amount) > 0) {
+        if (l.subCategoryId === '') return 'Select a sub-category for each expense row with an amount'
+        if (l.expenseModeId === '') return 'Select a payment mode for each expense row with an amount'
         const m = modeById(l.expenseModeId)
         if (m?.requiresBank && l.bankId === '') return `${m.name} needs a bank`
         if (m?.requiresRef && !l.transactionRef.trim()) return `${m.name} needs a transaction reference`
@@ -274,7 +278,27 @@ export default function NewExpensePage() {
     setError('')
     try {
       const { data } = await expensesApi.create(buildBody(submit))
-      finish(submit, data)
+      if (submit) {
+        finish(true, data)
+      } else {
+        setLoadedDoc(data)
+        if (data.lines.length) {
+          setLines(
+            data.lines.map((l) => ({
+              lineNo: l.lineNo,
+              transactionDate: l.transactionDate,
+              subCategoryId: l.subCategoryId,
+              amount: String(l.amount),
+              expenseModeId: l.expenseModeId,
+              bankId: l.bankId ?? '',
+              transactionRef: l.transactionRef ?? '',
+              remark: l.remark ?? '',
+            }))
+          )
+        }
+        setNotice(`Saved as draft ${data.documentNo ?? `#${data.id}`}. Add documents below, then Submit when ready.`)
+        navigate(`/app/new-expense?editDoc=${data.id}`, { replace: true })
+      }
     } catch (e) {
       setError(apiError(e, 'Could not save the expense.'))
     } finally {
@@ -299,6 +323,20 @@ export default function NewExpensePage() {
     try {
       const { data } = await expensesApi.create(buildBody(false))
       setLoadedDoc(data)
+      if (data.lines.length) {
+        setLines(
+          data.lines.map((l) => ({
+            lineNo: l.lineNo,
+            transactionDate: l.transactionDate,
+            subCategoryId: l.subCategoryId,
+            amount: String(l.amount),
+            expenseModeId: l.expenseModeId,
+            bankId: l.bankId ?? '',
+            transactionRef: l.transactionRef ?? '',
+            remark: l.remark ?? '',
+          }))
+        )
+      }
       setNotice(`Saved as draft ${data.documentNo ?? `#${data.id}`}. Add documents below, then Submit when ready.`)
       navigate(`/app/new-expense?editDoc=${data.id}`, { replace: true })
       return data.id
@@ -428,7 +466,23 @@ export default function NewExpensePage() {
     try {
       await patchHeader()
       await syncLines(loadedDoc.id)
-      finish(false, loadedDoc)
+      const { data } = await expensesApi.get(loadedDoc.id)
+      setLoadedDoc(data)
+      setLines(
+        data.lines.length
+          ? data.lines.map((l) => ({
+              lineNo: l.lineNo,
+              transactionDate: l.transactionDate,
+              subCategoryId: l.subCategoryId,
+              expenseModeId: l.expenseModeId,
+              amount: String(l.amount),
+              bankId: l.bankId ?? '',
+              transactionRef: l.transactionRef ?? '',
+              remark: l.remark ?? '',
+            }))
+          : [freshLine()],
+      )
+      setNotice(`Draft ${data.documentNo ?? `#${data.id}`} saved successfully. Continue editing, attach documents, or Submit when ready.`)
     } catch (e) {
       setError(apiError(e, 'Could not save draft.'))
     } finally {

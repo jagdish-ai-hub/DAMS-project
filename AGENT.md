@@ -353,3 +353,91 @@ Markdown), never stored in the database.
   first login. This is the path for every real organization. The one
   exception is the seeded dummy dealership used for testing (see "Local
   development & testing") — a production seed profile will not create it.
+
+Where this lives in this repo (verified):
+- Email: `com.dams.email.EmailService` + `LoggingEmailService`
+  (logs invite links when SMTP is not configured); invite link built from
+  `dams.app.base-url` (`APP_BASE_URL`, default `http://localhost:5173`);
+  accept route `POST /api/v1/auth/accept-invite` + frontend
+  `/accept-invite` page.
+- Admin: `GET|POST /api/v1/admin/organizations`,
+  `GET|PATCH|DELETE /api/v1/admin/organizations/{id}`
+  (`AdminOrgController`, SUPER_ADMIN-only; delete removes the org and all
+  its data). Users: `GET|POST /api/v1/users`, `GET|PATCH /api/v1/users/{id}`
+  (`UserController`, Owner writes — invite path for real orgs).
+  Frontend: `superadmin/OrganizationsPage.tsx`,
+  `owner/TeamAndBranchesPage.tsx`.
+- Prod deploy: `compose.prod.yml` + `docs/deployment-guide.md` + `deploy/`
+  scripts; images from GHCR as built by `ci.yml`.
+
+---
+
+## Backend API map (verified — keep this table current when routes change)
+
+All paths prefixed `/api/v1`. Auth: Bearer JWT (`JwtConfig`); public only:
+`/auth/login`, `/auth/accept-invite`, `/attachments/raw` (sig+exp ARE the
+auth, like an S3 presigned URL), `/swagger-ui.html`, `/swagger-ui/**`,
+`/api-docs/**`, `/actuator/health` — see `SecurityConfig#filterChain`.
+
+| Area | Controller | Routes |
+|---|---|---|
+| Auth | `auth/controller/AuthController` | `POST /auth/login`, `POST /auth/accept-invite`, `POST /auth/change-password` |
+| Admin (cross-org exception) | `admin/controller/AdminOrgController` | `GET|POST /admin/organizations`, `GET|PATCH|DELETE /admin/organizations/{id}` |
+| Branches | `branch/controller/BranchController` | `GET /branches`, `GET /branches/{id}`, `POST /branches`, `PATCH /branches/{id}` |
+| Users | `user/controller/UserController` | `GET /users`, `GET /users/{id}`, `POST /users`, `PATCH /users/{id}` |
+| Org settings | `organization/controller/OrgSettingsController` | `GET /organization`, `PATCH /organization` |
+| Masters | `masters/controller/MastersController` | `GET /masters/{type}`, `GET /masters/{type}/{id}`, `POST /masters/{type}` (Owner), `PATCH /masters/{type}/{id}` (Owner) |
+| Receivers | `receiver/controller/ReceiverController` | `GET /receivers`, `GET /receivers/{id}`, `POST /receivers`, `PATCH /receivers/{id}` |
+| Customers | `customer/controller/CustomerController` | `GET /customers`, `GET /customers/{id}`, `GET /customers/{id}/history`, `POST /customers`, `PATCH /customers/{id}` |
+| Vehicles | `vehicle/controller/VehicleController` | `GET /vehicles`, `POST /vehicles` (lookup + deduped create; number normalised) |
+| Job cards | `jobcard/controller/JobCardController` | `POST /job-cards` (existing or inline customer/vehicle create), `GET /job-cards/{id}` (derived `{branchCode}-JC-{id}` ref), `PATCH /job-cards/{id}` (invoiceNo, invoiceAmount/clear, vehicleNo, dbmId, b2b, gstNo, categoryId, businessStatusId), `POST /job-cards/{id}/close-claim` (FM) |
+| Receipts | `receive/controller/ReceiveDocumentController` | `POST /receipts`, `GET /receipts/{id}`, `POST /receipts/{id}/submit`, `POST /receipts/{id}/resubmit`, `POST /receipts/{id}/lines`, `PATCH /receipts/{id}/lines/{lineNo}`, `DELETE /receipts/{id}/lines/{lineNo}`, `POST|GET /receipts/{id}/attachments`, `POST|GET /receipts/{id}/lines/{lineNo}/attachments` |
+| Expenses | `expense/controller/ExpenseDocumentController` | `POST /expenses`, `GET /expenses/{id}`, `PATCH /expenses/{id}`, `POST /expenses/{id}/submit`, `POST /expenses/{id}/resubmit`, `POST /expenses/{id}/transfer-to-claim`, `POST /expenses/{id}/lines`, `PATCH /expenses/{id}/lines/{lineNo}`, `DELETE /expenses/{id}/lines/{lineNo}`, `POST|GET /expenses/{id}/attachments`, `POST|GET /expenses/{id}/lines/{lineNo}/attachments` |
+| Cash docs | `cash/controller/CashDocumentController` | `POST /cash-documents`, `GET /cash-documents`, `GET /cash-documents/{id}`, `PATCH /cash-documents/{id}`, `POST /cash-documents/{id}/submit`, `POST /cash-documents/{id}/resubmit`, `DELETE /cash-documents/{id}` |
+| Cash day | `cash/controller/CashController` | `GET /cash/drawer`, `POST /cash/opening`, `POST|GET /cash/close-day` |
+| Review | `review/controller/ReviewController` | `GET /review/receipts|expenses|cash`, `GET /review/fm/receipts|expenses|cash`, `POST /receipts/{id}/verify|query|reject`, `POST /receipts/{id}/lines/{lineNo}/override`, `POST /receipts/{id}/approve`, `POST /expenses/{id}/verify|query|reject`, `POST /expenses/{id}/lines/{lineNo}/override`, `POST /expenses/{id}/close`, `POST /expenses/{id}/approve`, `POST /cash-documents/{id}/verify|approve|query|reject` |
+| Search | `search/controller/SearchController` | `GET /search?q=` |
+| My Entries | `myentries/controller/MyEntriesController` | `GET /my-entries` |
+| Dashboard | `dashboard/controller/DashboardController` | `GET /dashboard/summary`, `GET /dashboard/outstanding`, `GET /dashboard/activity` |
+| Override audit | `audit/controller/OverrideAuditController` | `GET /override-audit` (Owner+FM, filterable user/branch/date) |
+| Attachments | `attachment/controller/AttachmentController` | `GET /attachments/{id}`, `DELETE /attachments/{id}`, `GET /attachments/raw` (public w/ signature) |
+
+Docs for every row above come from annotations (`@Operation`/`@Tag`), not a
+hand-maintained file — check Swagger UI when in doubt.
+
+## Reverification smoke checklist (fixed click-path per role — use for step 3)
+
+- **Cashier** (`cashier@jjmotors.demo`): login → Home universal search finds a
+  seeded customer → history card → Add Payment appends a line to the existing
+  open Receive doc (no second doc) → New Receipt / New Expense create →
+  Cash page drawer position matches `Opening + cash receipts + Cash In −
+  cash expenses − Cash Out` → Close Cash with counted amount (variance +
+  mandatory remark when ≠ 0 locks the date) → My Entries shows today+recent
+  with queried items highlighted → queried item opens in edit mode →
+  Resubmit returns it to SUBMITTED.
+- **Accountant** (`accountant@jjmotors.demo`): Review Queue lists SUBMITTED
+  docs in OOB+OOR only → verify moves receipt to FM approval (receipt does
+  NOT close) → override writes trail row (provisional) → query/reject with
+  reason → close an Expense explicitly → set a branch's first-ever opening.
+- **Finance Manager** (`finance@jjmotors.demo`): FM queues (receipts incl.
+  open/recently-closed claims, expenses, cash) → approve → close a
+  Warranty/AMC/CG claim with final override → record shows
+  "Overridden · Final" → Override Audit lists who/when/original→new/reason/doc-line.
+- **Owner** (`owner@jjmotors.demo`): Dashboard KPIs never include Cash In/Out
+  → branch comparison drill-downs → Team & Branches (add branch/user,
+  role-conditional branch assignment; multi-branch cashier toggle default
+  OFF) → Masters CRUD deactivates, never deletes → Override Audit visible.
+- **Super Admin** (`dams@jjsoftware.com`): Organizations list → onboard org +
+  first Owner via email invite (not temp password) → invite link
+  (`/accept-invite`) sets password → no transactional data visible by default.
+- **Guards on every pass:** JWT role/`org_id` drives every view (no toggle,
+  `/login` the only public screen); `org_id` filtering intact
+  (`CrossOrgIsolationTest` green); maker-checker holds (cannot
+  verify/approve own create/last-modify); IDs gap-free/sequential/never
+  reused; no applied migration edited; `git diff` contains only the task.
+
+## Filename note
+
+The repo file is `AGENT.md`. Claude Code and Cursor look for `AGENTS.md` by
+default — if an agent seems to ignore these rules, check that filename
+mapping first before assuming the rules were read.
