@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { receiptsApi, type Attachment } from '../api/receipts'
-import { Modal, ErrorBanner, ghostBtn, dangerBtn, SkeletonRows } from '../shell/ui'
+import { Modal, ErrorBanner, ghostBtn, dangerBtn, SkeletonRows, Spinner } from '../shell/ui'
 
 /**
  * "View Receipts" (AGENT.md: a button that opens on click — not inline thumbnails).
@@ -81,6 +81,7 @@ export default function ViewReceiptsModal(props: {
             <div key={a.id} style={{
               display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px',
               border: '1px solid var(--line)', borderRadius: 8, fontSize: '0.84rem',
+              flexWrap: 'wrap',
             }}>
               <span style={{
                 width: 30, height: 30, borderRadius: 7, background: 'var(--red-bg)', color: 'var(--red)',
@@ -88,14 +89,18 @@ export default function ViewReceiptsModal(props: {
               }}>
                 {a.contentType.includes('pdf') ? 'PDF' : 'IMG'}
               </span>
-              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span style={{ flex: '1 1 140px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {a.filename}
                 <span style={{ color: 'var(--faint)', marginLeft: 6 }}>{Math.round(a.sizeBytes / 1024) || 1} KB</span>
               </span>
-              <button type="button" onClick={() => open(a.id)} style={ghostBtn}>View</button>
-              {!a.frozen && !props.frozen && (
-                <button type="button" onClick={() => remove(a.id)} style={dangerBtn} disabled={busy}>Delete</button>
-              )}
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 'auto' }}>
+                <button type="button" onClick={() => open(a.id)} style={{ ...ghostBtn, minHeight: 36 }} aria-label={`View attachment ${a.filename}`}>View</button>
+                {!a.frozen && !props.frozen && (
+                  <button type="button" onClick={() => remove(a.id)} style={{ ...dangerBtn, minHeight: 36 }} disabled={busy} aria-label={`Delete attachment ${a.filename}`}>
+                    {busy ? '…' : 'Delete'}
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -107,10 +112,11 @@ export default function ViewReceiptsModal(props: {
         </p>
       ) : (
         <label style={{
-          border: '1.5px dashed var(--line)', borderRadius: 8, padding: '9px 12px', fontSize: '0.82rem',
-          color: 'var(--navy2)', fontWeight: 600, cursor: busy ? 'wait' : 'pointer', display: 'block',
+          border: '1.5px dashed var(--line)', borderRadius: 8, padding: '10px 14px', fontSize: '0.82rem',
+          color: 'var(--navy2)', fontWeight: 600, cursor: busy ? 'wait' : 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 44,
         }}>
-          📎 Attach receipt (PDF or image)
+          {busy ? <><Spinner /> Uploading receipt…</> : '📎 Attach receipt (PDF or image)'}
           <input
             type="file"
             accept=".pdf,image/*"

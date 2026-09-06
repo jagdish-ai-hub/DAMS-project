@@ -64,10 +64,24 @@ export default function GlobalSearch() {
         aria-label="Search customers and transactions"
         style={{
           width: '100%', border: '1.5px solid var(--line)', borderRadius: 9,
-          padding: '8px 11px 8px 32px', fontSize: '0.84rem',
+          padding: '8px 28px 8px 32px', fontSize: '0.84rem',
           background: 'var(--surface)', outline: 'none', boxShadow: 'var(--shadow)',
         }}
       />
+      {q && (
+        <button
+          type="button"
+          onClick={() => { setQ(''); setHits(null) }}
+          aria-label="Clear search"
+          style={{
+            position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+            background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer',
+            fontSize: '0.85rem', padding: '4px 6px', lineHeight: 1,
+          }}
+        >
+          ✕
+        </button>
+      )}
 
       {error && <ErrorBanner message={error} />}
 
@@ -154,110 +168,104 @@ function CustomerDrawer({ customerId, onClose }: { customerId: number; onClose: 
   }, [customerId])
 
   return (
-    <Modal
-      title={data?.customerName ?? 'Customer'}
-      subtitle={data ? `${data.jobCardCount} job card${data.jobCardCount === 1 ? '' : 's'} · view only` : undefined}
-      onClose={onClose}
-      maxWidth={720}
-    >
-      <ErrorBanner message={error} />
-      {data == null && !error && <SkeletonRows rows={4} />}
+    <>
+      <Modal
+        title={data?.customerName ?? 'Customer'}
+        subtitle={data ? `${data.jobCardCount} job card${data.jobCardCount === 1 ? '' : 's'} · view only` : undefined}
+        onClose={onClose}
+        maxWidth={720}
+      >
+        <ErrorBanner message={error} />
+        {data == null && !error && <SkeletonRows rows={4} />}
 
-      {data && (
-        <>
-          <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
-            {data.vehicles.map((v) => v.vehicleNo).join(', ') || 'No vehicle on file'}
-            {data.phone && ` · ${data.phone}`}
-          </div>
+        {data && (
+          <>
+            <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+              {data.vehicles.map((v) => v.vehicleNo).join(', ') || 'No vehicle on file'}
+              {data.phone && ` · ${data.phone}`}
+            </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-            <Stat label="Job Cards" value={String(data.jobCardCount)} />
-            <Stat label="Invoiced" value={inr(data.totalInvoiced)} />
-            <Stat label="Received" value={inr(data.totalReceived)} tone="green" />
-            <Stat label="Outstanding" value={inr(data.totalOutstanding)} tone={data.totalOutstanding > 0 ? 'amber' : undefined} />
-          </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
+              <Stat label="Job Cards" value={String(data.jobCardCount)} />
+              <Stat label="Invoiced" value={inr(data.totalInvoiced)} />
+              <Stat label="Received" value={inr(data.totalReceived)} tone="green" />
+              <Stat label="Outstanding" value={inr(data.totalOutstanding)} tone={data.totalOutstanding > 0 ? 'amber' : undefined} />
+            </div>
 
-          <div>
-            <h4 style={sectionH}>Job cards</h4>
-            {data.jobCards.length === 0 && <p style={mutedLine}>No job cards.</p>}
-            {data.jobCards.map((j) => (
-              <div key={j.id} style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0',
-                borderTop: '1px solid var(--line)', flexWrap: 'wrap',
-              }}>
-                <div style={{ minWidth: 150, flex: 1 }}>
-                  <div style={{ fontFamily: 'Consolas, monospace', fontSize: '0.75rem', color: 'var(--navy2)', fontWeight: 700 }}>
-                    {j.reference}
-                  </div>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>
-                    {j.categoryName ?? '—'}
-                    {j.isClaim && (
-                      <span style={{
-                        fontSize: '0.64rem', fontWeight: 700, color: 'var(--amber)', background: 'var(--amber-bg)',
-                        borderRadius: 999, padding: '1px 7px', marginLeft: 6,
-                      }}>
-                        Claim
+            <div>
+              <h4 style={sectionH}>Job cards</h4>
+              {data.jobCards.length === 0 && <p style={mutedLine}>No job cards on file.</p>}
+              {data.jobCards.map((j) => (
+                <div key={j.id} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap',
+                  gap: 10, padding: '8px 0', borderTop: '1px solid var(--line)', fontSize: '0.82rem',
+                }}>
+                  <div>
+                    <span style={{ fontWeight: 700, color: 'var(--navy)' }}>{j.reference}</span>
+                    <span style={{ color: 'var(--muted)', marginLeft: 8 }}>
+                      {j.categoryName}{j.businessStatusName ? ` · ${j.businessStatusName}` : ''}
+                    </span>
+                    {j.invoiceNo && (
+                      <span style={{ color: 'var(--faint)', marginLeft: 8, fontSize: '0.74rem' }}>
+                        Inv #{j.invoiceNo}
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--faint)' }}>
-                    {j.branchCode && `${j.branchCode} · `}{j.businessStatusName ?? ''}
-                    {j.invoiceNo && ` · Inv ${j.invoiceNo}`}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: '0.78rem' }}>
+                      <div style={{ color: 'var(--green)' }}>Rcvd {inr(j.received)}</div>
+                      <div style={{ color: j.balance > 0 ? 'var(--amber)' : 'var(--faint)' }}>
+                        Bal {j.invoiceAmount != null ? inr(j.balance) : '—'}
+                      </div>
+                    </div>
+                    {j.workflowStatus && (
+                      <span style={{
+                        fontSize: '0.66rem', fontWeight: 700, padding: '2px 8px', borderRadius: 999,
+                        background: 'var(--blue-bg)', color: 'var(--blue)',
+                      }}>
+                        {j.workflowStatus}
+                      </span>
+                    )}
+                    {j.receiveDocumentId != null && (
+                      <button
+                        type="button"
+                        onClick={() => setDocs({
+                          receiptId: j.receiveDocumentId!,
+                          subtitle: `${j.reference} · whole receipt`,
+                          frozen: j.receiveDocumentSettled || j.workflowStatus === 'REJECTED',
+                        })}
+                        style={{ ...ghostBtn, fontSize: '0.72rem' }}
+                      >
+                        View documents
+                      </button>
+                    )}
                   </div>
                 </div>
-                <div style={{ textAlign: 'right', fontSize: '0.76rem', fontVariantNumeric: 'tabular-nums' }}>
-                  <div>Inv {j.invoiceAmount != null ? inr(j.invoiceAmount) : '—'}</div>
-                  <div style={{ color: 'var(--green)' }}>Rcvd {inr(j.received)}</div>
-                  <div style={{ color: j.balance > 0 ? 'var(--amber)' : 'var(--faint)' }}>
-                    Bal {j.invoiceAmount != null ? inr(j.balance) : '—'}
-                  </div>
-                </div>
-                {j.workflowStatus && (
-                  <span style={{
-                    fontSize: '0.66rem', fontWeight: 700, padding: '2px 8px', borderRadius: 999,
-                    background: 'var(--blue-bg)', color: 'var(--blue)',
-                  }}>
-                    {j.workflowStatus}
-                  </span>
-                )}
-                {j.receiveDocumentId != null && (
-                  <button
-                    type="button"
-                    onClick={() => setDocs({
-                      receiptId: j.receiveDocumentId!,
-                      subtitle: `${j.reference} · whole receipt`,
-                      frozen: j.receiveDocumentSettled,
-                    })}
-                    style={{ ...ghostBtn, fontSize: '0.72rem' }}
-                  >
-                    View documents
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
 
-          <div>
-            <h4 style={sectionH}>Payment timeline</h4>
-            {data.timeline.length === 0 && <p style={mutedLine}>No payments recorded.</p>}
-            {data.timeline.map((t) => (
-              <div key={t.lineId} style={{
-                display: 'flex', gap: 10, padding: '7px 0', borderTop: '1px dashed var(--line)', fontSize: '0.8rem',
-              }}>
-                <span style={{ width: 84, color: 'var(--faint)', fontSize: '0.74rem', flexShrink: 0 }}>
-                  {fmtDateShort(t.date)}
-                </span>
-                <span style={{ flex: 1, color: 'var(--muted)' }}>
-                  {t.description}{t.mode ? ` · ${t.mode}` : ''}
-                </span>
-                <span style={{ fontWeight: 700, color: 'var(--green)', fontVariantNumeric: 'tabular-nums' }}>
-                  {inr(t.amount)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
+            <div>
+              <h4 style={sectionH}>Payment timeline</h4>
+              {data.timeline.length === 0 && <p style={mutedLine}>No payments recorded.</p>}
+              {data.timeline.map((t) => (
+                <div key={t.lineId} style={{
+                  display: 'flex', gap: 10, padding: '7px 0', borderTop: '1px dashed var(--line)', fontSize: '0.8rem',
+                }}>
+                  <span style={{ width: 84, color: 'var(--faint)', fontSize: '0.74rem', flexShrink: 0 }}>
+                    {fmtDateShort(t.date)}
+                  </span>
+                  <span style={{ flex: 1, color: 'var(--muted)' }}>
+                    {t.description}{t.mode ? ` · ${t.mode}` : ''}
+                  </span>
+                  <span style={{ fontWeight: 700, color: 'var(--green)', fontVariantNumeric: 'tabular-nums' }}>
+                    {inr(t.amount)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </Modal>
 
       {docs && (
         <ViewReceiptsModal
@@ -267,7 +275,7 @@ function CustomerDrawer({ customerId, onClose }: { customerId: number; onClose: 
           onClose={() => setDocs(null)}
         />
       )}
-    </Modal>
+    </>
   )
 }
 

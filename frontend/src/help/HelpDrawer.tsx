@@ -18,6 +18,8 @@ export default function HelpDrawer({ role, open, onClose, initialSlug }: {
   const [slug, setSlug] = useState(initialSlug ?? entries[0]?.slug ?? '')
   const [query, setQuery] = useState('')
 
+  const [mobileView, setMobileView] = useState<'list' | 'reader'>(initialSlug ? 'reader' : 'list')
+
   // Keep the panel mounted briefly after `open` flips false so it can slide out.
   const [render, setRender] = useState(open)
   const [closing, setClosing] = useState(false)
@@ -25,17 +27,19 @@ export default function HelpDrawer({ role, open, onClose, initialSlug }: {
     if (open) {
       setRender(true)
       setClosing(false)
+      if (initialSlug) setMobileView('reader')
       return
     }
     setClosing(true)
     const t = setTimeout(() => { setRender(false); setClosing(false) }, 240)
     return () => clearTimeout(t)
-  }, [open])
+  }, [open, initialSlug])
 
   // Re-point when opened with a specific article (contextual "?").
   useEffect(() => {
     if (open && initialSlug) {
       setSlug(initialSlug)
+      setMobileView('reader')
     }
   }, [open, initialSlug])
 
@@ -80,29 +84,54 @@ export default function HelpDrawer({ role, open, onClose, initialSlug }: {
       >
         <header style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '14px 18px', borderBottom: '1px solid var(--line)', flexShrink: 0,
+          padding: '10px 16px', borderBottom: '1px solid var(--line)', flexShrink: 0, minHeight: 52,
         }}>
-          <strong style={{ fontSize: '0.95rem', color: 'var(--navy)' }}>Help</strong>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Mobile back to article list button (< 640px) */}
+            <button
+              type="button"
+              onClick={() => setMobileView('list')}
+              className="sm:hidden"
+              style={{
+                display: mobileView === 'reader' ? 'flex' : 'none',
+                alignItems: 'center', gap: 4, background: 'none', border: 'none',
+                color: 'var(--navy)', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer',
+                padding: '6px 8px', borderRadius: 6,
+              }}
+            >
+              ← Back
+            </button>
+            <strong style={{ fontSize: '0.95rem', color: 'var(--navy)' }}>Help Center</strong>
+          </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close help"
-            style={{ background: 'none', border: 'none', fontSize: '1.1rem', color: 'var(--muted)', cursor: 'pointer' }}
+            style={{
+              background: 'none', border: 'none', fontSize: '1.2rem', color: 'var(--muted)',
+              cursor: 'pointer', minWidth: 44, minHeight: 44, display: 'flex',
+              alignItems: 'center', justifyContent: 'center', borderRadius: 8,
+            }}
           >
             ✕
           </button>
         </header>
 
         <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-          <nav style={{
-            width: 'clamp(180px, 32%, 240px)', flexShrink: 0,
-            borderRight: '1px solid var(--line)', padding: 14,
-            display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, overflowY: 'auto',
-          }}>
+          {/* Table of contents list pane */}
+          <nav
+            className={`${mobileView === 'list' ? 'flex' : 'hidden'} sm:flex`}
+            style={{
+              width: 'clamp(200px, 32%, 250px)', flexShrink: 0,
+              borderRight: '1px solid var(--line)', padding: 14,
+              flexDirection: 'column', gap: 8, minHeight: 0, overflowY: 'auto',
+            }}
+          >
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search help…"
+              aria-label="Search help articles"
               style={{
                 border: '1.5px solid var(--line)', borderRadius: 8, padding: '8px 10px',
                 fontSize: '0.82rem', outline: 'none', width: '100%',
@@ -115,13 +144,17 @@ export default function HelpDrawer({ role, open, onClose, initialSlug }: {
               <button
                 key={e.slug}
                 type="button"
-                onClick={() => setSlug(e.slug)}
+                onClick={() => {
+                  setSlug(e.slug)
+                  setMobileView('reader')
+                }}
                 style={{
                   textAlign: 'left', border: 'none', cursor: 'pointer', borderRadius: 7,
-                  padding: '8px 10px', fontSize: '0.83rem', lineHeight: 1.3,
+                  padding: '10px 12px', fontSize: '0.83rem', lineHeight: 1.3, minHeight: 40,
                   fontWeight: e.slug === slug ? 700 : 500,
                   background: e.slug === slug ? 'var(--navy)' : 'transparent',
                   color: e.slug === slug ? '#fff' : 'var(--ink)',
+                  display: 'flex', alignItems: 'center',
                 }}
               >
                 {e.title}
@@ -129,11 +162,12 @@ export default function HelpDrawer({ role, open, onClose, initialSlug }: {
             ))}
           </nav>
 
+          {/* Reader pane */}
           <article
-            className="dams-help-body"
+            className={`dams-help-body ${mobileView === 'reader' ? 'block' : 'hidden'} sm:block`}
             style={{
               flex: 1, minWidth: 0, minHeight: 0,
-              padding: '20px 26px', overflowY: 'auto', overflowX: 'hidden',
+              padding: 'clamp(14px, 3vw, 26px)', overflowY: 'auto', overflowX: 'hidden',
             }}
           >
             {body

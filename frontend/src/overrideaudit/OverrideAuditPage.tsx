@@ -65,30 +65,38 @@ export default function OverrideAuditPage() {
       </div>
 
       <div style={{ ...card, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 16 }}>
-        <Field label="From">
-          <input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} style={{ ...inputStyle, width: 'auto' }} />
-        </Field>
-        <Field label="To">
-          <input type="date" value={to} max={istToday()} onChange={(e) => setTo(e.target.value)} style={{ ...inputStyle, width: 'auto' }} />
-        </Field>
-        <Field label="Branch">
-          <select value={branchId} onChange={(e) => setBranchId(e.target.value === '' ? '' : Number(e.target.value))} style={{ ...inputStyle, width: 'auto' }}>
-            <option value="">All branches</option>
-            {branches.map((b) => <option key={b.id} value={b.id}>{b.code} — {b.name}</option>)}
-          </select>
-        </Field>
-        <Field label="User">
-          <select value={userId} onChange={(e) => setUserId(e.target.value === '' ? '' : Number(e.target.value))} style={{ ...inputStyle, width: 'auto' }}>
-            <option value="">Anyone</option>
-            {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
-        </Field>
-        <button type="button" onClick={() => setTick((n) => n + 1)} style={ghostBtn}>Refresh</button>
+        <div style={{ flex: '1 1 140px', minWidth: 130 }}>
+          <Field label="From">
+            <input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} style={{ ...inputStyle, width: '100%', minHeight: 38 }} />
+          </Field>
+        </div>
+        <div style={{ flex: '1 1 140px', minWidth: 130 }}>
+          <Field label="To">
+            <input type="date" value={to} max={istToday()} onChange={(e) => setTo(e.target.value)} style={{ ...inputStyle, width: '100%', minHeight: 38 }} />
+          </Field>
+        </div>
+        <div style={{ flex: '1 1 160px', minWidth: 150 }}>
+          <Field label="Branch">
+            <select value={branchId} onChange={(e) => setBranchId(e.target.value === '' ? '' : Number(e.target.value))} style={{ ...inputStyle, width: '100%', minHeight: 38 }}>
+              <option value="">All branches</option>
+              {branches.map((b) => <option key={b.id} value={b.id}>{b.code} — {b.name}</option>)}
+            </select>
+          </Field>
+        </div>
+        <div style={{ flex: '1 1 160px', minWidth: 150 }}>
+          <Field label="User">
+            <select value={userId} onChange={(e) => setUserId(e.target.value === '' ? '' : Number(e.target.value))} style={{ ...inputStyle, width: '100%', minHeight: 38 }}>
+              <option value="">Anyone</option>
+              {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+          </Field>
+        </div>
+        <button type="button" onClick={() => setTick((n) => n + 1)} style={{ ...ghostBtn, minHeight: 38, padding: '0 16px' }}>Refresh</button>
       </div>
 
       <ErrorBanner message={error} />
 
-      <div style={{ ...card, padding: 0, overflowX: 'auto' }}>
+      <div style={{ ...card, padding: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
           <thead>
             <tr>

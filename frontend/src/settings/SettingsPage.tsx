@@ -31,18 +31,18 @@ export default function SettingsPage() {
         : user.role === 'SUPER_ADMIN' ? 'Platform-wide' : 'All branches'
 
   return (
-    <div style={{ maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div style={{ maxWidth: 'min(640px, 100%)', display: 'flex', flexDirection: 'column', gap: 14 }}>
       <h1 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--navy)' }}>Settings</h1>
 
       {/* Account summary — read-only. Gives the page something to land on. */}
-      <section style={{ ...card, display: 'flex', alignItems: 'center', gap: 14 }}>
+      <section style={{ ...card, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
         <span style={{
           width: 44, height: 44, borderRadius: 12, background: 'var(--navy3)', color: 'var(--navy)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, flexShrink: 0,
         }}>
           {initials(user.name || '?')}
         </span>
-        <div style={{ minWidth: 0 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{user.name || 'Account'}</div>
           <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: 2 }}>
             {ROLE_LABEL[user.role]} · {branchContext}
@@ -81,7 +81,7 @@ function Collapsible({ title, summary, defaultOpen = false, children }: {
         style={{
           width: '100%', display: 'flex', alignItems: 'center', gap: 12,
           padding: '14px 18px', background: 'transparent', border: 'none',
-          textAlign: 'left', cursor: 'pointer',
+          textAlign: 'left', cursor: 'pointer', minHeight: 48,
         }}
       >
         <span style={{ flex: 1, minWidth: 0 }}>
@@ -137,7 +137,7 @@ function ChangePasswordForm() {
       <ErrorBanner message={error} />
       {done && <div style={{ fontSize: '0.82rem', color: 'var(--green)', fontWeight: 600 }}>Password changed.</div>}
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button type="submit" style={primaryBtn(saving)} disabled={saving}>
+        <button type="submit" style={{ ...primaryBtn(saving), minHeight: 38 }} disabled={saving}>
           {saving ? <><Spinner /> Saving…</> : 'Update password'}
         </button>
       </div>
@@ -176,10 +176,12 @@ function OrgSettingsForm() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <Field label="Organization name">
-        <div style={{ display: 'flex', gap: 8 }}>
-          <TextInput value={settings.name} onChange={(v) => setSettings({ ...settings, name: v })} />
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <TextInput value={settings.name} onChange={(v) => setSettings({ ...settings, name: v })} />
+          </div>
           <button
-            style={ghostBtn}
+            style={{ ...ghostBtn, minHeight: 38, padding: '0 16px' }}
             disabled={savingKey === 'name'}
             onClick={() => save({ name: settings.name }, 'name')}
           >

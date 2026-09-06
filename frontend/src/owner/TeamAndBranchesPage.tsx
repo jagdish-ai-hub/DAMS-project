@@ -52,12 +52,12 @@ export default function TeamAndBranchesPage() {
 
       {/* Branches */}
       <section style={card}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
           <h2 style={{ ...cardTitle, marginBottom: 0, flex: 1 }}>Branches</h2>
-          <button style={primaryBtn()} onClick={() => setBranchModal({ editing: null })}>+ Add Branch</button>
+          <button style={{ ...primaryBtn(), minHeight: 36 }} onClick={() => setBranchModal({ editing: null })}>+ Add Branch</button>
         </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 500, fontSize: '0.84rem' }}>
             <thead>
               <tr>
                 <th style={th}>Branch</th><th style={th}>Code</th>
@@ -74,7 +74,7 @@ export default function TeamAndBranchesPage() {
                     {b.active ? <Badge tone="green">Active</Badge> : <Badge>Inactive</Badge>}
                   </td>
                   <td style={{ ...td, textAlign: 'right' }}>
-                    <button style={ghostBtn} onClick={() => setBranchModal({ editing: b })}>Edit</button>
+                    <button style={{ ...ghostBtn, minHeight: 36, padding: '4px 12px' }} onClick={() => setBranchModal({ editing: b })}>Edit</button>
                   </td>
                 </tr>
               ))}
@@ -88,12 +88,12 @@ export default function TeamAndBranchesPage() {
 
       {/* Users */}
       <section style={card}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
           <h2 style={{ ...cardTitle, marginBottom: 0, flex: 1 }}>Users</h2>
-          <button style={primaryBtn()} onClick={() => setUserModal({ editing: null })}>+ Add User</button>
+          <button style={{ ...primaryBtn(), minHeight: 36 }} onClick={() => setUserModal({ editing: null })}>+ Add User</button>
         </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 540, fontSize: '0.84rem' }}>
             <thead>
               <tr>
                 <th style={th}>User</th><th style={th}>Role</th>
@@ -115,7 +115,7 @@ export default function TeamAndBranchesPage() {
                       : <Badge tone="green">Active</Badge>}
                   </td>
                   <td style={{ ...td, textAlign: 'right' }}>
-                    <button style={ghostBtn} onClick={() => setUserModal({ editing: u })}>Edit</button>
+                    <button style={{ ...ghostBtn, minHeight: 36, padding: '4px 12px' }} onClick={() => setUserModal({ editing: u })}>Edit</button>
                   </td>
                 </tr>
               ))}
@@ -192,8 +192,8 @@ function BranchModal(props: { editing: Branch | null; onClose: () => void; onSav
         )}
         <ErrorBanner message={error} />
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button type="button" style={ghostBtn} onClick={props.onClose}>Cancel</button>
-          <button type="submit" style={primaryBtn(saving)} disabled={saving}>
+          <button type="button" style={{ ...ghostBtn, minHeight: 36 }} onClick={props.onClose}>Cancel</button>
+          <button type="submit" style={{ ...primaryBtn(saving), minHeight: 36 }} disabled={saving}>
             {saving ? 'Saving…' : props.editing ? 'Save changes' : 'Add branch'}
           </button>
         </div>
@@ -258,8 +258,8 @@ function UserModal(props: { editing: TeamUser | null; branches: Branch[]; onClos
           {inviteLink}
         </code>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button style={ghostBtn} onClick={() => navigator.clipboard?.writeText(inviteLink)}>Copy link</button>
-          <button style={primaryBtn()} onClick={props.onSaved}>Done</button>
+          <button style={{ ...ghostBtn, minHeight: 36 }} onClick={() => navigator.clipboard?.writeText(inviteLink)}>Copy link</button>
+          <button style={{ ...primaryBtn(), minHeight: 36 }} onClick={props.onSaved}>Done</button>
         </div>
       </Modal>
     )
@@ -324,8 +324,8 @@ function UserModal(props: { editing: TeamUser | null; branches: Branch[]; onClos
         )}
         <ErrorBanner message={error} />
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button type="button" style={ghostBtn} onClick={props.onClose}>Cancel</button>
-          <button type="submit" style={primaryBtn(saving)} disabled={saving}>
+          <button type="button" style={{ ...ghostBtn, minHeight: 36 }} onClick={props.onClose}>Cancel</button>
+          <button type="submit" style={{ ...primaryBtn(saving), minHeight: 36 }} disabled={saving}>
             {saving ? 'Saving…' : props.editing ? 'Save changes' : 'Add user'}
           </button>
         </div>
@@ -344,6 +344,8 @@ function StatusToggle({ value, onChange }: { value: boolean; onChange: (v: boole
           onClick={() => onChange(v)}
           style={{
             ...ghostBtn,
+            minHeight: 36,
+            padding: '6px 14px',
             background: value === v ? 'var(--navy)' : 'transparent',
             color: value === v ? '#fff' : 'var(--navy)',
             borderColor: value === v ? 'var(--navy)' : 'var(--line)',

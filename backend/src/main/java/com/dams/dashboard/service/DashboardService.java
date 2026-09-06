@@ -265,6 +265,10 @@ public class DashboardService {
             if (closedJcIds.contains(jc.getId())) {
                 continue;
             }
+            ReceiveCategory cat = categoriesById.get(jc.getCategoryId());
+            if (cat != null && cat.isClaim()) {
+                continue;
+            }
             BigDecimal pending = pendingFor(jc, receivedByJc);
             if (pending.signum() <= 0) {
                 continue;
@@ -280,12 +284,13 @@ public class DashboardService {
         }
 
         // Open claims — approved claim receipts with no ClaimClose yet.
+        java.util.Set<Long> seenClaimJcs = new java.util.HashSet<>();
         for (var d : receiveDocumentRepo.findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(
                 orgId, com.dams.receive.entity.WorkflowStatus.APPROVED)) {
             if (branchId != null && !branchId.equals(d.getBranchId())) {
                 continue;
             }
-            if (closedJcIds.contains(d.getJobCardId())) {
+            if (closedJcIds.contains(d.getJobCardId()) || !seenClaimJcs.add(d.getJobCardId())) {
                 continue;
             }
             JobCard jc = jobCardsById.get(d.getJobCardId());

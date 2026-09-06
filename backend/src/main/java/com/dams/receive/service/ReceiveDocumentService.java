@@ -204,7 +204,7 @@ public class ReceiveDocumentService {
         }
 
         ReceiveDocument doc = receiveDocumentRepo
-            .findByOrgIdAndJobCardIdAndSettledFalse(orgId, jobCard.getId())
+            .findByOrgIdAndJobCardIdAndSettledFalseAndWorkflowStatusNot(orgId, jobCard.getId(), WorkflowStatus.REJECTED)
             .orElse(null);
         boolean opened = false;
         if (doc == null) {

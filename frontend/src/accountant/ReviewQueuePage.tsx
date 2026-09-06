@@ -83,21 +83,22 @@ export default function ReviewQueuePage() {
         </div>
       )}
 
-      <div style={{
-        display: 'grid', gridTemplateColumns: '340px 1fr', gap: 0,
-        border: '1px solid var(--line)', borderRadius: 'var(--radius)', overflow: 'hidden',
-        background: 'var(--surface)', minHeight: '68vh',
-      }}>
-        <QueuePane type={type} items={items} selectedId={selectedId} onType={pickType} onSelect={setSelectedId} />
-        <div style={{ borderLeft: '1px solid var(--line)', padding: '20px 24px', overflowY: 'auto' }}>
+      <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] border border-[var(--line)] rounded-[var(--radius)] overflow-hidden bg-[var(--surface)] min-h-[68vh]">
+        <div className={selectedId != null ? 'hidden lg:flex flex-col overflow-y-auto' : 'flex flex-col overflow-y-auto'}>
+          <QueuePane type={type} items={items} selectedId={selectedId} onType={pickType} onSelect={setSelectedId} />
+        </div>
+        <div className={selectedId == null ? 'hidden lg:block border-t lg:border-t-0 lg:border-l border-[var(--line)] p-4 sm:p-6 overflow-y-auto' : 'block border-t lg:border-t-0 lg:border-l border-[var(--line)] p-4 sm:p-6 overflow-y-auto'}>
           {selectedId == null
             ? <Overview type={type} items={items ?? []} onSelect={setSelectedId} />
             : doc == null
               ? <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div className="lg:hidden mb-2">
+                    <button type="button" onClick={() => setSelectedId(null)} style={{ ...ghostBtn, minHeight: 36, fontWeight: 700 }}>← Back to Queue</button>
+                  </div>
                   <Skeleton width={200} height={20} />
                   <SkeletonRows rows={5} />
                 </div>
-              : <RecordDetail type={type} doc={doc} onDone={afterAction} />}
+              : <RecordDetail type={type} doc={doc} onDone={afterAction} onBack={() => setSelectedId(null)} />}
         </div>
       </div>
     </div>
@@ -154,8 +155,8 @@ export function QueueRow({ it, selected, onSelect }: { it: ReviewQueueItem; sele
       style={{
         textAlign: 'left', border: 'none', borderBottom: '1px solid var(--line)', cursor: 'pointer',
         borderLeft: `3px solid ${selected ? 'var(--navy)' : 'transparent'}`,
-        background: selected ? 'var(--navy3)' : 'transparent', padding: '11px 14px',
-        display: 'flex', flexDirection: 'column', gap: 3,
+        background: selected ? 'var(--navy3)' : 'transparent', padding: '12px 14px', minHeight: 44,
+        display: 'flex', flexDirection: 'column', gap: 3, width: '100%',
       }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
         <span style={{ fontFamily: 'Consolas, monospace', fontSize: '0.7rem', fontWeight: 700, color: 'var(--navy2)' }}>
@@ -196,7 +197,7 @@ function Overview(props: { type: ReviewType; items: ReviewQueueItem[]; onSelect:
       <h2 style={{ fontSize: '1.1rem', color: 'var(--navy)' }}>Accountant overview</h2>
       <div style={{ fontSize: '0.82rem', color: 'var(--muted)', marginBottom: 16 }}>Reviewing {label}</div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 12, marginBottom: 18 }}>
         <Stat label="Awaiting your review" value={String(items.length)} sub={items.length === 1 ? 'item' : 'items'} />
         <Stat label="Total value pending" value={inr(total)} sub="across your branches" accent />
       </div>
@@ -253,7 +254,12 @@ function Stat({ label, value, sub, accent }: { label: string; value: string; sub
 
 // ───────────────────────────── Record detail ─────────────────────────────
 
-function RecordDetail(props: { type: ReviewType; doc: DetailDoc; onDone: (message: string, keepOpen: boolean) => void }) {
+function RecordDetail(props: {
+  type: ReviewType
+  doc: DetailDoc
+  onDone: (message: string, keepOpen: boolean) => void
+  onBack?: () => void
+}) {
   const { type, doc } = props
   const cash = type === 'cash'
   const expense = !cash && 'expenseCategoryName' in doc
@@ -291,6 +297,17 @@ function RecordDetail(props: { type: ReviewType; doc: DetailDoc; onDone: (messag
 
   return (
     <div>
+      {props.onBack && (
+        <div className="lg:hidden mb-3">
+          <button
+            type="button"
+            onClick={props.onBack}
+            style={{ ...ghostBtn, minHeight: 36, display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700 }}
+          >
+            ← Back to Queue
+          </button>
+        </div>
+      )}
       <ErrorBanner message={error} />
       {cash
         ? <CashRecordCard doc={doc as CashDocument} />
@@ -326,17 +343,17 @@ function RecordDetail(props: { type: ReviewType; doc: DetailDoc; onDone: (messag
             {canReview && (
               <>
                 <button type="button" onClick={() => { setBox(box === 'query' ? null : 'query'); setBoxText(''); setError('') }}
-                  style={{ ...ghostBtn, color: 'var(--amber)' }}>Query</button>
+                  style={{ ...ghostBtn, color: 'var(--amber)', minHeight: 36 }}>Query</button>
                 <button type="button" onClick={() => { setBox(box === 'reject' ? null : 'reject'); setBoxText(''); setError('') }}
-                  style={{ ...ghostBtn, color: 'var(--red)' }}>Reject</button>
+                  style={{ ...ghostBtn, color: 'var(--red)', minHeight: 36 }}>Reject</button>
                 <button type="button" onClick={() => run(() => reviewApi.verify(type, doc.id), `${docNo} verified — moved to Finance Manager`)}
-                  disabled={busy} style={primaryBtn(busy)}>Verify</button>
+                  disabled={busy} style={{ ...primaryBtn(busy), minHeight: 36 }}>Verify</button>
               </>
             )}
             {canClose && (
               <button type="button" onClick={() => run(() => reviewApi.closeExpense(doc.id), `${docNo} closed`)}
                 disabled={busy || (overLimit && wf !== 'APPROVED')}
-                style={primaryBtn(busy || (overLimit && wf !== 'APPROVED'))}
+                style={{ ...primaryBtn(busy || (overLimit && wf !== 'APPROVED')), minHeight: 36 }}
                 title={overLimit && wf !== 'APPROVED' ? 'Over-limit expense — needs Finance Manager approval first' : undefined}>
                 Close expense
               </button>

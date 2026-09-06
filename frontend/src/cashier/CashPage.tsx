@@ -118,15 +118,15 @@ export default function CashPage() {
           ) : (
             <div style={{ display: 'flex', gap: 10, margin: '14px 0 18px', flexWrap: 'wrap' }}>
               <button type="button" onClick={() => setMovementModal({ direction: 'IN' })}
-                style={{ ...primaryBtn(), background: 'var(--green)' }}>
+                style={{ ...primaryBtn(), background: 'var(--green)', minHeight: 38 }}>
                 ＋ Cash In
               </button>
               <button type="button" onClick={() => setMovementModal({ direction: 'OUT' })}
-                style={{ ...primaryBtn(), background: 'var(--red)' }}>
+                style={{ ...primaryBtn(), background: 'var(--red)', minHeight: 38 }}>
                 − Cash Out
               </button>
               <span style={{ flex: 1 }} />
-              <button type="button" onClick={() => setCloseModal(true)} style={primaryBtn()}>
+              <button type="button" onClick={() => setCloseModal(true)} style={{ ...primaryBtn(), minHeight: 38 }}>
                 Close Day
               </button>
             </div>
@@ -231,7 +231,7 @@ function MovementsTable(props: {
       <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--line)' }}>
         <h3 style={{ fontSize: '0.94rem', fontWeight: 700 }}>Movements</h3>
       </div>
-      <div style={{ overflowX: 'auto' }}>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
           <thead>
             <tr>

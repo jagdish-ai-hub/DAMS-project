@@ -280,7 +280,7 @@ function RecentStrip(props: { recent: RecentCustomer[]; onOpenCustomer: (id: num
       }}>
         Recently looked up
       </h4>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
         {props.recent.map((c) => (
           <button
             key={c.id}
@@ -377,7 +377,7 @@ function CustomerHistoryView(props: {
       {loading && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <Skeleton height={84} radius={13} />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12 }}>
             {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} height={64} radius={10} />)}
           </div>
           <SkeletonRows rows={3} height={64} />
@@ -410,25 +410,25 @@ function CustomerHistoryView(props: {
                 {data.phone && <span style={{ marginLeft: 4 }}>· {data.phone}</span>}
               </div>
             </div>
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button
                 type="button"
                 onClick={() => navigate(`/app/new-receipt?customerId=${data.customerId}`)}
-                style={{ border: '1.5px solid #BBDCC9', background: 'var(--surface)', borderRadius: 8, padding: '9px 14px', fontSize: '0.85rem', fontWeight: 700, color: 'var(--green)', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                style={{ border: '1.5px solid #BBDCC9', background: 'var(--surface)', borderRadius: 8, padding: '9px 14px', fontSize: '0.85rem', fontWeight: 700, color: 'var(--green)', cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 38 }}
               >
                 ＋ New Receipt
               </button>
               <button
                 type="button"
                 onClick={() => navigate(`/app/new-expense?customerId=${data.customerId}`)}
-                style={{ border: '1.5px solid #E4C3C3', background: 'var(--surface)', borderRadius: 8, padding: '9px 14px', fontSize: '0.85rem', fontWeight: 700, color: 'var(--red)', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                style={{ border: '1.5px solid #E4C3C3', background: 'var(--surface)', borderRadius: 8, padding: '9px 14px', fontSize: '0.85rem', fontWeight: 700, color: 'var(--red)', cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 38 }}
               >
                 ＋ New Expense
               </button>
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12, marginBottom: 16 }}>
             <Stat label="Job Cards" value={String(data.jobCardCount)} />
             <Stat label="Total Invoiced" value={inr(data.totalInvoiced)} />
             <Stat label="Total Received" value={inr(data.totalReceived)} tone="green" />
@@ -493,7 +493,7 @@ function CustomerHistoryView(props: {
                       onClick={() => setReceiptsTarget({
                         receiptId: j.receiveDocumentId!,
                         subtitle: `${j.reference} · whole receipt`,
-                        frozen: j.receiveDocumentSettled,
+                        frozen: j.receiveDocumentSettled || j.workflowStatus === 'REJECTED',
                       })}
                       style={{ border: 'none', background: 'none', color: 'var(--navy2)', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
                     >

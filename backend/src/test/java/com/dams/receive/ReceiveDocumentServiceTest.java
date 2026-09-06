@@ -176,7 +176,7 @@ class ReceiveDocumentServiceTest {
 
     @Test
     void create_alwaysPostsUnderTheJobCardBranch_notAnythingFromTheRequest() {
-        when(receiveDocumentRepo.findByOrgIdAndJobCardIdAndSettledFalse(ORG, JOB_CARD_ID))
+        when(receiveDocumentRepo.findByOrgIdAndJobCardIdAndSettledFalseAndWorkflowStatusNot(ORG, JOB_CARD_ID, WorkflowStatus.REJECTED))
             .thenReturn(Optional.empty());
 
         CreateReceiptRequest req = new CreateReceiptRequest();
@@ -188,6 +188,21 @@ class ReceiveDocumentServiceTest {
         verify(receiveDocumentRepo, org.mockito.Mockito.atLeastOnce()).save(doc.capture());
         assertThat(doc.getAllValues())
             .allSatisfy(d -> assertThat(d.getBranchId()).isEqualTo(BRANCH_ID));
+    }
+
+    @Test
+    void create_whenPreviousDocumentRejected_opensNewDraft() {
+        when(receiveDocumentRepo.findByOrgIdAndJobCardIdAndSettledFalseAndWorkflowStatusNot(ORG, JOB_CARD_ID, WorkflowStatus.REJECTED))
+            .thenReturn(Optional.empty());
+
+        CreateReceiptRequest req = new CreateReceiptRequest();
+        req.setJobCardId(JOB_CARD_ID);
+
+        service.create(req);
+
+        ArgumentCaptor<ReceiveDocument> docCaptor = ArgumentCaptor.forClass(ReceiveDocument.class);
+        verify(receiveDocumentRepo, org.mockito.Mockito.atLeastOnce()).save(docCaptor.capture());
+        verify(auditService).recordUserEvent(eq("ReceiveDocument"), any(), any(), eq(EventType.CREATED), eq(CASHIER_ID), any());
     }
 
     @Test

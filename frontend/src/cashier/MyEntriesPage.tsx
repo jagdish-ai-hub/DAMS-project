@@ -74,12 +74,13 @@ function Group({ title, rows, onOpen }: { title: string; rows: MyEntry[]; onOpen
             <div
               key={`${e.kind}-${e.id}`}
               style={{
-                display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px',
+                display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
                 borderTop: i === 0 ? 'none' : '1px solid var(--line)',
                 background: e.queried ? 'var(--amber-bg)' : undefined,
+                flexWrap: 'wrap',
               }}
             >
-              <div style={{ minWidth: 150 }}>
+              <div style={{ minWidth: 140 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{
                     fontSize: '0.6rem', fontWeight: 800, letterSpacing: '0.04em',
@@ -95,7 +96,7 @@ function Group({ title, rows, onOpen }: { title: string; rows: MyEntry[]; onOpen
                   {e.jobCardReference ?? (isExpense ? 'branch overhead' : isCash ? 'cash drawer' : '')}
                 </div>
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ flex: 1, minWidth: 180 }}>
                 <div style={{ fontSize: '0.88rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {e.partyName ?? '—'}
                 </div>
@@ -107,15 +108,17 @@ function Group({ title, rows, onOpen }: { title: string; rows: MyEntry[]; onOpen
                   {isExpense && e.overLimit && ' · over limit'}
                 </div>
               </div>
-              {isExpense && e.overLimit && (
-                <span style={{ fontSize: '0.66rem', fontWeight: 700, color: 'var(--amber)', background: 'var(--amber-bg)', borderRadius: 999, padding: '2px 8px' }}>
-                  ⚠ over limit
-                </span>
-              )}
-              <Badge tone={badgeTone(e)}>{e.settled ? 'SETTLED' : e.workflowStatus}</Badge>
-              <button type="button" onClick={() => onOpen(e)} style={ghostBtn}>
-                {e.queried ? 'Fix & Resubmit' : 'Open'}
-              </button>
+              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+                {isExpense && e.overLimit && (
+                  <span style={{ fontSize: '0.66rem', fontWeight: 700, color: 'var(--amber)', background: 'var(--amber-bg)', borderRadius: 999, padding: '2px 8px' }}>
+                    ⚠ over limit
+                  </span>
+                )}
+                <Badge tone={badgeTone(e)}>{e.settled ? 'SETTLED' : e.workflowStatus}</Badge>
+                <button type="button" onClick={() => onOpen(e)} style={{ ...ghostBtn, minHeight: 34, display: 'inline-flex', alignItems: 'center' }}>
+                  {e.queried ? 'Fix & Resubmit' : 'Open'}
+                </button>
+              </div>
             </div>
           )
         })}

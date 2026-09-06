@@ -3,4 +3,5 @@ dist/
 coverage/
 .git
 .gitignore
-*.md
+README.md
+!src/help/**/*.md

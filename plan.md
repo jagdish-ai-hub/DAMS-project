@@ -7,6 +7,38 @@
 
 ## Revision log
 
+- **rev 21 (2026-09-05)** — Deep codebase bug audit and surgical fixes under AGENT CORE RULES
+  (100% full-file audit, 366 files, 3 passes).
+  - **`BUG-01`**: Fixed reverse-proxy upstream port mismatch in `deploy/nginx-dams.conf`
+    (`8081` → `8083` frontend, `8080` → `8082` backend) and aligned `docs/deployment-guide.md`
+    architecture diagram to match `compose.prod.yml`, `DEPLOYMENT.md`, and `AGENT.md`.
+  - **`BUG-02`**: Fixed dashboard outstanding classification in `DashboardService.java`:
+    excluded open claims (`cat.isClaim()`) from the standard job-card attention items loop so
+    they are correctly surfaced only as `CLAIM` attention items; deduplicated open claims across
+    multiple approved receipts using a visited job card tracking set.
+  - **`BUG-03`**: Fixed receipt creation reusing rejected documents in `ReceiveDocumentService.java`
+    and `ReceiveDocumentRepository.java`: added
+    `findByOrgIdAndJobCardIdAndSettledFalseAndWorkflowStatusNot(..., WorkflowStatus.REJECTED)`
+    so that when a previous receipt document for a job card is `REJECTED`, creating a receipt
+    opens a clean new draft instead of appending lines or resurrecting the terminal rejected document.
+  - **`BUG-04`**: Fixed FM "recently closed claims" queue in `ReviewService.recentlyClosedClaims`:
+    resolve the real receive-document id and `documentNo` for each closed claim (batch
+    `findByOrgIdAndJobCardIdInOrderByCreatedAtDesc`, latest doc per job card) instead of emitting
+    a synthetic `code-JC-<id>` ref and the job-card id as the item id.
+  - Frontend surgical fixes carried in with the responsive pass: draft submit vs save-draft split
+    on New Receipt / New Expense (`submitDraft` validates and posts, never double-creates a
+    document); loaded-line sync guard so editing a queried draft no longer clobbers unedited lines;
+    `frozen` prop respected on rejected docs in Cashier Home and on New Receipt; `GlobalSearch`
+    nested-modal Escape clash fixed and a clear button added.
+  - **Responsive overhaul** — every cashier / owner / accountant / FM / auth / shell screen made
+    mobile-usable: `AppShell` mobile nav drawer, fluid container padding, custom breakpoints and
+    purple tokens in `tailwind.config.ts`, touch-target sizing, horizontal table scroll wrappers,
+    master–detail responsive toggles on the review and FM queues, `HelpDrawer` mobile drill-down.
+    Styling only — no logic or API changes. See `docs/RESPONSIVE_OVERHAUL_PLAN.md`.
+  - `frontend/.dockerignore` no longer excludes `src/help/**/*.md`, so in-app help articles ship
+    in the frontend image.
+  - Full test suite green (129 backend tests, frontend lint & build 0 errors).
+
 - **rev 20 (2026-09-03)** — Query-fan-out fixes after the owner reported 20–40s per entry
   from a local (India) dev machine. **Root cause proven by trace, not guessed**: not Neon
   latency per se — the app fires many small sequential queries per request, and each

@@ -106,7 +106,7 @@ export default function OrganizationsPage() {
 
       <section style={card}>
         <h2 style={cardTitle}>Onboard a new organization</h2>
-        <form onSubmit={handleCreate} style={{ display: 'grid', gap: 12, maxWidth: 460 }}>
+        <form onSubmit={handleCreate} style={{ display: 'grid', gap: 12, maxWidth: 'min(460px, 100%)' }}>
           <Field label="Organization name">
             <TextInput value={orgName} onChange={setOrgName} required />
           </Field>
@@ -116,7 +116,7 @@ export default function OrganizationsPage() {
           <Field label="First owner — email">
             <TextInput value={ownerEmail} onChange={setOwnerEmail} type="email" required />
           </Field>
-          <button type="submit" disabled={submitting} style={primaryBtn(submitting)}>
+          <button type="submit" disabled={submitting} style={{ ...primaryBtn(submitting), minHeight: 38 }}>
             {submitting ? 'Creating…' : 'Create organization & invite owner'}
           </button>
         </form>
@@ -138,7 +138,7 @@ export default function OrganizationsPage() {
             }}>
               {created.inviteLink}
             </code>
-            <button type="button" onClick={copyLink} style={{ ...ghostBtn, marginTop: 8 }}>
+            <button type="button" onClick={copyLink} style={{ ...ghostBtn, minHeight: 36, marginTop: 8 }}>
               {copied ? 'Copied ✓' : 'Copy link'}
             </button>
           </div>
@@ -152,8 +152,8 @@ export default function OrganizationsPage() {
         ) : orgs.length === 0 ? (
           <p style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>No organizations yet.</p>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640, fontSize: '0.84rem' }}>
               <thead>
                 <tr>
                   <th style={th}>#</th>
@@ -179,7 +179,7 @@ export default function OrganizationsPage() {
                         type="button"
                         onClick={() => toggleActive(org)}
                         disabled={busyId === org.id}
-                        style={ghostBtn}
+                        style={{ ...ghostBtn, minHeight: 36, padding: '4px 12px' }}
                       >
                         {org.active ? 'Deactivate' : 'Activate'}
                       </button>
@@ -187,7 +187,7 @@ export default function OrganizationsPage() {
                         type="button"
                         onClick={() => setConfirmDelete(org)}
                         disabled={busyId === org.id}
-                        style={{ ...ghostBtn, color: 'var(--red)', borderColor: '#EBC2C2', marginLeft: 8 }}
+                        style={{ ...ghostBtn, color: 'var(--red)', borderColor: '#EBC2C2', marginLeft: 8, minHeight: 36, padding: '4px 12px' }}
                       >
                         Delete
                       </button>
@@ -230,13 +230,13 @@ function DeleteOrgModal(props: {
       <Field label={`Type the organization name to confirm`}>
         <TextInput value={typed} onChange={setTyped} placeholder={props.org.name} />
       </Field>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-        <button type="button" onClick={props.onCancel} style={ghostBtn} disabled={props.busy}>Cancel</button>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+        <button type="button" onClick={props.onCancel} style={{ ...ghostBtn, minHeight: 36, padding: '6px 14px' }} disabled={props.busy}>Cancel</button>
         <button
           type="button"
           onClick={props.onConfirm}
           disabled={!match || props.busy}
-          style={{ ...dangerBtn, opacity: !match || props.busy ? 0.5 : 1 }}
+          style={{ ...dangerBtn, minHeight: 36, padding: '6px 14px', opacity: !match || props.busy ? 0.5 : 1 }}
         >
           {props.busy ? 'Deleting…' : 'Delete permanently'}
         </button>

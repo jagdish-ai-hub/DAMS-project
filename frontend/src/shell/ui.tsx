@@ -192,7 +192,10 @@ export function Modal(props: { title: string; subtitle?: string; onClose: () => 
   const { onClose } = props
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        onClose()
+      }
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
@@ -201,11 +204,14 @@ export function Modal(props: { title: string; subtitle?: string; onClose: () => 
   return (
     <div
       className="dams-anim-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label={props.title}
       onMouseDown={props.onClose}
       style={{
         position: 'fixed', inset: 0, background: 'rgba(16,24,40,.45)',
         display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-        padding: '60px 16px', zIndex: 50, overflowY: 'auto',
+        padding: 'clamp(16px, 5vh, 60px) clamp(10px, 3vw, 16px)', zIndex: 50, overflowY: 'auto',
       }}
     >
       <div
@@ -214,21 +220,33 @@ export function Modal(props: { title: string; subtitle?: string; onClose: () => 
         style={{
           background: 'var(--surface)', borderRadius: 12, boxShadow: 'var(--shadow-lift)',
           width: '100%', maxWidth: props.maxWidth ?? 460,
+          maxHeight: 'calc(100vh - 32px)', display: 'flex', flexDirection: 'column',
         }}
       >
         <div style={{
           display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-          padding: '18px 20px', borderBottom: '1px solid var(--line)',
+          padding: '16px 20px', borderBottom: '1px solid var(--line)', flexShrink: 0,
         }}>
           <div>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--navy)' }}>{props.title}</h3>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--navy)', margin: 0 }}>{props.title}</h3>
             {props.subtitle && (
               <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: 2 }}>{props.subtitle}</div>
             )}
           </div>
-          <button onClick={props.onClose} style={{ background: 'none', border: 'none', fontSize: '1.1rem', color: 'var(--muted)', cursor: 'pointer' }}>✕</button>
+          <button
+            type="button"
+            onClick={props.onClose}
+            aria-label="Close"
+            style={{
+              background: 'none', border: 'none', fontSize: '1.2rem', color: 'var(--muted)',
+              cursor: 'pointer', minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center',
+              justifyContent: 'center', borderRadius: 8, margin: '-8px -10px -8px 0',
+            }}
+          >
+            ✕
+          </button>
         </div>
-        <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto' }}>
           {props.children}
         </div>
       </div>
@@ -265,12 +283,14 @@ export function Spinner({ style }: { style?: CSSProperties }) {
   return <span className="dams-spinner" style={style} aria-hidden="true" />
 }
 
-export function Badge({ children, tone = 'gray' }: { children: ReactNode; tone?: 'green' | 'amber' | 'gray' | 'red' }) {
+export function Badge({ children, tone = 'gray' }: { children: ReactNode; tone?: 'green' | 'amber' | 'gray' | 'red' | 'blue' | 'purple' }) {
   const map = {
     green: { c: 'var(--green)', b: 'var(--green-bg)' },
     amber: { c: 'var(--amber)', b: 'var(--amber-bg)' },
     gray: { c: 'var(--gray)', b: 'var(--gray-bg)' },
     red: { c: 'var(--red)', b: 'var(--red-bg)' },
+    blue: { c: 'var(--blue)', b: 'var(--blue-bg)' },
+    purple: { c: 'var(--purple)', b: 'var(--purple-bg)' },
   }[tone]
   return (
     <span style={{

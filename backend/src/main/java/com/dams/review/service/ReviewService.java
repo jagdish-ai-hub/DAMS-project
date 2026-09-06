@@ -596,21 +596,32 @@ public class ReviewService {
     private List<ReviewQueueItem> recentlyClosedClaims(Long orgId) {
         var closes = claimCloseRepo.findByOrgIdOrderByClosedAtDesc(orgId, Limit.of(RECENTLY_CLOSED_LIMIT));
         Map<Long, String> branchCodes = branchCodeMap(orgId);
-        Map<Long, JobCard> jobCards = jobCardsById(orgId, closes.stream().map(cc -> cc.getJobCardId()).toList());
+        List<Long> jcIds = closes.stream().map(cc -> cc.getJobCardId()).toList();
+        Map<Long, JobCard> jobCards = jobCardsById(orgId, jcIds);
         Map<Long, String> customerNames = customerNamesById(orgId,
             jobCards.values().stream().map(JobCard::getCustomerId).toList());
         Map<Long, String> categoryNames = receiveCategoryNames(orgId);
+
+        List<ReceiveDocument> docs = jcIds.isEmpty() ? List.of()
+            : receiveDocumentRepo.findByOrgIdAndJobCardIdInOrderByCreatedAtDesc(orgId, jcIds);
+        Map<Long, ReceiveDocument> latestDocByJc = new HashMap<>();
+        for (ReceiveDocument d : docs) {
+            latestDocByJc.putIfAbsent(d.getJobCardId(), d);
+        }
+
         List<ReviewQueueItem> out = new ArrayList<>(closes.size());
         for (var cc : closes) {
             JobCard jc = jobCards.get(cc.getJobCardId());
             if (jc == null) {
                 continue;
             }
+            ReceiveDocument doc = latestDocByJc.get(jc.getId());
             String party = customerNames.getOrDefault(jc.getCustomerId(), "—");
             String category = categoryNames.getOrDefault(jc.getCategoryId(), "—");
             String code = branchCodes.getOrDefault(jc.getBranchId(), "?");
-            String ref = code + "-JC-" + jc.getId();
-            out.add(new ReviewQueueItem("receipt", jc.getId(), ref, jc.getBranchId(),
+            String ref = doc != null && doc.getDocumentNo() != null ? doc.getDocumentNo() : code + "-JC-" + jc.getId();
+            Long docId = doc != null ? doc.getId() : jc.getId();
+            out.add(new ReviewQueueItem("receipt", docId, ref, jc.getBranchId(),
                 code, party, category,
                 cc.getFinalAmount(), false, cc.isOverridden(), cc.getClosedAt()));
         }

@@ -87,14 +87,14 @@ export default function DashboardPage() {
       <ErrorBanner message={error} />
       {summary == null && !error && (
         <div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 18 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 14, marginBottom: 18 }}>
             {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} height={92} radius={10} />)}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16, marginBottom: 16 }}>
+          <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4 mb-4">
             <Skeleton height={264} radius={10} />
             <Skeleton height={264} radius={10} />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Skeleton height={220} radius={10} />
             <Skeleton height={220} radius={10} />
           </div>
@@ -103,7 +103,7 @@ export default function DashboardPage() {
 
       {summary && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 18 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 14, marginBottom: 18 }}>
             <Kpi label="Collections" value={inr(summary.kpis.collections)} tone="var(--green)" />
             <Kpi label="Expenses" value={inr(summary.kpis.expenses)} tone="var(--red)" />
             <Kpi label="Net" value={inr(summary.kpis.net)} tone="var(--navy2)" />
@@ -111,7 +111,7 @@ export default function DashboardPage() {
               sub={`${summary.kpis.pendingReview} pending review`} />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16, marginBottom: 16 }}>
+          <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4 mb-4">
             <div style={{ ...card }}>
               <h3 style={{ fontSize: '0.94rem', fontWeight: 700, marginBottom: 10 }}>Collections vs Expenses · last 14 days</h3>
               <ResponsiveContainer width="100%" height={220}>
@@ -158,11 +158,11 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
             <div style={{ ...card }}>
               <h3 style={{ fontSize: '0.94rem', fontWeight: 700, marginBottom: 12 }}>Branch comparison</h3>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 460, fontSize: '0.82rem' }}>
+              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 500, fontSize: '0.82rem' }}>
                   <thead>
                     <tr>
                       {['Branch', 'Collections', 'Expenses', 'Net', 'Cash', 'Last close'].map((h) => (
@@ -207,7 +207,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div style={{ ...card }}>
               <h3 style={{ fontSize: '0.94rem', fontWeight: 700, marginBottom: 6 }}>Outstanding</h3>
               <div style={{ fontSize: '0.74rem', color: 'var(--faint)', marginBottom: 10 }}>money still owed or awaiting settlement</div>
@@ -271,13 +271,14 @@ function Seg<T extends string | number>({ options, value, onChange }: {
   onChange: (v: T) => void
 }) {
   return (
-    <div style={{ display: 'flex', border: '1px solid var(--line)', borderRadius: 9, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', border: '1px solid var(--line)', borderRadius: 9, overflowX: 'auto', WebkitOverflowScrolling: 'touch', maxWidth: '100%' }}>
       {options.map((o) => (
         <button key={String(o.v)} type="button" onClick={() => onChange(o.v)}
           style={{
             border: 'none', padding: '7px 14px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer',
             background: value === o.v ? 'var(--navy)' : 'var(--surface)',
             color: value === o.v ? '#fff' : 'var(--muted)',
+            minHeight: 36, whiteSpace: 'nowrap',
           }}>
           {o.label}
         </button>

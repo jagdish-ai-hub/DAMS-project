@@ -18,6 +18,9 @@ public interface ReceiveDocumentRepository extends JpaRepository<ReceiveDocument
     /** The at-most-one open document for a job card — the target of "Add Payment". */
     Optional<ReceiveDocument> findByOrgIdAndJobCardIdAndSettledFalse(Long orgId, Long jobCardId);
 
+    Optional<ReceiveDocument> findByOrgIdAndJobCardIdAndSettledFalseAndWorkflowStatusNot(
+        Long orgId, Long jobCardId, WorkflowStatus workflowStatus);
+
     /** Every document on a job card, newest first (history, roll-ups). */
     List<ReceiveDocument> findByOrgIdAndJobCardIdOrderByCreatedAtDesc(Long orgId, Long jobCardId);
 
