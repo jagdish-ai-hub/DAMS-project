@@ -158,10 +158,11 @@ public class JobCardService {
             if (normalised == null || normalised.isBlank()) {
                 jc.setVehicleId(null);
             } else {
+                Long customerIdForVehicle = jc.getCustomerId();
                 Vehicle v = vehicleRepo.findByOrgIdAndVehicleNo(orgId, normalised).orElseGet(() -> {
                     Vehicle nv = new Vehicle();
                     nv.setOrgId(orgId);
-                    nv.setCustomerId(jc.getCustomerId());
+                    nv.setCustomerId(customerIdForVehicle);
                     nv.setVehicleNo(normalised);
                     return vehicleRepo.save(nv);
                 });
