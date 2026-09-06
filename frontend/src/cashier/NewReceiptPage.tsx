@@ -25,6 +25,7 @@ function queryNote(history: DocumentHistoryEntry[]): string | null {
  */
 
 type LineRow = {
+  lineNo: number | null // null = not yet saved to the server (a new row added on this page)
   transactionDate: string
   settlementModeId: number | ''
   amount: string
@@ -34,7 +35,7 @@ type LineRow = {
 }
 
 const freshLine = (modeId: number | ''): LineRow => ({
-  transactionDate: istToday(), settlementModeId: modeId, amount: '', bankId: '', transactionRef: '', remark: '',
+  lineNo: null, transactionDate: istToday(), settlementModeId: modeId, amount: '', bankId: '', transactionRef: '', remark: '',
 })
 
 function apiError(err: unknown, fallback: string) {
@@ -129,6 +130,7 @@ export default function NewReceiptPage() {
         setLines(
           data.lines.length
             ? data.lines.map((l) => ({
+                lineNo: l.lineNo,
                 transactionDate: l.transactionDate,
                 settlementModeId: l.settlementModeId,
                 amount: String(l.amount),
@@ -269,20 +271,40 @@ export default function NewReceiptPage() {
     }
   }
 
+  /**
+   * Reconcile the on-screen rows against the server for an already-saved document — by
+   * lineNo, never by array position, so rows added or removed on this visit don't get
+   * silently dropped or matched to the wrong existing line.
+   */
   async function syncLines(docId: number) {
-    if (!loadedDoc?.lines) return
-    for (let i = 0; i < loadedDoc.lines.length; i++) {
-      const existing = loadedDoc.lines[i]
-      const current = lines[i]
-      if (current && (
-        Number(current.amount) !== existing.amount ||
-        Number(current.settlementModeId) !== existing.settlementModeId ||
-        (current.bankId === '' ? null : Number(current.bankId)) !== existing.bankId ||
-        (current.transactionRef || null) !== existing.transactionRef ||
-        (current.remark || null) !== existing.remark ||
-        current.transactionDate !== existing.transactionDate
-      )) {
-        await receiptsApi.updateLine(docId, existing.lineNo, {
+    if (!loadedDoc) return
+    const existingByLineNo = new Map(loadedDoc.lines.map((l) => [l.lineNo, l]))
+    const keptLineNos = new Set<number>()
+
+    for (const current of lines) {
+      if (current.lineNo != null) {
+        keptLineNos.add(current.lineNo)
+        const existing = existingByLineNo.get(current.lineNo)
+        if (existing && (
+          Number(current.amount) !== existing.amount ||
+          Number(current.settlementModeId) !== existing.settlementModeId ||
+          (current.bankId === '' ? null : Number(current.bankId)) !== existing.bankId ||
+          (current.transactionRef || null) !== existing.transactionRef ||
+          (current.remark || null) !== existing.remark ||
+          current.transactionDate !== existing.transactionDate
+        )) {
+          await receiptsApi.updateLine(docId, current.lineNo, {
+            transactionDate: current.transactionDate,
+            settlementModeId: Number(current.settlementModeId),
+            amount: Number(current.amount),
+            bankId: current.bankId === '' ? null : Number(current.bankId),
+            transactionRef: current.transactionRef || undefined,
+            remark: current.remark || undefined,
+          })
+        }
+      } else if (Number(current.amount) > 0 && current.settlementModeId !== '') {
+        // A row added on this visit — never sent to the server before.
+        await receiptsApi.addLine(docId, {
           transactionDate: current.transactionDate,
           settlementModeId: Number(current.settlementModeId),
           amount: Number(current.amount),
@@ -290,6 +312,12 @@ export default function NewReceiptPage() {
           transactionRef: current.transactionRef || undefined,
           remark: current.remark || undefined,
         })
+      }
+    }
+
+    for (const existing of loadedDoc.lines) {
+      if (!keptLineNos.has(existing.lineNo)) {
+        await receiptsApi.deleteLine(docId, existing.lineNo)
       }
     }
   }

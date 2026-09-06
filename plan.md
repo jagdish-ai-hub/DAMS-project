@@ -7,6 +7,24 @@
 
 ## Revision log
 
+- **rev 22 (2026-09-06)** — Fixed a data-loss bug reported by a cashier: reopening an
+  already-saved receipt/expense from My Entries, adding a new settlement/expense row, then
+  Save Draft / Submit / Resubmit reported success but silently dropped the new row (never
+  posted to the server), which also understated the cashier's cash-box position for any
+  dropped cash-mode line.
+  - **`BUG-05`**: `syncLines` in `NewReceiptPage.tsx` and `NewExpensePage.tsx` matched
+    on-screen rows to saved lines by array index, so it only ever called `updateLine` for
+    rows that existed when the page loaded — a row added on this visit sat past the end of
+    that loop and was never sent via `addLine`; a removed row was never sent via
+    `deleteLine` either. Rewrote both to track each row's real `lineNo` (`null` for a new,
+    unsaved row) and reconcile by that id: `addLine` for `lineNo == null` rows with a valid
+    amount/mode, `updateLine` for changed existing rows, `deleteLine` for existing lineNos no
+    longer present. No backend or API changes — `addLine`/`deleteLine` already existed and
+    were already correct (only "Add Payment" used them before). Audited `CashPage.tsx` /
+    `CashDocumentService.java` / `DrawerService.java` for the same class of bug: not present —
+    each cash movement is a single-field document edited via one `PATCH`, no per-line array
+    to desync.
+
 - **rev 21 (2026-09-05)** — Deep codebase bug audit and surgical fixes under AGENT CORE RULES
   (100% full-file audit, 366 files, 3 passes).
   - **`BUG-01`**: Fixed reverse-proxy upstream port mismatch in `deploy/nginx-dams.conf`
