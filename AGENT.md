@@ -397,6 +397,7 @@ auth, like an S3 presigned URL), `/swagger-ui.html`, `/swagger-ui/**`,
 | Cash day | `cash/controller/CashController` | `GET /cash/drawer`, `POST /cash/opening`, `POST|GET /cash/close-day` |
 | Review | `review/controller/ReviewController` | `GET /review/receipts|expenses|cash`, `GET /review/fm/receipts|expenses|cash`, `POST /receipts/{id}/verify|query|reject`, `POST /receipts/{id}/lines/{lineNo}/override`, `POST /receipts/{id}/approve`, `POST /expenses/{id}/verify|query|reject`, `POST /expenses/{id}/lines/{lineNo}/override`, `POST /expenses/{id}/close`, `POST /expenses/{id}/approve`, `POST /cash-documents/{id}/verify|approve|query|reject` |
 | Search | `search/controller/SearchController` | `GET /search?q=` |
+| AI assistant | `ai/controller/AiController` | `POST /ai/ask`, `GET /ai/brief`, `GET /ai/benchmark`, `GET /ai/anomalies`, `GET /ai/risk`, `GET /ai/queries/roots`, `GET /ai/claims/insights`, `GET /ai/cash/advice`, `GET /ai/close/checklist`, `GET /ai/receivers/duplicates`, `GET /ai/masters/health`, `GET /ai/limits/advice`, `GET /ai/search` (all read-only; only write is `ai_query_log` trace row) |
 | My Entries | `myentries/controller/MyEntriesController` | `GET /my-entries` |
 | Dashboard | `dashboard/controller/DashboardController` | `GET /dashboard/summary`, `GET /dashboard/outstanding`, `GET /dashboard/activity` |
 | Override audit | `audit/controller/OverrideAuditController` | `GET /override-audit` (Owner+FM, filterable user/branch/date) |

@@ -8,8 +8,10 @@ import {
   dashboardApi,
   type DashboardPeriod, type DashboardSummary, type OutstandingItem, type ActivityItem,
 } from '../api/dashboard'
-import { card, ErrorBanner, Skeleton, inr, fmtDate, fmtDateTime } from '../shell/ui'
+import { card, ErrorBanner, Skeleton, inr, fmtDate, fmtDateTime, primaryBtn } from '../shell/ui'
 import GlobalSearch from '../shared/GlobalSearch'
+import AskDamsPanel from './AskDamsPanel'
+import AiInsightsSection from './AiInsightsSection'
 
 /**
  * Owner dashboard (intial ui prototypes/owner-dashboard.html, dashboard tab). Read-only
@@ -31,6 +33,7 @@ export default function DashboardPage() {
   const [outstanding, setOutstanding] = useState<OutstandingItem[]>([])
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [error, setError] = useState('')
+  const [askOpen, setAskOpen] = useState(false)
 
   useEffect(() => {
     branchesApi.list().then(({ data }) => setBranches(data.filter((b) => b.active))).catch(() => {})
@@ -58,6 +61,7 @@ export default function DashboardPage() {
   const donut = useMemo(() => (summary?.byMode ?? []).filter((m) => m.amount > 0), [summary])
   const donutTotal = donut.reduce((a, m) => a + m.amount, 0)
   const maxCat = Math.max(1, ...(summary?.byCategory ?? []).map((c) => c.amount))
+  const scopeLabel = branchId === '' ? 'All branches' : (branches.find((x) => x.id === branchId)?.code ?? 'Branch')
 
   return (
     <div style={{ maxWidth: 1180, margin: '0 auto' }}>
@@ -68,7 +72,12 @@ export default function DashboardPage() {
             Verified numbers · cash In/Out excluded from collections &amp; expenses
           </span>
         </div>
-        <GlobalSearch />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <GlobalSearch />
+          <button type="button" onClick={() => setAskOpen(true)} style={{ ...primaryBtn(), minHeight: 36, whiteSpace: 'nowrap' }}>
+            Ask DAMS
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', margin: '12px 0 18px' }}>
@@ -85,6 +94,14 @@ export default function DashboardPage() {
       </div>
 
       <ErrorBanner message={error} />
+      <AiInsightsSection branchId={branchId} period={period} scopeLabel={scopeLabel} />
+      {askOpen && (
+        <AskDamsPanel
+          branchId={branchId === '' ? undefined : branchId}
+          scopeLabel={scopeLabel}
+          onClose={() => setAskOpen(false)}
+        />
+      )}
       {summary == null && !error && (
         <div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 14, marginBottom: 18 }}>

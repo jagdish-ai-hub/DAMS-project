@@ -7,6 +7,56 @@
 
 ## Revision log
 
+- **rev 27 (2026-09-06)** — AI bug-fix pass (findings H1–H5, M1–M9, L2, L6): brief now
+  counts real 90+ claim buckets via `AiOpsService` (the old `sub().contains("90+")`
+  could never match); doc-lookup honours the branch filter and a miss cites nothing;
+  brief activity uses the branch filter; risk is case-insensitive on queue type;
+  risk "no bill" counts line-level attachments (one line fetch feeds totals/overrides/
+  line-ids); branch scope resolves once per call (was per document); claim insights
+  cite one primary number; cash-healthy fallback shows the branch code; masters
+  janitor skips fully-inactive pairs; ask() skips aggregates on doc questions.
+  Frontend: thread ids survive reloads, one thread per scope, smart-loading reset,
+  empty-smart state, receipt/expense risk toggle (with empty state), org-wide label
+  on benchmark. Tests added: unknown-doc, branch-filter, critical-count.
+  `tsc`/`npm test` green (only the 2 pre-existing FEAT-04 errors); `mvn test` still
+  needs CI (no JDK on this box — backend verified by full re-read).
+
+- **rev 26 (2026-09-06)** — AI trust + clarity batch (batch 1): global `Ctrl/⌘+K` +
+  topbar "Ask DAMS" entry for Owner/FM (`AppShell`, endpoint roles unchanged);
+  shared `useCopy` hook with claim-draft copy buttons in the hub claim watch and
+  the FM banner; risk reason tooltips (`RiskDot` title + hub rows); hub header
+  with scope / as-of time / "suggestions only" microcopy (+ masters strip note);
+  smart search auto-escalates on zero exact hits with an intent label
+  ("Smart results · unpaid") and retry fallback (`GlobalSearch`). No backend or
+  API changes. `tsc`/`npm test` status unchanged (only the 2 pre-existing FEAT-04
+  WIP import errors); `mvn test` still needs CI.
+
+- **rev 25 (2026-09-06)** — Ask DAMS chat upgrade (FEAT-09): multi-turn thread with
+  session-only history, starter suggestions, follow-up chips, clickable cited docs,
+  per-answer copy + ref id, scope badge, `aria-live` answers (`AskDamsPanel.tsx`,
+  additive `autoFocus` on shared `TextInput`); backend doc-lookup intent in
+  `AiAssistantService.ask` (names like `OOR-JUL26-R-021` resolve to that document's
+  status/lines/total, out-of-scope reads as not found) + new test
+  `ask_resolvesNamedDocument_toRealDocumentFacts`. `tsc`/`npm test` status unchanged
+  (only the 2 pre-existing FEAT-04 WIP import errors); `mvn test` still needs CI.
+
+- **rev 24 (2026-09-06)** — Owner/Admin AI assistant stage (FEAT-09 → FEAT-21,
+  `docs/VALUE_ADDITIONS.md` §3): new read-only `com.dams.ai` module behind
+  `GET|POST /api/v1/ai/*` (13 endpoints, see AGENT.md API map) plus `V20__ai_query_log.sql`
+  (ask trace rows only — the module's sole write). Deterministic rules over existing
+  aggregates/services (`DashboardService`, `OverrideAuditService`, `SearchService`,
+  masters/receivers, claim-close discovery mirroring the FM queue) with the LLM kept
+  behind the swappable `InsightService` interface, so every endpoint works offline and
+  in tests. Guards preserved: JWT `org_id` + `BranchScope` on every method, Owner
+  stays read-only, maker-checker untouched, answers cite only real doc numbers.
+  Frontend: `api/ai.ts`, `AskDamsPanel`, `AiInsightsSection` hub on the Owner
+  dashboard, `AiMastersStrip` on Masters, `AiClaimBanner` + `AiRiskBadge` pills on the
+  FM/Accountant queues, smart-search fallback in `GlobalSearch`. Tests:
+  `AiAssistantServiceTest`, `AiWatchdogServiceTest`, `AiOpsServiceTest`.
+  Verified here: `npm test` green, `tsc --noEmit` clean for all AI files (the 2
+  remaining tsc errors are other uncommitted FEAT-04 WIP imports, not this stage);
+  `mvn test` needs JDK 21 (this box has only a JRE) — must go green in CI before merge.
+
 - **rev 23 (2026-09-06)** — Removed the **Reject** action from the Accountant and Finance
   Manager review screens **as per instruction from the user**: Query already returns a
   record to the cashier for a fix-and-resubmit, and Reject (a terminal, unrecoverable state)

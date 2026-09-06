@@ -4,6 +4,7 @@ import {
   Badge, ErrorBanner, Field, Modal, TextInput,
   card, ghostBtn, inputStyle, primaryBtn, td, th,
 } from '../shell/ui'
+import AiMastersStrip from './AiMastersStrip'
 
 type Extra = 'claim' | 'mode' | 'sub' | undefined
 const TABS: { slug: MasterTypeSlug; label: string; extra: Extra }[] = [
@@ -68,6 +69,7 @@ export default function MastersPage() {
       <p style={{ fontSize: '0.82rem', color: 'var(--muted)', marginTop: -8 }}>
         Every dropdown the app shows comes from these lists. Rows are deactivated, never deleted.
       </p>
+      <AiMastersStrip />
 
       <div className="flex flex-col md:flex-row gap-4 items-start">
         {/* left rail on desktop, horizontal tab bar on mobile */}

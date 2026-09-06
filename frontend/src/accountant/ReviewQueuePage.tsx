@@ -6,6 +6,8 @@ import { reviewApi, type ReviewQueueItem, type ReviewType } from '../api/review'
 import { card, ErrorBanner, ghostBtn, primaryBtn, Skeleton, SkeletonRows, inr } from '../shell/ui'
 import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, type AnyDoc } from '../review/reviewShared'
 import GlobalSearch from '../shared/GlobalSearch'
+import { useRiskMap, RiskDot, } from '../review/AiRiskBadge'
+import type { RiskScore } from '../api/ai'
 
 /**
  * Accountant review queue (intial ui prototypes/review-close.html, Accountant view). Two
@@ -31,6 +33,7 @@ export default function ReviewQueuePage() {
   const [tick, setTick] = useState(0)
 
   const reload = useCallback(() => setTick((n) => n + 1), [])
+  const riskMap = useRiskMap(type)
 
   useEffect(() => {
     let live = true
@@ -85,7 +88,7 @@ export default function ReviewQueuePage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] border border-[var(--line)] rounded-[var(--radius)] overflow-hidden bg-[var(--surface)] min-h-[68vh]">
         <div className={selectedId != null ? 'hidden lg:flex flex-col overflow-y-auto' : 'flex flex-col overflow-y-auto'}>
-          <QueuePane type={type} items={items} selectedId={selectedId} onType={pickType} onSelect={setSelectedId} />
+          <QueuePane type={type} items={items} selectedId={selectedId} onType={pickType} onSelect={setSelectedId} riskMap={riskMap} />
         </div>
         <div className={selectedId == null ? 'hidden lg:block border-t lg:border-t-0 lg:border-l border-[var(--line)] p-4 sm:p-6 overflow-y-auto' : 'block border-t lg:border-t-0 lg:border-l border-[var(--line)] p-4 sm:p-6 overflow-y-auto'}>
           {selectedId == null
@@ -113,6 +116,7 @@ function QueuePane(props: {
   selectedId: number | null
   onType: (t: ReviewType) => void
   onSelect: (id: number) => void
+  riskMap: Map<number, RiskScore>
 }) {
   const { items } = props
   return (
@@ -143,13 +147,13 @@ function QueuePane(props: {
       )}
 
       {(items ?? []).map((it) => (
-        <QueueRow key={it.id} it={it} selected={props.selectedId === it.id} onSelect={() => props.onSelect(it.id)} />
+        <QueueRow key={it.id} it={it} selected={props.selectedId === it.id} onSelect={() => props.onSelect(it.id)} risk={props.riskMap.get(it.id)} />
       ))}
     </div>
   )
 }
 
-export function QueueRow({ it, selected, onSelect }: { it: ReviewQueueItem; selected: boolean; onSelect: () => void }) {
+export function QueueRow({ it, selected, onSelect, risk }: { it: ReviewQueueItem; selected: boolean; onSelect: () => void; risk?: RiskScore }) {
   return (
     <button type="button" onClick={onSelect}
       style={{
@@ -168,10 +172,11 @@ export function QueueRow({ it, selected, onSelect }: { it: ReviewQueueItem; sele
       <div style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>
         {it.categoryName} · <strong style={{ fontVariantNumeric: 'tabular-nums' }}>{inr(it.amount)}</strong>
       </div>
-      {(it.overLimit || it.hasOverride) && (
+      {(it.overLimit || it.hasOverride || (risk && risk.score > 0)) && (
         <div style={{ display: 'flex', gap: 5, marginTop: 2 }}>
           {it.hasOverride && <Tag>Overridden</Tag>}
           {it.overLimit && <Tag>Above limit</Tag>}
+          {risk && risk.score > 0 && <RiskDot risk={risk} />}
         </div>
       )}
     </button>

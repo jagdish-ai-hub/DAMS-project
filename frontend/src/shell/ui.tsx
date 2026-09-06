@@ -152,6 +152,7 @@ export function TextInput(props: {
   required?: boolean
   maxLength?: number
   disabled?: boolean
+  autoFocus?: boolean
 }) {
   return (
     <input
@@ -161,6 +162,7 @@ export function TextInput(props: {
       required={props.required}
       maxLength={props.maxLength}
       disabled={props.disabled}
+      autoFocus={props.autoFocus}
       onChange={(e) => props.onChange(e.target.value)}
       style={{ ...inputStyle, background: props.disabled ? 'var(--bg)' : '#fff' }}
     />

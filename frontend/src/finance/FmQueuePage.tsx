@@ -7,6 +7,8 @@ import { jobCardsApi } from '../api/jobCards'
 import { card, ErrorBanner, ghostBtn, primaryBtn, inputStyle, Modal, Skeleton, SkeletonRows, inr } from '../shell/ui'
 import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, type AnyDoc } from '../review/reviewShared'
 import GlobalSearch from '../shared/GlobalSearch'
+import AiClaimBanner from './AiClaimBanner'
+import { useRiskMap, RiskDot } from '../review/AiRiskBadge'
 
 /**
  * Finance Manager queue (intial ui prototypes/review-close.html, FM view). Approve / query /
@@ -28,6 +30,7 @@ export default function FmQueuePage() {
   const [tick, setTick] = useState(0)
 
   const reload = useCallback(() => setTick((n) => n + 1), [])
+  const riskMap = useRiskMap(type)
 
   useEffect(() => {
     let live = true
@@ -138,6 +141,8 @@ export default function FmQueuePage() {
         </div>
       )}
 
+      {type === 'receipt' && <AiClaimBanner />}
+
       <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] border border-[var(--line)] rounded-[var(--radius)] overflow-hidden bg-[var(--surface)] min-h-[68vh]">
         <div className={selectedId != null ? 'hidden lg:flex flex-col overflow-y-auto' : 'flex flex-col overflow-y-auto'}>
           <div style={{ display: 'flex', padding: 12, gap: 4 }}>
@@ -154,7 +159,7 @@ export default function FmQueuePage() {
             ))}
           </div>
 
-          <Section title="Awaiting final approval" items={queue.awaitingApproval} selectedId={selectedId} onSelect={setSelectedId} />
+          <Section title="Awaiting final approval" items={queue.awaitingApproval} selectedId={selectedId} onSelect={setSelectedId} riskMap={riskMap} />
           {type === 'receipt' && (
             <>
               <Section title="Open warranty / AMC / CG claims" items={queue.openClaims} selectedId={selectedId} onSelect={setSelectedId} />
@@ -189,6 +194,7 @@ function Section(props: {
   selectedId: number | null
   onSelect: (id: number) => void
   plain?: boolean
+  riskMap?: Map<number, import('../api/ai').RiskScore>
 }) {
   return (
     <>
@@ -219,6 +225,9 @@ function Section(props: {
               {it.categoryName} · <strong style={{ fontVariantNumeric: 'tabular-nums' }}>{inr(it.amount)}</strong>
             </div>
             {it.hasOverride && <div style={{ marginTop: 2 }}><Tag>Overridden</Tag></div>}
+            {props.riskMap?.get(it.id) != null && props.riskMap.get(it.id)!.score > 0 && (
+              <div style={{ marginTop: 2 }}><RiskDot risk={props.riskMap.get(it.id)} /></div>
+            )}
           </button>
         )
       })}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { searchApi, type SearchHit } from '../api/search'
+import { aiApi, type SmartHit } from '../api/ai'
 import { customersApi, type CustomerHistory } from '../api/customers'
 import ViewReceiptsModal from '../cashier/ViewReceiptsModal'
 import { Modal, ErrorBanner, SkeletonRows, ghostBtn, inr, initials, fmtDateShort } from '../shell/ui'
@@ -19,18 +20,43 @@ export default function GlobalSearch() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [openId, setOpenId] = useState<number | null>(null)
+  // FEAT-20 smart-search fallback: offered only when the exact search finds nothing.
+  const [smartHits, setSmartHits] = useState<SmartHit[] | null>(null)
+  const [smartIntent, setSmartIntent] = useState('')
+  const [smartLoading, setSmartLoading] = useState(false)
   const seq = useRef(0)
   const boxRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const query = q.trim()
-    if (query.length < 2) { setHits(null); setError(''); setLoading(false); return }
+    if (query.length < 2) { setHits(null); setError(''); setLoading(false); setSmartHits(null); setSmartIntent(''); return }
+    // M3: a new query retires any in-flight smart state — the stale chain's
+    // seq guard would otherwise leave smartLoading stuck on.
+    setSmartLoading(false)
     const mine = ++seq.current
     setLoading(true)
     const t = setTimeout(async () => {
       try {
         const { data } = await searchApi.query(query)
-        if (mine === seq.current) { setHits(data.hits); setError('') }
+        if (mine !== seq.current) return
+        setHits(data.hits)
+        setError('')
+        if (data.hits.length === 0) {
+          // FEAT-20: exact search found nothing — escalate to the tolerant
+          // smart search automatically instead of making the user click again.
+          setSmartLoading(true)
+          try {
+            const smart = await aiApi.smartSearch(query)
+            if (mine === seq.current) { setSmartHits(smart.data.hits); setSmartIntent(smart.data.intent) }
+          } catch (e) {
+            if (mine === seq.current) setError(apiError(e, 'Smart search failed. Try again.'))
+          } finally {
+            if (mine === seq.current) setSmartLoading(false)
+          }
+        } else {
+          setSmartHits(null)
+          setSmartIntent('')
+        }
       } catch (e) {
         if (mine === seq.current) setError(apiError(e, 'Search failed. Try again.'))
       } finally {
@@ -39,6 +65,21 @@ export default function GlobalSearch() {
     }, 250)
     return () => clearTimeout(t)
   }, [q])
+
+  async function trySmartSearch() {
+    const query = q.trim()
+    if (query.length < 2 || smartLoading) return
+    setSmartLoading(true)
+    try {
+      const { data } = await aiApi.smartSearch(query)
+      setSmartHits(data.hits)
+      setSmartIntent(data.intent)
+    } catch (e) {
+      setError(apiError(e, 'Smart search failed. Try again.'))
+    } finally {
+      setSmartLoading(false)
+    }
+  }
 
   useEffect(() => {
     function onDown(e: MouseEvent) {
@@ -71,7 +112,7 @@ export default function GlobalSearch() {
       {q && (
         <button
           type="button"
-          onClick={() => { setQ(''); setHits(null) }}
+          onClick={() => { setQ(''); setHits(null); setSmartHits(null); setSmartIntent('') }}
           aria-label="Clear search"
           style={{
             position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
@@ -99,11 +140,65 @@ export default function GlobalSearch() {
               Searching…
             </div>
           )}
-          {hits != null && hits.length === 0 && (
+          {hits != null && hits.length === 0 && smartHits == null && !smartLoading && (
             <div style={{ padding: 16, textAlign: 'center', color: 'var(--faint)', fontSize: '0.84rem' }}>
-              Nothing matches “{q.trim()}”
+              <div style={{ marginBottom: 10 }}>Nothing matches “{q.trim()}”</div>
+              <button
+                type="button"
+                onClick={trySmartSearch}
+                style={{ ...ghostBtn, minHeight: 36, fontWeight: 700 }}
+              >
+                Retry smart search
+              </button>
             </div>
           )}
+          {hits != null && hits.length === 0 && smartHits == null && smartLoading && (
+            <div style={{ padding: 16, textAlign: 'center', color: 'var(--faint)', fontSize: '0.84rem' }}>
+              Trying smart search…
+            </div>
+          )}
+          {smartHits != null && smartHits.length === 0 && (
+            <div style={{ padding: 16, textAlign: 'center', color: 'var(--faint)', fontSize: '0.84rem' }}>
+              No close matches for “{q.trim()}” — try fewer words.
+            </div>
+          )}
+          {smartHits != null && smartHits.length > 0 && (
+            <div style={{ padding: '8px 14px 4px', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--faint)', fontWeight: 700 }}>
+              Smart results · {smartHits.length}{smartIntent && smartIntent !== 'general' ? ` · ${smartIntent}` : ''}
+            </div>
+          )}
+          {(smartHits ?? []).map((h) => (
+            <button
+              key={`smart-${h.customerId}`}
+              type="button"
+              onClick={() => { setOpenId(h.customerId); setHits(null); setSmartHits(null); setSmartIntent(''); setQ('') }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
+                padding: '10px 14px', background: 'transparent', border: 'none',
+                borderTop: '1px solid var(--line)', cursor: 'pointer',
+              }}
+            >
+              <span style={{
+                width: 30, height: 30, borderRadius: 8, background: 'var(--navy3)', color: 'var(--navy)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontWeight: 700, fontSize: '0.72rem', flexShrink: 0,
+              }}>
+                {initials(h.customerName)}
+              </span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: '0.86rem', fontWeight: 700 }}>{h.customerName}</span>
+                <span style={{ display: 'block', fontSize: '0.74rem', color: 'var(--muted)' }}>
+                  {h.matchField} · {h.whyRank}
+                </span>
+              </span>
+              <span style={{
+                fontSize: '0.76rem', fontWeight: 700, flexShrink: 0,
+                color: h.totalOutstanding > 0 ? 'var(--amber)' : 'var(--green)',
+              }}>
+                {h.totalOutstanding > 0 ? inr(h.totalOutstanding) : 'Clear'}
+              </span>
+            </button>
+          ))}
           {hits != null && hits.map((h) => (
             <button
               key={h.customerId}
