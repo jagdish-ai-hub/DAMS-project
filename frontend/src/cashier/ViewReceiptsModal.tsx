@@ -68,7 +68,14 @@ export default function ViewReceiptsModal(props: {
   }
 
   return (
-    <Modal title="Receipts" subtitle={props.subtitle} onClose={props.onClose}>
+    <Modal
+      title="Receipts"
+      subtitle={props.subtitle}
+      onClose={props.onClose}
+      footer={
+        <button type="button" onClick={props.onClose} style={{ ...ghostBtn, minHeight: 36 }}>Close</button>
+      }
+    >
       <ErrorBanner message={error} />
 
       {items == null ? (
