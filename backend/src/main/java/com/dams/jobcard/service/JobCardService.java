@@ -158,13 +158,11 @@ public class JobCardService {
             if (normalised == null || normalised.isBlank()) {
                 jc.setVehicleId(null);
             } else {
-                // Copied before the lambda: jc is reassigned by the final save() below,
-                // so it is not effectively final and cannot be captured directly.
-                Long customerId = jc.getCustomerId();
+                Long customerIdForVehicle = jc.getCustomerId();
                 Vehicle v = vehicleRepo.findByOrgIdAndVehicleNo(orgId, normalised).orElseGet(() -> {
                     Vehicle nv = new Vehicle();
                     nv.setOrgId(orgId);
-                    nv.setCustomerId(customerId);
+                    nv.setCustomerId(customerIdForVehicle);
                     nv.setVehicleNo(normalised);
                     return vehicleRepo.save(nv);
                 });
