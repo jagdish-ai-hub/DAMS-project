@@ -50,14 +50,20 @@ export function useDraftRecovery<T>(key: string, currentData: T, isDirty: boolea
   const discardDraft = useCallback(() => {
     try {
       localStorage.removeItem(key)
-    } catch {}
+    } catch (err) {
+      // Private-mode browsers throw here — the in-memory draft below still clears.
+      console.warn('Could not discard draft from localStorage:', err)
+    }
     setSavedDraft(null)
   }, [key])
 
   const clearDraft = useCallback(() => {
     try {
       localStorage.removeItem(key)
-    } catch {}
+    } catch (err) {
+      // Private-mode browsers throw here — the in-memory draft below still clears.
+      console.warn('Could not clear draft from localStorage:', err)
+    }
     setSavedDraft(null)
   }, [key])
 
