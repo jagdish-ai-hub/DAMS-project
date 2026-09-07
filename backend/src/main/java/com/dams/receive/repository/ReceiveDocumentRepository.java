@@ -39,6 +39,8 @@ public interface ReceiveDocumentRepository extends JpaRepository<ReceiveDocument
 
     boolean existsByOrgIdAndDocumentNo(Long orgId, String documentNo);
 
+    boolean existsByOrgId(Long orgId);
+
     /** Owner dashboard — receipts still in the review pipeline (SUBMITTED / VERIFIED / QUERIED). */
     @Query("""
         select count(d) from ReceiveDocument d

@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { overrideAuditApi, type OverrideAuditEntry } from '../api/overrideAudit'
 import { branchesApi, type Branch } from '../api/branches'
 import { usersApi, type TeamUser } from '../api/users'
+import { useAuth } from '../auth/useAuth'
 import { card, ErrorBanner, inputStyle, ghostBtn, Skeleton, inr, fmtDate, fmtDateTime, istToday } from '../shell/ui'
+import HelpButton from '../help/HelpButton'
 
 /**
  * Org-wide Override Audit (AGENT.md decision #4) — every amount override in the
@@ -31,6 +33,10 @@ export default function OverrideAuditPage() {
   const [to, setTo] = useState(istToday())
   const [branchId, setBranchId] = useState<number | ''>('')
   const [userId, setUserId] = useState<number | ''>('')
+  const { user } = useAuth()
+  // The team list is Owner-gated server-side — an FM would get an empty dropdown,
+  // so the filter only renders where it can actually list anyone.
+  const canFilterByUser = user?.role === 'OWNER'
 
   const [rows, setRows] = useState<OverrideAuditEntry[] | null>(null)
   const [branches, setBranches] = useState<Branch[]>([])
@@ -40,8 +46,10 @@ export default function OverrideAuditPage() {
 
   useEffect(() => {
     branchesApi.list().then(({ data }) => setBranches(data)).catch(() => {})
-    usersApi.list().then(({ data }) => setUsers(data)).catch(() => {})
-  }, [])
+    if (canFilterByUser) {
+      usersApi.list().then(({ data }) => setUsers(data)).catch(() => {})
+    }
+  }, [canFilterByUser])
 
   useEffect(() => {
     let live = true
@@ -59,7 +67,10 @@ export default function OverrideAuditPage() {
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-      <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)', marginBottom: 4 }}>Override Audit</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)', marginBottom: 4 }}>Override Audit</h1>
+        <HelpButton slug="override-audit" />
+      </div>
       <div style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: 16 }}>
         Every amount override across the organisation — who, when, from what to what, and why.
       </div>
@@ -83,14 +94,16 @@ export default function OverrideAuditPage() {
             </select>
           </Field>
         </div>
-        <div style={{ flex: '1 1 160px', minWidth: 150 }}>
-          <Field label="User">
-            <select value={userId} onChange={(e) => setUserId(e.target.value === '' ? '' : Number(e.target.value))} style={{ ...inputStyle, width: '100%', minHeight: 38 }}>
-              <option value="">Anyone</option>
-              {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
-          </Field>
-        </div>
+        {canFilterByUser && (
+          <div style={{ flex: '1 1 160px', minWidth: 150 }}>
+            <Field label="User">
+              <select value={userId} onChange={(e) => setUserId(e.target.value === '' ? '' : Number(e.target.value))} style={{ ...inputStyle, width: '100%', minHeight: 38 }}>
+                <option value="">Anyone</option>
+                {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            </Field>
+          </div>
+        )}
         <button type="button" onClick={() => setTick((n) => n + 1)} style={{ ...ghostBtn, minHeight: 38, padding: '0 16px' }}>Refresh</button>
       </div>
 

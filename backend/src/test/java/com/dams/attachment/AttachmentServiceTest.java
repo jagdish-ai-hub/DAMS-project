@@ -30,6 +30,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -57,6 +58,8 @@ class AttachmentServiceTest {
             expenseDocumentRepo, expenseLineRepo, storage, branchScope);
         TenantContext.setOrgId(ORG);
         lenient().when(branchScope.currentUserId()).thenReturn(7L);
+        // Every path now honours branch access — default the fixtures to visible.
+        lenient().when(branchScope.canSeeBranch(anyLong())).thenReturn(true);
         lenient().when(storage.put(any(), any(), any())).thenReturn("org/1/receive_document/500/abc");
         lenient().when(attachmentRepo.save(any(Attachment.class))).thenAnswer(inv -> {
             Attachment a = inv.getArgument(0);
@@ -132,10 +135,14 @@ class AttachmentServiceTest {
         Attachment frozen = new Attachment();
         ReflectionTestUtils.setField(frozen, "id", 77L);
         frozen.setOrgId(ORG);
+        frozen.setParentType(ParentType.RECEIVE_DOCUMENT);
+        frozen.setParentId(DOC_ID);
         frozen.setFilename("receipt.pdf");
         frozen.setObjectKey("k");
         frozen.setFrozen(true);
         when(attachmentRepo.findByIdAndOrgId(77L, ORG)).thenReturn(Optional.of(frozen));
+        when(receiveDocumentRepo.findByIdAndOrgId(DOC_ID, ORG))
+            .thenReturn(Optional.of(doc(WorkflowStatus.SUBMITTED, false)));
 
         assertThatThrownBy(() -> service.delete(77L))
             .isInstanceOf(DamsException.class)

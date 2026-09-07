@@ -23,6 +23,7 @@ public record SearchResponse(
         int jobCardCount,
         BigDecimal totalInvoiced,
         BigDecimal totalOutstanding,
-        String matchField        // "Name" | "Phone" | "Vehicle" | "Job Card" | "Invoice" | "Receipt" | "Expense"
+        String matchField,        // "Name" | "Phone" | "Vehicle" | "Job Card" | "Invoice" | "Receipt" | "Expense"
+        List<String> branchCodes   // branch codes of the caller's visible job cards behind this hit
     ) {}
 }

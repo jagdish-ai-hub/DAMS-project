@@ -3,6 +3,7 @@ package com.dams.customer.service;
 import com.dams.branch.entity.Branch;
 import com.dams.branch.repository.BranchRepository;
 import com.dams.common.exception.DamsException;
+import com.dams.common.security.BranchScope;
 import com.dams.config.TenantContext;
 import com.dams.customer.dto.CustomerHistoryResponse;
 import com.dams.customer.dto.CustomerRequest;
@@ -36,6 +37,8 @@ import java.math.BigDecimal;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -60,6 +63,7 @@ public class CustomerService {
     private final SettlementModeRepository settlementModeRepo;
     private final PendingAmountCalculator pendingAmountCalculator;
     private final ReceivePaymentGuard paymentGuard;
+    private final BranchScope branchScope;
 
     public CustomerService(CustomerRepository customerRepo,
                            VehicleRepository vehicleRepo,
@@ -71,7 +75,8 @@ public class CustomerService {
                            SettlementLineRepository settlementLineRepo,
                            SettlementModeRepository settlementModeRepo,
                            PendingAmountCalculator pendingAmountCalculator,
-                           ReceivePaymentGuard paymentGuard) {
+                           ReceivePaymentGuard paymentGuard,
+                           BranchScope branchScope) {
         this.customerRepo = customerRepo;
         this.vehicleRepo = vehicleRepo;
         this.jobCardRepo = jobCardRepo;
@@ -83,6 +88,7 @@ public class CustomerService {
         this.settlementModeRepo = settlementModeRepo;
         this.pendingAmountCalculator = pendingAmountCalculator;
         this.paymentGuard = paymentGuard;
+        this.branchScope = branchScope;
     }
 
     @Transactional(readOnly = true)
@@ -135,7 +141,14 @@ public class CustomerService {
         Customer c = load(id);
 
         List<Vehicle> vehicles = vehicleRepo.findByOrgIdAndCustomerIdOrderByVehicleNoAsc(orgId, id);
-        List<JobCard> jobCards = jobCardRepo.findByOrgIdAndCustomerIdOrderByCreatedAtDesc(orgId, id);
+        // Decision #2: identity (customer, vehicles) is org-wide, but job cards,
+        // documents and totals are branch-scoped — a restricted caller sees only
+        // their branches' cards. Everything below derives from this filtered list.
+        Optional<Set<Long>> allowed = branchScope.allowedBranchIds();
+        List<JobCard> jobCards = jobCardRepo.findByOrgIdAndCustomerIdOrderByCreatedAtDesc(orgId, id)
+            .stream()
+            .filter(j -> allowed.map(set -> set.contains(j.getBranchId())).orElse(true))
+            .toList();
 
         Map<Long, Branch> branches = branchRepo.findByOrgIdOrderByCodeAsc(orgId).stream()
             .collect(Collectors.toMap(Branch::getId, Function.identity()));

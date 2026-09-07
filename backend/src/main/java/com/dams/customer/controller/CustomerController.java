@@ -13,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 /**
  * Customers. Any signed-in org user can read and create — the cashier flow creates a
@@ -32,30 +33,35 @@ public class CustomerController {
 
     @GetMapping
     @Operation(summary = "Search customers by name or phone (?q=)")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER')")
     public List<CustomerResponse> list(@RequestParam(name = "q", required = false) String q) {
         return customerService.search(q);
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Get one customer with their vehicles")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER')")
     public CustomerResponse get(@PathVariable Long id) {
         return customerService.get(id);
     }
 
     @GetMapping("/{id}/history")
     @Operation(summary = "Customer history card — totals, job cards, payment timeline")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER')")
     public CustomerHistoryResponse history(@PathVariable Long id) {
         return customerService.history(id);
     }
 
     @PostMapping
     @Operation(summary = "Create a customer")
+    @PreAuthorize("hasAnyAuthority('CASHIER','ACCOUNTANT','FINANCE_MANAGER')")
     public ResponseEntity<CustomerResponse> create(@Valid @RequestBody CustomerRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(customerService.create(request));
     }
 
     @PatchMapping("/{id}")
     @Operation(summary = "Update a customer's name / phone")
+    @PreAuthorize("hasAnyAuthority('CASHIER','ACCOUNTANT','FINANCE_MANAGER')")
     public CustomerResponse update(@PathVariable Long id, @Valid @RequestBody CustomerRequest request) {
         return customerService.update(id, request);
     }

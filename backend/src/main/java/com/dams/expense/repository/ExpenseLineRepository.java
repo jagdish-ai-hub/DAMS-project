@@ -130,6 +130,22 @@ public interface ExpenseLineRepository extends JpaRepository<ExpenseLine, Long> 
                                           @Param("to") LocalDate to,
                                           @Param("branchId") Long branchId);
 
+    @Query("""
+        select l, d
+        from ExpenseLine l, ExpenseDocument d
+        where l.expenseDocumentId = d.id
+          and l.orgId = :orgId
+          and d.workflowStatus <> com.dams.expense.entity.ExpenseWorkflowStatus.REJECTED
+          and d.branchId in :branchIds
+          and l.transactionDate between :from and :to
+        order by l.transactionDate desc, l.id desc
+        """)
+    List<Object[]> findLinesForExport(
+        @Param("orgId") Long orgId,
+        @Param("branchIds") java.util.Collection<Long> branchIds,
+        @Param("from") LocalDate from,
+        @Param("to") LocalDate to);
+
     /** Super Admin org-purge only. */
     long deleteByOrgId(Long orgId);
 }

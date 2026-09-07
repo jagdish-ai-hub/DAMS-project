@@ -34,6 +34,8 @@ public interface CashDocumentRepository extends JpaRepository<CashDocument, Long
 
     boolean existsByOrgIdAndDocumentNo(Long orgId, String documentNo);
 
+    boolean existsByOrgId(Long orgId);
+
     /** Owner dashboard — cash movements still in the review pipeline (SUBMITTED / VERIFIED / QUERIED). */
     @Query("""
         select count(c) from CashDocument c

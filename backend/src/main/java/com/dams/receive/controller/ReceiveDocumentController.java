@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 /**
  * Receive documents — the cashier's receipt flow. Create (with inline job-card create) or
@@ -42,36 +43,42 @@ public class ReceiveDocumentController {
 
     @PostMapping
     @Operation(summary = "Create a receipt (inline job-card create) or append to the open document")
+    @PreAuthorize("hasAuthority('CASHIER')")
     public ResponseEntity<ReceiveDocumentResponse> create(@Valid @RequestBody CreateReceiptRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(receiveDocumentService.create(request));
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Get a receive document with its lines and derived job-card fields")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER')")
     public ReceiveDocumentResponse get(@PathVariable Long id) {
         return receiveDocumentService.get(id);
     }
 
     @PostMapping("/{id}/submit")
     @Operation(summary = "Submit a draft — assigns the gap-free document number and line ids")
+    @PreAuthorize("hasAuthority('CASHIER')")
     public ReceiveDocumentResponse submit(@PathVariable Long id) {
         return receiveDocumentService.submit(id);
     }
 
     @PostMapping("/{id}/resubmit")
     @Operation(summary = "Resubmit a queried document after fixing it")
+    @PreAuthorize("hasAuthority('CASHIER')")
     public ReceiveDocumentResponse resubmit(@PathVariable Long id) {
         return receiveDocumentService.resubmit(id);
     }
 
     @PostMapping("/{id}/lines")
     @Operation(summary = "Add Payment — append one settlement line to the open document")
+    @PreAuthorize("hasAuthority('CASHIER')")
     public ReceiveDocumentResponse addLine(@PathVariable Long id, @Valid @RequestBody SettlementLineInput input) {
         return receiveDocumentService.addLine(id, input);
     }
 
     @PatchMapping("/{id}/lines/{lineNo}")
     @Operation(summary = "Edit a settlement line (draft or queried documents only)")
+    @PreAuthorize("hasAuthority('CASHIER')")
     public ReceiveDocumentResponse updateLine(@PathVariable Long id, @PathVariable Integer lineNo,
                                               @Valid @RequestBody SettlementLineInput input) {
         return receiveDocumentService.updateLine(id, lineNo, input);
@@ -79,6 +86,7 @@ public class ReceiveDocumentController {
 
     @DeleteMapping("/{id}/lines/{lineNo}")
     @Operation(summary = "Remove a settlement line (draft or queried documents only)")
+    @PreAuthorize("hasAuthority('CASHIER')")
     public ReceiveDocumentResponse deleteLine(@PathVariable Long id, @PathVariable Integer lineNo) {
         return receiveDocumentService.deleteLine(id, lineNo);
     }
@@ -87,6 +95,7 @@ public class ReceiveDocumentController {
 
     @PostMapping(value = "/{id}/attachments", consumes = "multipart/form-data")
     @Operation(summary = "Attach a PDF/image receipt to the whole document")
+    @PreAuthorize("hasAnyAuthority('CASHIER','ACCOUNTANT','FINANCE_MANAGER')")
     public ResponseEntity<AttachmentResponse> attachToDocument(@PathVariable Long id,
                                                                @RequestParam("file") MultipartFile file) {
         AttachmentResponse saved = attachmentService.upload(ParentType.RECEIVE_DOCUMENT, id, file);
@@ -95,12 +104,14 @@ public class ReceiveDocumentController {
 
     @GetMapping("/{id}/attachments")
     @Operation(summary = "List the document's attachments")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER')")
     public List<AttachmentResponse> documentAttachments(@PathVariable Long id) {
         return attachmentService.list(ParentType.RECEIVE_DOCUMENT, id);
     }
 
     @PostMapping(value = "/{id}/lines/{lineNo}/attachments", consumes = "multipart/form-data")
     @Operation(summary = "Attach a PDF/image receipt to one settlement line")
+    @PreAuthorize("hasAnyAuthority('CASHIER','ACCOUNTANT','FINANCE_MANAGER')")
     public ResponseEntity<AttachmentResponse> attachToLine(@PathVariable Long id, @PathVariable Integer lineNo,
                                                            @RequestParam("file") MultipartFile file) {
         Long settlementLineId = receiveDocumentService.settlementLineId(id, lineNo);
@@ -110,6 +121,7 @@ public class ReceiveDocumentController {
 
     @GetMapping("/{id}/lines/{lineNo}/attachments")
     @Operation(summary = "List a settlement line's attachments")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER')")
     public List<AttachmentResponse> lineAttachments(@PathVariable Long id, @PathVariable Integer lineNo) {
         Long settlementLineId = receiveDocumentService.settlementLineId(id, lineNo);
         return attachmentService.list(ParentType.SETTLEMENT_LINE, settlementLineId);

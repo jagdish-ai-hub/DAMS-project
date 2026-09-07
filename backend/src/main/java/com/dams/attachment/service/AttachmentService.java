@@ -75,6 +75,7 @@ public class AttachmentService {
     public AttachmentResponse upload(ParentType parentType, Long parentId, MultipartFile file) {
         Long orgId = TenantContext.requireOrgId();
         OwningDoc owner = resolveOwner(orgId, parentType, parentId);
+        requireVisibleBranch(owner);
 
         if (owner.frozen()) {
             throw DamsException.conflict(
@@ -105,7 +106,8 @@ public class AttachmentService {
     @Transactional(readOnly = true)
     public List<AttachmentResponse> list(ParentType parentType, Long parentId) {
         Long orgId = TenantContext.requireOrgId();
-        resolveOwner(orgId, parentType, parentId); // authorises + 404s
+        OwningDoc owner = resolveOwner(orgId, parentType, parentId); // authorises + 404s
+        requireVisibleBranch(owner);
         return attachmentRepo.findByOrgIdAndParentTypeAndParentIdOrderByUploadedAtAsc(orgId, parentType, parentId)
             .stream().map(AttachmentResponse::of).toList();
     }
@@ -115,6 +117,8 @@ public class AttachmentService {
         Long orgId = TenantContext.requireOrgId();
         Attachment a = attachmentRepo.findByIdAndOrgId(attachmentId, orgId)
             .orElseThrow(() -> DamsException.notFound("Attachment", attachmentId));
+        // Viewing is allowed on frozen documents (View Receipts) — but never across branches.
+        requireVisibleBranch(resolveOwner(orgId, a.getParentType(), a.getParentId()));
         return new SignedUrlResponse(
             storage.signedUrl(a.getObjectKey(), a.getFilename(), a.getContentType()),
             a.getFilename(), a.getContentType());
@@ -125,7 +129,9 @@ public class AttachmentService {
         Long orgId = TenantContext.requireOrgId();
         Attachment a = attachmentRepo.findByIdAndOrgId(attachmentId, orgId)
             .orElseThrow(() -> DamsException.notFound("Attachment", attachmentId));
-        if (a.isFrozen()) {
+        OwningDoc owner = resolveOwner(orgId, a.getParentType(), a.getParentId());
+        requireVisibleBranch(owner);
+        if (owner.frozen() || a.isFrozen()) {
             throw DamsException.conflict("Attachment '" + a.getFilename()
                 + "' is frozen (its document is approved or closed) and cannot be deleted");
         }
@@ -175,7 +181,19 @@ public class AttachmentService {
     // --- helpers ---
 
     /** The document that owns a parent, reduced to what the attachment rules need. */
-    private record OwningDoc(boolean frozen, String label) {}
+    private record OwningDoc(boolean frozen, Long branchId, String label) {
+    }
+
+    /**
+     * Branch gate: an accountant or cashier must never read, add, or remove another
+     * branch's bills — org membership alone is not enough.
+     */
+    private void requireVisibleBranch(OwningDoc owner) {
+        if (!branchScope.canSeeBranch(owner.branchId())) {
+            throw DamsException.forbidden("Document " + owner.label()
+                + " is in branch " + owner.branchId() + ", which is outside your access");
+        }
+    }
 
     private OwningDoc resolveOwner(Long orgId, ParentType parentType, Long parentId) {
         return switch (parentType) {
@@ -199,15 +217,23 @@ public class AttachmentService {
     }
 
     private static OwningDoc receiveOwner(ReceiveDocument doc) {
-        boolean frozen = doc.getWorkflowStatus() == WorkflowStatus.APPROVED
+        // Frozen once approved or closed (settled is the receipt's closed state).
+        // VERIFIED stays open: the FM's approval is still pending.
+        boolean frozen = doc.isSettled()
+            || doc.getWorkflowStatus() == WorkflowStatus.APPROVED
             || doc.getWorkflowStatus() == WorkflowStatus.REJECTED;
-        return new OwningDoc(frozen, doc.getDocumentNo() != null ? doc.getDocumentNo() : "#" + doc.getId());
+        return new OwningDoc(frozen, doc.getBranchId(),
+            doc.getDocumentNo() != null ? doc.getDocumentNo() : "#" + doc.getId());
     }
 
     private static OwningDoc expenseOwner(ExpenseDocument doc) {
-        boolean frozen = doc.getWorkflowStatus() == ExpenseWorkflowStatus.CLOSED
+        // Frozen once approved or closed — an approved-but-unclosed expense still
+        // accepts an explicit close, but no more bill changes.
+        boolean frozen = doc.getWorkflowStatus() == ExpenseWorkflowStatus.APPROVED
+            || doc.getWorkflowStatus() == ExpenseWorkflowStatus.CLOSED
             || doc.getWorkflowStatus() == ExpenseWorkflowStatus.REJECTED;
-        return new OwningDoc(frozen, doc.getDocumentNo() != null ? doc.getDocumentNo() : "#" + doc.getId());
+        return new OwningDoc(frozen, doc.getBranchId(),
+            doc.getDocumentNo() != null ? doc.getDocumentNo() : "#" + doc.getId());
     }
 
     private void validate(MultipartFile file) {

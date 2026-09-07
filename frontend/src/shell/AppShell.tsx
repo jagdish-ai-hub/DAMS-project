@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Routes, Route, Navigate, NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import type { Role } from '../auth/AuthContext'
@@ -19,6 +19,7 @@ import ReviewQueuePage from '../accountant/ReviewQueuePage'
 import FmQueuePage from '../finance/FmQueuePage'
 import OverrideAuditPage from '../overrideaudit/OverrideAuditPage'
 import DashboardPage from '../owner/DashboardPage'
+import AskDamsPanel from '../owner/AskDamsPanel'
 
 type NavItem = { to: string; label: string; end?: boolean }
 
@@ -63,7 +64,26 @@ export default function AppShell() {
   const { user } = useAuth()
   const [helpOpen, setHelpOpen] = useState(false)
   const [navOpen, setNavOpen] = useState(false)
+  const [askOpen, setAskOpen] = useState(false)
   const location = useLocation()
+
+  // Hooks must run before the early return below (rules-of-hooks) — so the
+  // role gate is computed here from the nullable user, not after the return.
+  // Ask DAMS answers from org aggregates the Accountant/Cashier roles must not
+  // see — Owner and FM only, enforced again server-side per endpoint.
+  const canAsk = user != null && (user.role === 'OWNER' || user.role === 'FINANCE_MANAGER')
+
+  useEffect(() => {
+    if (!canAsk) return
+    function onKey(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setAskOpen(true)
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [canAsk])
 
   if (!user) {
     return <Navigate to="/login" replace />
@@ -153,6 +173,20 @@ export default function AppShell() {
         </nav>
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+          {canAsk && (
+            <button
+              type="button"
+              onClick={() => setAskOpen(true)}
+              title="Ask DAMS (Ctrl+K)"
+              style={{
+                background: 'rgba(255,255,255,.14)', color: '#fff', border: 'none', borderRadius: 7,
+                padding: '6px 12px', fontSize: '0.83rem', fontWeight: 600, cursor: 'pointer',
+                minHeight: 32, display: 'flex', alignItems: 'center',
+              }}
+            >
+              ✦ Ask DAMS
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setHelpOpen(true)}
@@ -215,6 +249,10 @@ export default function AppShell() {
         open={helpOpen}
         onClose={() => setHelpOpen(false)}
       />
+
+      {askOpen && canAsk && (
+        <AskDamsPanel scopeLabel="All branches" onClose={() => setAskOpen(false)} />
+      )}
 
       <main style={{ flex: 1, width: '100%', maxWidth: 1200, margin: '0 auto', padding: 'clamp(14px, 2.5vw, 24px) clamp(10px, 2.5vw, 20px)' }}>
         {/* Keyed on the path (not the query string) so each screen fades in on arrival,

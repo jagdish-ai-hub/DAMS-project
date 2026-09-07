@@ -38,6 +38,7 @@ import com.dams.receive.repository.SettlementLineRepository;
 import com.dams.receive.service.ReceiveDocumentService;
 import com.dams.receiver.entity.Receiver;
 import com.dams.receiver.repository.ReceiverRepository;
+import com.dams.review.dto.BulkVerifyResponse;
 import com.dams.review.dto.FmQueue;
 import com.dams.review.dto.ReviewQueueItem;
 import com.dams.user.entity.AppUser;
@@ -310,6 +311,39 @@ public class ReviewService {
             WorkflowStatus.SUBMITTED, WorkflowStatus.VERIFIED, EventType.VERIFIED, null, null, false);
     }
 
+    @Transactional
+    public BulkVerifyResponse bulkVerifyReceipts(List<Long> ids) {
+        Long orgId = TenantContext.requireOrgId();
+        AppUser me = guard.requireAccountant();
+        List<Long> verifiedIds = new ArrayList<>();
+        List<String> skippedReasons = new ArrayList<>();
+
+        if (ids == null || ids.isEmpty()) {
+            return new BulkVerifyResponse(0, List.of(), List.of("No documents selected"));
+        }
+
+        for (Long id : ids) {
+            try {
+                ReceiveDocument doc = loadReceipt(orgId, id);
+                String label = describe(doc);
+                guard.requireCanReview(me, doc.getBranchId(), doc.getCreatedBy(), doc.getLastModifiedBy(), label);
+                if (doc.getWorkflowStatus() != WorkflowStatus.SUBMITTED) {
+                    skippedReasons.add(label + " is " + doc.getWorkflowStatus() + " (needs SUBMITTED)");
+                    continue;
+                }
+                doc.setWorkflowStatus(WorkflowStatus.VERIFIED);
+                receiveDocumentRepo.save(doc);
+                auditService.recordUserEvent(RECEIVE, doc.getId(), doc.getBranchId(), EventType.VERIFIED, me.getId(),
+                    detail("documentNo", doc.getDocumentNo(), "bulk", true));
+                verifiedIds.add(doc.getId());
+                log.info("Bulk verified receipt: orgId={} docId={} by={}", orgId, doc.getId(), me.getId());
+            } catch (Exception e) {
+                skippedReasons.add("#" + id + ": " + e.getMessage());
+            }
+        }
+        return new BulkVerifyResponse(verifiedIds.size(), verifiedIds, skippedReasons);
+    }
+
     /** Query back to the cashier — from the Accountant (SUBMITTED) or the FM (VERIFIED). */
     @Transactional
     public ReceiveDocumentResponse queryReceipt(Long id, String note) {
@@ -375,6 +409,39 @@ public class ReviewService {
     public ExpenseDocumentResponse verifyExpense(Long id) {
         return transitionExpense(id, guard.requireAccountant(),
             ExpenseWorkflowStatus.SUBMITTED, ExpenseWorkflowStatus.VERIFIED, EventType.VERIFIED, null, null);
+    }
+
+    @Transactional
+    public BulkVerifyResponse bulkVerifyExpenses(List<Long> ids) {
+        Long orgId = TenantContext.requireOrgId();
+        AppUser me = guard.requireAccountant();
+        List<Long> verifiedIds = new ArrayList<>();
+        List<String> skippedReasons = new ArrayList<>();
+
+        if (ids == null || ids.isEmpty()) {
+            return new BulkVerifyResponse(0, List.of(), List.of("No documents selected"));
+        }
+
+        for (Long id : ids) {
+            try {
+                ExpenseDocument doc = loadExpense(orgId, id);
+                String label = describe(doc);
+                guard.requireCanReview(me, doc.getBranchId(), doc.getCreatedBy(), doc.getLastModifiedBy(), label);
+                if (doc.getWorkflowStatus() != ExpenseWorkflowStatus.SUBMITTED) {
+                    skippedReasons.add(label + " is " + doc.getWorkflowStatus() + " (needs SUBMITTED)");
+                    continue;
+                }
+                doc.setWorkflowStatus(ExpenseWorkflowStatus.VERIFIED);
+                expenseDocumentRepo.save(doc);
+                auditService.recordUserEvent(EXPENSE, doc.getId(), doc.getBranchId(), EventType.VERIFIED, me.getId(),
+                    detail("documentNo", doc.getDocumentNo(), "bulk", true));
+                verifiedIds.add(doc.getId());
+                log.info("Bulk verified expense: orgId={} docId={} by={}", orgId, doc.getId(), me.getId());
+            } catch (Exception e) {
+                skippedReasons.add("#" + id + ": " + e.getMessage());
+            }
+        }
+        return new BulkVerifyResponse(verifiedIds.size(), verifiedIds, skippedReasons);
     }
 
     @Transactional
@@ -487,6 +554,13 @@ public class ReviewService {
 
         doc.setWorkflowStatus(next);
         receiveDocumentRepo.save(doc);
+        if (next == WorkflowStatus.APPROVED) {
+            // Approved rows freeze with the document (mirrors expense close below) —
+            // the owner predicate alone would still leave already-stored rows deletable.
+            List<Long> lineIds = settlementLineRepo.findByOrgIdAndReceiveDocumentIdOrderByLineNoAsc(orgId, doc.getId())
+                .stream().map(SettlementLine::getId).toList();
+            attachmentService.freezeReceiveDocument(orgId, doc.getId(), lineIds);
+        }
         auditService.recordUserEvent(RECEIVE, doc.getId(), doc.getBranchId(), event, me.getId(),
             detail("documentNo", doc.getDocumentNo(), noteKey, noteVal));
         if (refreshSettle) {
@@ -506,6 +580,12 @@ public class ReviewService {
 
         doc.setWorkflowStatus(next);
         expenseDocumentRepo.save(doc);
+        if (next == ExpenseWorkflowStatus.APPROVED) {
+            // Approved rows freeze with the document (mirrors the receipt transition above).
+            List<Long> lineIds = expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(orgId, doc.getId())
+                .stream().map(ExpenseLine::getId).toList();
+            attachmentService.freezeExpenseDocument(orgId, doc.getId(), lineIds);
+        }
         auditService.recordUserEvent(EXPENSE, doc.getId(), doc.getBranchId(), event, me.getId(),
             detail("documentNo", doc.getDocumentNo(), noteKey, noteVal));
         log.info("ExpenseDocument {}->{}: orgId={} branchId={} docId={} by={}",

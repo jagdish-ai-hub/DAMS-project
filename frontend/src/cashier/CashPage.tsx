@@ -9,6 +9,7 @@ import {
   type DocumentHistoryEntry,
 } from '../api/cash'
 import { card, ErrorBanner, inr, primaryBtn, ghostBtn, inputStyle, Modal, Badge, Skeleton, SkeletonRows, fmtDate, istToday } from '../shell/ui'
+import HelpButton from '../help/HelpButton'
 
 /**
  * Cash page (AGENT.md decision #1 — no HTML mockup). One dedicated per-branch, per-day
@@ -89,6 +90,7 @@ export default function CashPage() {
         <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)' }}>
           Cash{drawer?.branchName ? ` — ${drawer.branchName}` : ''}
         </h1>
+        <HelpButton slug="closing-the-day" />
         <input
           type="date"
           value={date}

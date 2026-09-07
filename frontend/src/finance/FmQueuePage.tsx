@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { receiptsApi, type ReceiveDocument } from '../api/receipts'
 import { expensesApi } from '../api/expenses'
 import { cashApi, type CashDocument } from '../api/cash'
@@ -7,6 +7,10 @@ import { jobCardsApi } from '../api/jobCards'
 import { card, ErrorBanner, ghostBtn, primaryBtn, inputStyle, Modal, Skeleton, SkeletonRows, inr } from '../shell/ui'
 import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, type AnyDoc } from '../review/reviewShared'
 import GlobalSearch from '../shared/GlobalSearch'
+import HelpButton from '../help/HelpButton'
+import { useAuth } from '../auth/useAuth'
+import AiClaimBanner from './AiClaimBanner'
+import { useRiskMap, RiskDot } from '../review/AiRiskBadge'
 
 /**
  * Finance Manager queue (intial ui prototypes/review-close.html, FM view). Approve / query /
@@ -18,6 +22,43 @@ const EMPTY: FmQueue = { awaitingApproval: [], openClaims: [], recentlyClosed: [
 
 type DetailDoc = AnyDoc | CashDocument
 
+export type AgingBucket = 'all' | '0-30' | '31-60' | '61-90' | '90+'
+
+export function claimAgeDays(submittedAt: string | null): number {
+  if (!submittedAt) return 0
+  const ms = Date.now() - new Date(submittedAt).getTime()
+  return Math.max(0, Math.floor(ms / (1000 * 60 * 60 * 24)))
+}
+
+export function getAgingBucket(days: number): '0-30' | '31-60' | '61-90' | '90+' {
+  if (days <= 30) return '0-30'
+  if (days <= 60) return '31-60'
+  if (days <= 90) return '61-90'
+  return '90+'
+}
+
+export function AgingBadge({ days }: { days: number }) {
+  const bucket = getAgingBucket(days)
+  const bg = bucket === '0-30' ? 'var(--green-bg, #DCFCE7)' : bucket === '31-60' ? 'var(--amber-bg, #FEF3C7)' : bucket === '61-90' ? '#FFEDD5' : '#FEE2E2'
+  const color = bucket === '0-30' ? 'var(--green, #166534)' : bucket === '31-60' ? 'var(--amber, #B45309)' : bucket === '61-90' ? '#C2410C' : '#991B1B'
+
+  return (
+    <span style={{
+      fontSize: '0.66rem',
+      fontWeight: 800,
+      padding: '2px 7px',
+      borderRadius: 4,
+      background: bg,
+      color: color,
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 3,
+    }}>
+      ⏱️ {days}d{bucket === '90+' ? ' · Critical' : ''}
+    </span>
+  )
+}
+
 export default function FmQueuePage() {
   const [type, setType] = useState<ReviewType>('receipt')
   const [queue, setQueue] = useState<FmQueue>(EMPTY)
@@ -26,8 +67,15 @@ export default function FmQueuePage() {
   const [error, setError] = useState('')
   const [flash, setFlash] = useState('')
   const [tick, setTick] = useState(0)
+  const [claimBucket, setClaimBucket] = useState<AgingBucket>('all')
 
   const reload = useCallback(() => setTick((n) => n + 1), [])
+  const riskMap = useRiskMap(type)
+
+  const filteredOpenClaims = useMemo(() => {
+    if (claimBucket === 'all') return queue.openClaims
+    return queue.openClaims.filter((c) => getAgingBucket(claimAgeDays(c.submittedAt)) === claimBucket)
+  }, [queue.openClaims, claimBucket])
 
   useEffect(() => {
     let live = true
@@ -49,57 +97,9 @@ export default function FmQueuePage() {
         const { data } = await req
         if (live) setDoc(data as DetailDoc)
       } catch (e) {
-        if (type === 'receipt') {
-          try {
-            const jcRes = await jobCardsApi.get(selectedId)
-            const jc = jcRes.data
-            if (jc && live) {
-              setDoc({
-                id: jc.id,
-                documentNo: jc.reference,
-                workflowStatus: 'CLOSED',
-                settled: true,
-                jobCardId: jc.id,
-                jobCardReference: jc.reference,
-                branchId: jc.branchId,
-                branchCode: jc.branchCode,
-                branchName: jc.branchName,
-                customerId: jc.customerId,
-                customerName: jc.customerName,
-                customerPhone: jc.customerPhone,
-                vehicleNo: jc.vehicleNo,
-                dbmId: jc.dbmId,
-                invoiceNo: jc.invoiceNo,
-                invoiceAmount: jc.invoiceAmount,
-                b2b: jc.b2b,
-                gstNo: jc.gstNo,
-                categoryId: jc.categoryId,
-                categoryName: jc.categoryName,
-                isClaim: jc.isClaim,
-                businessStatusId: jc.businessStatusId,
-                businessStatusName: jc.businessStatusName,
-                pendingAmount: jc.pendingAmount,
-                settledViaClaimClose: jc.settledViaClaimClose,
-                claimFinalAmount: jc.claimFinalAmount,
-                claimOverridden: jc.claimOverridden,
-                claimOverrideReason: jc.claimOverrideReason,
-                totalReceived: jc.claimFinalAmount ?? 0,
-                canRecordPayment: false,
-                createdBy: 0,
-                createdByName: jc.claimClosedByName,
-                lastModifiedBy: null,
-                createdAt: jc.createdAt,
-                submittedAt: jc.claimClosedAt,
-                lines: [],
-                history: [],
-              } as unknown as ReceiveDocument)
-              return
-            }
-          } catch {
-            // fallback to original error
-          }
-        }
-        if (live) setError(apiError(e, 'Could not load that document.'))
+        // No synthetic fallback: queue rows carry real document ids, so a load
+        // failure is a real failure — name it instead of fabricating a record.
+        if (live) setError(apiError(e, `Could not load document #${selectedId}.`))
       }
     }
     load()
@@ -123,7 +123,10 @@ export default function FmQueuePage() {
     <div style={{ maxWidth: 1180, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
         <div>
-          <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)', marginBottom: 4 }}>Approvals & Claims</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)', marginBottom: 4 }}>Approvals & Claims</h1>
+            <HelpButton slug="approving-entries" />
+          </div>
           <div style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
             Give each verified entry final approval, and close warranty / AMC / CG claims.
           </div>
@@ -137,6 +140,8 @@ export default function FmQueuePage() {
           {flash}
         </div>
       )}
+
+      {type === 'receipt' && <AiClaimBanner />}
 
       <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] border border-[var(--line)] rounded-[var(--radius)] overflow-hidden bg-[var(--surface)] min-h-[68vh]">
         <div className={selectedId != null ? 'hidden lg:flex flex-col overflow-y-auto' : 'flex flex-col overflow-y-auto'}>
@@ -154,10 +159,19 @@ export default function FmQueuePage() {
             ))}
           </div>
 
-          <Section title="Awaiting final approval" items={queue.awaitingApproval} selectedId={selectedId} onSelect={setSelectedId} />
+          <Section title="Awaiting final approval" items={queue.awaitingApproval} selectedId={selectedId} onSelect={setSelectedId} riskMap={riskMap} />
           {type === 'receipt' && (
             <>
-              <Section title="Open warranty / AMC / CG claims" items={queue.openClaims} selectedId={selectedId} onSelect={setSelectedId} />
+              <Section
+                title="Open warranty / AMC / CG claims"
+                items={filteredOpenClaims}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                showAging
+                claimFilter={claimBucket}
+                onClaimFilterChange={setClaimBucket}
+                totalCount={queue.openClaims.length}
+              />
               <Section title="Recently closed" items={queue.recentlyClosed} selectedId={selectedId} onSelect={setSelectedId} plain />
             </>
           )}
@@ -165,14 +179,20 @@ export default function FmQueuePage() {
 
         <div className={selectedId == null ? 'hidden lg:block border-t lg:border-t-0 lg:border-l border-[var(--line)] p-4 sm:p-6 overflow-y-auto' : 'block border-t lg:border-t-0 lg:border-l border-[var(--line)] p-4 sm:p-6 overflow-y-auto'}>
           {selectedId == null
-            ? <Overview count={queue.awaitingApproval.length} total={total} openClaims={queue.openClaims.length} type={type} />
+            ? <Overview count={queue.awaitingApproval.length} total={total} openClaimsList={queue.openClaims} type={type} />
             : doc == null
               ? <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <div className="lg:hidden mb-2">
                     <button type="button" onClick={() => setSelectedId(null)} style={{ ...ghostBtn, minHeight: 36, fontWeight: 700 }}>← Back to Queue</button>
                   </div>
-                  <Skeleton width={200} height={20} />
-                  <SkeletonRows rows={5} />
+                  {error ? (
+                    <div style={{ ...card, color: 'var(--red)', fontSize: '0.85rem' }}>{error}</div>
+                  ) : (
+                    <>
+                      <Skeleton width={200} height={20} />
+                      <SkeletonRows rows={5} />
+                    </>
+                  )}
                 </div>
               : <FmDetail type={type} doc={doc} onDone={afterAction} onError={setError} onBack={() => setSelectedId(null)} />}
         </div>
@@ -189,15 +209,45 @@ function Section(props: {
   selectedId: number | null
   onSelect: (id: number) => void
   plain?: boolean
+  riskMap?: Map<number, import('../api/ai').RiskScore>
+  showAging?: boolean
+  claimFilter?: AgingBucket
+  onClaimFilterChange?: (bucket: AgingBucket) => void
+  totalCount?: number
 }) {
   return (
     <>
       <div style={{ padding: '10px 14px 6px', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--faint)', fontWeight: 700 }}>
         {props.title}
         <span style={{ background: 'var(--gray-bg)', color: 'var(--gray)', borderRadius: 999, fontSize: '0.66rem', padding: '1px 7px', marginLeft: 6 }}>
-          {props.items.length}
+          {props.totalCount ?? props.items.length}
         </span>
       </div>
+
+      {props.showAging && props.onClaimFilterChange && (
+        <div style={{ display: 'flex', gap: 4, padding: '2px 14px 8px', flexWrap: 'wrap' }}>
+          {(['all', '0-30', '31-60', '61-90', '90+'] as const).map((b) => (
+            <button
+              key={b}
+              type="button"
+              onClick={() => props.onClaimFilterChange!(b)}
+              style={{
+                border: '1px solid var(--line)',
+                borderRadius: 4,
+                padding: '2px 6px',
+                fontSize: '0.68rem',
+                fontWeight: props.claimFilter === b ? 700 : 500,
+                background: props.claimFilter === b ? 'var(--navy)' : 'transparent',
+                color: props.claimFilter === b ? '#fff' : 'var(--muted)',
+                cursor: 'pointer',
+              }}
+            >
+              {b === 'all' ? 'All' : `${b}d`}
+            </button>
+          ))}
+        </div>
+      )}
+
       {props.items.map((it) => {
         const sel = props.selectedId === it.id
         return (
@@ -218,7 +268,13 @@ function Section(props: {
             <div style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>
               {it.categoryName} · <strong style={{ fontVariantNumeric: 'tabular-nums' }}>{inr(it.amount)}</strong>
             </div>
-            {it.hasOverride && <div style={{ marginTop: 2 }}><Tag>Overridden</Tag></div>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+              {it.hasOverride && <Tag>Overridden</Tag>}
+              {props.showAging && <AgingBadge days={claimAgeDays(it.submittedAt)} />}
+              {props.riskMap?.get(it.id) != null && props.riskMap.get(it.id)!.score > 0 && (
+                <RiskDot risk={props.riskMap.get(it.id)} />
+              )}
+            </div>
           </button>
         )
       })}
@@ -226,7 +282,32 @@ function Section(props: {
   )
 }
 
-function Overview({ count, total, openClaims, type }: { count: number; total: number; openClaims: number; type: ReviewType }) {
+function Overview({
+  count,
+  total,
+  openClaimsList,
+  type,
+}: {
+  count: number
+  total: number
+  openClaimsList: ReviewQueueItem[]
+  type: ReviewType
+}) {
+  const agingCounts = useMemo(() => {
+    let b0_30 = 0
+    let b31_60 = 0
+    let b61_90 = 0
+    let b90_plus = 0
+    for (const c of openClaimsList) {
+      const days = claimAgeDays(c.submittedAt)
+      if (days <= 30) b0_30++
+      else if (days <= 60) b31_60++
+      else if (days <= 90) b61_90++
+      else b90_plus++
+    }
+    return { b0_30, b31_60, b61_90, b90_plus }
+  }, [openClaimsList])
+
   return (
     <div>
       <h2 style={{ fontSize: '1.1rem', color: 'var(--navy)' }}>Finance Manager overview</h2>
@@ -242,11 +323,42 @@ function Overview({ count, total, openClaims, type }: { count: number; total: nu
         {type === 'receipt' && (
           <div style={{ ...card, borderTop: '3px solid var(--purple, #6B3FA0)' }}>
             <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>Open claims</div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 800, marginTop: 4 }}>{openClaims}</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 800, marginTop: 4 }}>{openClaimsList.length}</div>
             <div style={{ fontSize: '0.76rem', color: 'var(--faint)' }}>awaiting your close</div>
           </div>
         )}
       </div>
+
+      {type === 'receipt' && openClaimsList.length > 0 && (
+        <div style={{ ...card, marginTop: 16 }}>
+          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--navy)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span>⏱️</span> OEM Claim Aging Buckets
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 8 }}>
+            <div style={{ padding: '8px 10px', background: 'var(--green-bg, #DCFCE7)', borderRadius: 6, border: '1px solid #BBF7D0' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 600, color: '#166534' }}>0–30 Days</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#166534', marginTop: 2 }}>{agingCounts.b0_30}</div>
+              <div style={{ fontSize: '0.62rem', color: '#15803D' }}>Normal</div>
+            </div>
+            <div style={{ padding: '8px 10px', background: 'var(--amber-bg, #FEF3C7)', borderRadius: 6, border: '1px solid #FDE68A' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 600, color: '#B45309' }}>31–60 Days</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#B45309', marginTop: 2 }}>{agingCounts.b31_60}</div>
+              <div style={{ fontSize: '0.62rem', color: '#B45309' }}>Follow-up</div>
+            </div>
+            <div style={{ padding: '8px 10px', background: '#FFEDD5', borderRadius: 6, border: '1px solid #FED7AA' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 600, color: '#C2410C' }}>61–90 Days</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#C2410C', marginTop: 2 }}>{agingCounts.b61_90}</div>
+              <div style={{ fontSize: '0.62rem', color: '#C2410C' }}>Escalate</div>
+            </div>
+            <div style={{ padding: '8px 10px', background: '#FEE2E2', borderRadius: 6, border: '1px solid #FECACA' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 600, color: '#991B1B' }}>90+ Days</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#991B1B', marginTop: 2 }}>{agingCounts.b90_plus}</div>
+              <div style={{ fontSize: '0.62rem', color: '#B91C1C' }}>Critical</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ textAlign: 'center', fontSize: '0.82rem', color: 'var(--faint)', marginTop: 22, paddingTop: 16, borderTop: '1px dashed var(--line)' }}>
         Select an item from the list to review it.
       </div>
@@ -275,7 +387,13 @@ function FmDetail(props: {
   const [boxText, setBoxText] = useState('')
   const [claimModal, setClaimModal] = useState(false)
 
-  const canApprove = wf === 'VERIFIED'
+  const { user } = useAuth()
+  // Maker-checker mirror (claim close needs none — an FM can never be a maker by
+  // construction, and the service does not check it there either).
+  const isMaker = user != null && (user.userId === doc.createdBy
+    || (doc.lastModifiedBy != null && user.userId === doc.lastModifiedBy))
+  const canApprove = wf === 'VERIFIED' && !isMaker
+
   const isOpenClaim = !!receipt && receipt.isClaim && wf === 'APPROVED' && !receipt.settledViaClaimClose
   const isClosedClaim = !!receipt && receipt.settledViaClaimClose
 
@@ -332,7 +450,9 @@ function FmDetail(props: {
 
       {!canApprove && !isOpenClaim ? (
         <div style={{ ...card, textAlign: 'center', color: 'var(--faint)', fontSize: '0.84rem' }}>
-          No action needed from you right now.
+          {isMaker
+            ? 'You created or last edited this entry — maker-checker requires another reviewer.'
+            : 'No action needed from you right now.'}
         </div>
       ) : (
         <div style={{ ...card }}>

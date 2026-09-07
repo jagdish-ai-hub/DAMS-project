@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { branchesApi, type Branch, type BranchRequest } from '../api/branches'
 import { usersApi, type TeamUser, type UserRequest } from '../api/users'
 import type { Role } from '../auth/AuthContext'
+import HelpButton from '../help/HelpButton'
 import {
   Badge, ErrorBanner, Field, Modal, TextInput,
   card, cardTitle, ghostBtn, inputStyle, primaryBtn, td, th,
@@ -47,7 +48,10 @@ export default function TeamAndBranchesPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <h1 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--navy)' }}>Team &amp; Branches</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h1 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--navy)' }}>Team &amp; Branches</h1>
+        <HelpButton slug="team-and-branches" />
+      </div>
       <ErrorBanner message={error} />
 
       {/* Branches */}

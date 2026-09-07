@@ -92,7 +92,7 @@ public class JobCardService {
 
     @Transactional(readOnly = true)
     public JobCardResponse get(Long id) {
-        return toResponse(load(id));
+        return toResponse(loadVisible(id));
     }
 
     @Transactional
@@ -133,7 +133,7 @@ public class JobCardService {
     @Transactional
     public JobCardResponse patch(Long id, JobCardPatchRequest request) {
         Long orgId = TenantContext.requireOrgId();
-        JobCard jc = load(id);
+        JobCard jc = loadVisible(id);
 
         // Free-to-edit references
         if (request.getInvoiceNo() != null) {
@@ -304,6 +304,19 @@ public class JobCardService {
     private JobCard load(Long id) {
         return jobCardRepo.findByIdAndOrgId(id, TenantContext.requireOrgId())
             .orElseThrow(() -> DamsException.notFound("Job card", id));
+    }
+
+    /**
+     * load() plus the branch gate: with the cashier toggle OFF a cashier (or a
+     * branch-scoped accountant) must not read or mutate another branch's job card.
+     */
+    private JobCard loadVisible(Long id) {
+        JobCard jc = load(id);
+        if (!branchScope.canSeeBranch(jc.getBranchId())) {
+            throw DamsException.forbidden(
+                "Job card " + id + " is in branch " + jc.getBranchId() + ", which is outside your access");
+        }
+        return jc;
     }
 
     private JobCardResponse toResponse(JobCard jc) {

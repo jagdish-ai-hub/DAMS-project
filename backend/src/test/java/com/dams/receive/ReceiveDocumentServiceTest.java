@@ -250,6 +250,53 @@ class ReceiveDocumentServiceTest {
         verify(settlementLineRepo, never()).save(any());
     }
 
+    @Test
+    void submit_refusesCashLineInLockedDay_withoutConsumingNumber() {
+        ReceiveDocument draft = draftDoc();
+        when(receiveDocumentRepo.findByIdAndOrgId(500L, ORG)).thenReturn(Optional.of(draft));
+        when(settlementLineRepo.findByOrgIdAndReceiveDocumentIdOrderByLineNoAsc(ORG, 500L))
+            .thenReturn(List.of(persistedLine(1)));
+        SettlementMode cashMode = mode();
+        cashMode.setCash(true);
+        lenient().when(settlementModeRepo.findByOrgIdOrderBySortOrderAscIdAsc(ORG))
+            .thenReturn(List.of(cashMode));
+        org.mockito.Mockito.doThrow(DamsException.conflict("A cash settlement line dated 2026-08-30 cannot be recorded"))
+            .when(cashDateLock).requireCashLineDateOpen(eq(ORG), eq(BRANCH_ID), eq(LocalDate.of(2026, 8, 30)), eq(true), eq("settlement"));
+
+        assertThatThrownBy(() -> service.submit(500L))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("cash settlement line");
+        // The lock check itself ran (not some earlier guard)…
+        verify(cashDateLock).requireCashLineDateOpen(eq(ORG), eq(BRANCH_ID),
+            eq(LocalDate.of(2026, 8, 30)), eq(true), eq("settlement"));
+        // …and the refusal happens before numbering, so no document number is consumed.
+        verify(documentNumberService, never()).nextNumber(any(), any(), any());
+        assertThat(draft.getDocumentNo()).isNull();
+        assertThat(draft.getWorkflowStatus()).isEqualTo(WorkflowStatus.DRAFT);
+    }
+
+    @Test
+    void lineNumbers_neverReused_afterDelete() {
+        ReceiveDocument doc = openDoc();
+        doc.setWorkflowStatus(WorkflowStatus.QUERIED);
+        when(receiveDocumentRepo.findByIdAndOrgId(500L, ORG)).thenReturn(Optional.of(doc));
+
+        service.addLine(500L, lineInput(new BigDecimal("100")));
+        service.addLine(500L, lineInput(new BigDecimal("200")));
+
+        SettlementLine first = persistedLine(1);
+        when(settlementLineRepo.findByOrgIdAndReceiveDocumentIdAndLineNo(ORG, 500L, 1))
+            .thenReturn(Optional.of(first));
+        service.deleteLine(500L, 1);
+
+        service.addLine(500L, lineInput(new BigDecimal("300")));
+
+        ArgumentCaptor<SettlementLine> lines = ArgumentCaptor.forClass(SettlementLine.class);
+        verify(settlementLineRepo, org.mockito.Mockito.times(3)).save(lines.capture());
+        assertThat(lines.getAllValues()).extracting(SettlementLine::getLineNo).containsExactly(1, 2, 3);
+        assertThat(doc.getLineNoSeq()).isEqualTo(3);
+    }
+
     // --- fixtures ---
 
     private static JobCard jobCard(BigDecimal invoice) {

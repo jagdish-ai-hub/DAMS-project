@@ -13,6 +13,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 /**
  * Job cards (cases). Any signed-in org user can create and read; a CASHIER's job card
@@ -35,24 +36,28 @@ public class JobCardController {
 
     @PostMapping
     @Operation(summary = "Create a job card (inline customer/vehicle create supported)")
+    @PreAuthorize("hasAnyAuthority('CASHIER','ACCOUNTANT','FINANCE_MANAGER')")
     public ResponseEntity<JobCardResponse> create(@Valid @RequestBody JobCardCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(jobCardService.create(request));
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Get a job card with derived fields (reference, is_claim, pending_amount)")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER')")
     public JobCardResponse get(@PathVariable Long id) {
         return jobCardService.get(id);
     }
 
     @PatchMapping("/{id}")
     @Operation(summary = "Update invoice / dbm references, or category / business status while the claim is open")
+    @PreAuthorize("hasAnyAuthority('CASHIER','ACCOUNTANT','FINANCE_MANAGER')")
     public JobCardResponse patch(@PathVariable Long id, @Valid @RequestBody JobCardPatchRequest request) {
         return jobCardService.patch(id, request);
     }
 
     @PostMapping("/{id}/close-claim")
     @Operation(summary = "Finance Manager: finalise a warranty / AMC / CG claim (immutable; optional final override)")
+    @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
     public JobCardResponse closeClaim(@PathVariable Long id, @Valid @RequestBody CloseClaimRequest request) {
         return claimCloseService.closeClaim(id, request);
     }

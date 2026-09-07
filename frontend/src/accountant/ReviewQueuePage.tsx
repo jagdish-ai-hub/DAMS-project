@@ -6,6 +6,12 @@ import { reviewApi, type ReviewQueueItem, type ReviewType } from '../api/review'
 import { card, ErrorBanner, ghostBtn, primaryBtn, Skeleton, SkeletonRows, inr } from '../shell/ui'
 import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, type AnyDoc } from '../review/reviewShared'
 import GlobalSearch from '../shared/GlobalSearch'
+import HelpButton from '../help/HelpButton'
+import { useAuth } from '../auth/useAuth'
+import { Download } from 'lucide-react'
+import ExportModal from '../shared/ExportModal'
+import { useRiskMap, RiskDot, } from '../review/AiRiskBadge'
+import type { RiskScore } from '../api/ai'
 
 /**
  * Accountant review queue (intial ui prototypes/review-close.html, Accountant view). Two
@@ -29,8 +35,12 @@ export default function ReviewQueuePage() {
   const [error, setError] = useState('')
   const [flash, setFlash] = useState('')
   const [tick, setTick] = useState(0)
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<number[]>([])
+  const [bulkBusy, setBulkBusy] = useState(false)
 
   const reload = useCallback(() => setTick((n) => n + 1), [])
+  const riskMap = useRiskMap(type)
 
   useEffect(() => {
     let live = true
@@ -53,8 +63,43 @@ export default function ReviewQueuePage() {
   function pickType(t: ReviewType) {
     setType(t)
     setSelectedId(null)
+    setSelectedIds([])
     setDoc(null)
     setFlash('')
+  }
+
+  async function handleBulkVerify() {
+    if (selectedIds.length === 0 || type === 'cash') return
+    setBulkBusy(true)
+    setError('')
+    try {
+      const res = await reviewApi.bulkVerify(type, selectedIds)
+      const data = res.data
+      setFlash(`Bulk verified ${data.verifiedCount} ${type}s successfully.${data.skippedCount > 0 ? ` (${data.skippedCount} skipped due to maker-checker or state)` : ''}`)
+      setTimeout(() => setFlash(''), 4000)
+      setSelectedIds([])
+      reload()
+    } catch (e) {
+      setError(apiError(e, 'Could not bulk verify items.'))
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  function toggleSelect(id: number) {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    )
+  }
+
+  function toggleSelectAll() {
+    if (!items || items.length === 0) return
+    const allSelected = items.every((it) => selectedIds.includes(it.id))
+    if (allSelected) {
+      setSelectedIds([])
+    } else {
+      setSelectedIds(items.map((it) => it.id))
+    }
   }
 
   function afterAction(message: string, keepOpen: boolean) {
@@ -68,12 +113,34 @@ export default function ReviewQueuePage() {
     <div style={{ maxWidth: 1180, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
         <div>
-          <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)', marginBottom: 4 }}>Review Queue</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)', marginBottom: 4 }}>Review Queue</h1>
+            <HelpButton slug="reviewing-the-queue" />
+          </div>
           <div style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
-            Verify, query, reject or adjust each submitted entry. A verified entry moves on to the Finance Manager.
+            Verify, query, or adjust each submitted entry. A verified entry moves on to the Finance Manager.
           </div>
         </div>
-        <GlobalSearch />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => setShowExportModal(true)}
+            style={{
+              ...ghostBtn,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              minHeight: 36,
+              padding: '6px 12px',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+            }}
+          >
+            <Download size={15} />
+            <span>Export Tally / CSV</span>
+          </button>
+          <GlobalSearch />
+        </div>
       </div>
 
       <ErrorBanner message={error} />
@@ -85,7 +152,20 @@ export default function ReviewQueuePage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] border border-[var(--line)] rounded-[var(--radius)] overflow-hidden bg-[var(--surface)] min-h-[68vh]">
         <div className={selectedId != null ? 'hidden lg:flex flex-col overflow-y-auto' : 'flex flex-col overflow-y-auto'}>
-          <QueuePane type={type} items={items} selectedId={selectedId} onType={pickType} onSelect={setSelectedId} />
+          <QueuePane
+            type={type}
+            items={items}
+            selectedId={selectedId}
+            onType={pickType}
+            onSelect={setSelectedId}
+            riskMap={riskMap}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
+            onToggleSelectAll={toggleSelectAll}
+            onClearSelected={() => setSelectedIds([])}
+            onBulkVerify={handleBulkVerify}
+            bulkBusy={bulkBusy}
+          />
         </div>
         <div className={selectedId == null ? 'hidden lg:block border-t lg:border-t-0 lg:border-l border-[var(--line)] p-4 sm:p-6 overflow-y-auto' : 'block border-t lg:border-t-0 lg:border-l border-[var(--line)] p-4 sm:p-6 overflow-y-auto'}>
           {selectedId == null
@@ -101,6 +181,8 @@ export default function ReviewQueuePage() {
               : <RecordDetail type={type} doc={doc} onDone={afterAction} onBack={() => setSelectedId(null)} />}
         </div>
       </div>
+
+      {showExportModal && <ExportModal onClose={() => setShowExportModal(false)} />}
     </div>
   )
 }
@@ -113,6 +195,13 @@ function QueuePane(props: {
   selectedId: number | null
   onType: (t: ReviewType) => void
   onSelect: (id: number) => void
+  riskMap: Map<number, RiskScore>
+  selectedIds: number[]
+  onToggleSelect: (id: number) => void
+  onToggleSelectAll: () => void
+  onClearSelected: () => void
+  onBulkVerify: () => void
+  bulkBusy: boolean
 }) {
   const { items } = props
   return (
@@ -137,44 +226,164 @@ function QueuePane(props: {
         </span>
       </div>
 
+      {props.type !== 'cash' && items && items.length > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '6px 14px', borderBottom: '1px solid var(--line)', background: 'var(--bg)',
+          fontSize: '0.76rem',
+        }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600 }}>
+            <input
+              type="checkbox"
+              checked={items.length > 0 && items.every((it) => props.selectedIds.includes(it.id))}
+              onChange={props.onToggleSelectAll}
+            />
+            <span>Select All ({items.length})</span>
+          </label>
+          {props.selectedIds.length > 0 && (
+            <span style={{ color: 'var(--navy)', fontWeight: 700 }}>
+              {props.selectedIds.length} selected
+            </span>
+          )}
+        </div>
+      )}
+
       {items == null && <div style={{ padding: 14 }}><SkeletonRows rows={5} height={52} /></div>}
       {items != null && items.length === 0 && (
         <p style={{ padding: 14, color: 'var(--faint)', fontSize: '0.82rem' }}>Nothing waiting on you — the queue is clear.</p>
       )}
 
       {(items ?? []).map((it) => (
-        <QueueRow key={it.id} it={it} selected={props.selectedId === it.id} onSelect={() => props.onSelect(it.id)} />
+        <QueueRow
+          key={it.id}
+          it={it}
+          selected={props.selectedId === it.id}
+          onSelect={() => props.onSelect(it.id)}
+          risk={props.riskMap.get(it.id)}
+          checked={props.type !== 'cash' ? props.selectedIds.includes(it.id) : undefined}
+          onToggleCheck={props.type !== 'cash' ? () => props.onToggleSelect(it.id) : undefined}
+        />
       ))}
+
+      {props.type !== 'cash' && props.selectedIds.length > 0 && (
+        <div style={{
+          position: 'sticky', bottom: 0, zIndex: 10,
+          background: 'var(--navy)', color: '#fff', padding: '10px 14px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+          boxShadow: '0 -2px 10px rgba(0,0,0,0.15)',
+        }}>
+          <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>
+            {props.selectedIds.length} item{props.selectedIds.length === 1 ? '' : 's'} selected
+          </span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              type="button"
+              onClick={props.onClearSelected}
+              style={{ ...ghostBtn, color: '#fff', border: '1px solid rgba(255,255,255,0.3)', minHeight: 30, padding: '3px 10px', fontSize: '0.75rem' }}
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={props.onBulkVerify}
+              disabled={props.bulkBusy}
+              style={{
+                background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 6,
+                padding: '4px 12px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', minHeight: 30,
+              }}
+            >
+              {props.bulkBusy ? 'Verifying…' : `Verify (${props.selectedIds.length})`}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-export function QueueRow({ it, selected, onSelect }: { it: ReviewQueueItem; selected: boolean; onSelect: () => void }) {
+export function QueueRow({
+  it,
+  selected,
+  onSelect,
+  risk,
+  checked,
+  onToggleCheck,
+}: {
+  it: ReviewQueueItem
+  selected: boolean
+  onSelect: () => void
+  risk?: RiskScore
+  checked?: boolean
+  onToggleCheck?: () => void
+}) {
   return (
-    <button type="button" onClick={onSelect}
+    <div
       style={{
-        textAlign: 'left', border: 'none', borderBottom: '1px solid var(--line)', cursor: 'pointer',
+        borderBottom: '1px solid var(--line)',
         borderLeft: `3px solid ${selected ? 'var(--navy)' : 'transparent'}`,
-        background: selected ? 'var(--navy3)' : 'transparent', padding: '12px 14px', minHeight: 44,
-        display: 'flex', flexDirection: 'column', gap: 3, width: '100%',
-      }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-        <span style={{ fontFamily: 'Consolas, monospace', fontSize: '0.7rem', fontWeight: 700, color: 'var(--navy2)' }}>
-          {it.documentNo ?? 'draft'}
-        </span>
-        <span style={{ marginLeft: 'auto', fontSize: '0.68rem', color: 'var(--faint)' }}>{it.branchCode}</span>
-      </div>
-      <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{it.partyName}</div>
-      <div style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>
-        {it.categoryName} · <strong style={{ fontVariantNumeric: 'tabular-nums' }}>{inr(it.amount)}</strong>
-      </div>
-      {(it.overLimit || it.hasOverride) && (
-        <div style={{ display: 'flex', gap: 5, marginTop: 2 }}>
-          {it.hasOverride && <Tag>Overridden</Tag>}
-          {it.overLimit && <Tag>Above limit</Tag>}
+        background: selected ? 'var(--navy3)' : 'transparent',
+        display: 'flex',
+        alignItems: 'stretch',
+        minHeight: 44,
+      }}
+    >
+      {onToggleCheck && (
+        <div
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleCheck()
+          }}
+          style={{
+            padding: '12px 0 12px 12px',
+            display: 'flex',
+            alignItems: 'flex-start',
+            cursor: 'pointer',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={Boolean(checked)}
+            onChange={() => {}}
+            style={{ cursor: 'pointer', marginTop: 2 }}
+          />
         </div>
       )}
-    </button>
+      <button
+        type="button"
+        onClick={onSelect}
+        style={{
+          flex: 1,
+          textAlign: 'left',
+          border: 'none',
+          background: 'transparent',
+          cursor: 'pointer',
+          padding: '12px 14px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 3,
+          width: '100%',
+          minWidth: 0,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span style={{ fontFamily: 'Consolas, monospace', fontSize: '0.7rem', fontWeight: 700, color: 'var(--navy2)' }}>
+            {it.documentNo ?? 'draft'}
+          </span>
+          <span style={{ marginLeft: 'auto', fontSize: '0.68rem', color: 'var(--faint)' }}>{it.branchCode}</span>
+        </div>
+        <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{it.partyName}</div>
+        <div style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>
+          {it.categoryName} · <strong style={{ fontVariantNumeric: 'tabular-nums' }}>{inr(it.amount)}</strong>
+        </div>
+        {(it.overLimit || it.hasOverride || (risk && risk.score > 0)) && (
+          <div style={{ display: 'flex', gap: 5, marginTop: 2 }}>
+            {it.hasOverride && <Tag>Overridden</Tag>}
+            {it.overLimit && <Tag>Above limit</Tag>}
+            {risk && risk.score > 0 && <RiskDot risk={risk} />}
+          </div>
+        )}
+      </button>
+    </div>
   )
 }
 
@@ -271,8 +480,13 @@ function RecordDetail(props: {
   const [box, setBox] = useState<'query' | null>(null)
   const [boxText, setBoxText] = useState('')
 
-  const canReview = wf === 'SUBMITTED'
-  const canClose = expense && (wf === 'VERIFIED' || wf === 'APPROVED')
+  const { user } = useAuth()
+  // Maker-checker mirror: the server refuses these actions when you created or last
+  // touched the entry — hiding them avoids a dead-end click (server stays authoritative).
+  const isMaker = user != null && (user.userId === doc.createdBy
+    || (doc.lastModifiedBy != null && user.userId === doc.lastModifiedBy))
+  const canReview = wf === 'SUBMITTED' && !isMaker
+  const canClose = expense && (wf === 'VERIFIED' || wf === 'APPROVED') && !isMaker
   const overLimit = expense ? (doc as { overLimit: boolean }).overLimit : false
 
   async function run(fn: () => Promise<unknown>, message: string, keepOpen = false) {
@@ -324,7 +538,9 @@ function RecordDetail(props: {
 
       {!canReview && !canClose ? (
         <div style={{ ...card, textAlign: 'center', color: 'var(--faint)', fontSize: '0.84rem' }}>
-          No action needed from you right now.
+          {isMaker
+            ? 'You created or last edited this entry — maker-checker requires another reviewer.'
+            : 'No action needed from you right now.'}
         </div>
       ) : (
         <div style={{ ...card }}>

@@ -4,6 +4,9 @@ import {
   Badge, ErrorBanner, Field, Modal, TextInput,
   card, ghostBtn, inputStyle, primaryBtn, td, th,
 } from '../shell/ui'
+import AiMastersStrip from './AiMastersStrip'
+import ReceiversSection from './ReceiversSection'
+import HelpButton from '../help/HelpButton'
 
 type Extra = 'claim' | 'mode' | 'sub' | undefined
 const TABS: { slug: MasterTypeSlug; label: string; extra: Extra }[] = [
@@ -64,10 +67,14 @@ export default function MastersPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <h1 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--navy)' }}>Masters</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h1 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--navy)' }}>Masters</h1>
+        <HelpButton slug="masters" />
+      </div>
       <p style={{ fontSize: '0.82rem', color: 'var(--muted)', marginTop: -8 }}>
         Every dropdown the app shows comes from these lists. Rows are deactivated, never deleted.
       </p>
+      <AiMastersStrip />
 
       <div className="flex flex-col md:flex-row gap-4 items-start">
         {/* left rail on desktop, horizontal tab bar on mobile */}
@@ -151,6 +158,8 @@ export default function MastersPage() {
           </div>
         </section>
       </div>
+
+      <ReceiversSection />
 
       {modal && (
         <MasterModal

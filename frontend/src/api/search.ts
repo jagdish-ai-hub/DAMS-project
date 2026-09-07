@@ -1,6 +1,6 @@
 import api from './axios'
 
-export type MatchField = 'Name' | 'Phone' | 'Vehicle' | 'Job Card' | 'Invoice'
+export type MatchField = 'Name' | 'Phone' | 'Vehicle' | 'Job Card' | 'Invoice' | 'Receipt' | 'Expense'
 
 export interface SearchHit {
   customerId: number
@@ -11,6 +11,7 @@ export interface SearchHit {
   totalInvoiced: number
   totalOutstanding: number
   matchField: MatchField
+  branchCodes: string[]
 }
 
 export interface SearchResult {

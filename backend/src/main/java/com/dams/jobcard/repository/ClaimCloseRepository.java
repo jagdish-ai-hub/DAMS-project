@@ -12,6 +12,8 @@ public interface ClaimCloseRepository extends JpaRepository<ClaimClose, Long> {
 
     Optional<ClaimClose> findByOrgIdAndJobCardId(Long orgId, Long jobCardId);
 
+    boolean existsByOrgId(Long orgId);
+
     boolean existsByOrgIdAndJobCardId(Long orgId, Long jobCardId);
 
     List<ClaimClose> findByOrgIdAndJobCardIdIn(Long orgId, List<Long> jobCardIds);

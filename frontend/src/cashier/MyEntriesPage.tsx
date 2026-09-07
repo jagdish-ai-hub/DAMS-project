@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { myEntriesApi, type MyEntry } from '../api/myEntries'
 import { card, ErrorBanner, inr, Badge, ghostBtn, SkeletonRows } from '../shell/ui'
+import HelpButton from '../help/HelpButton'
 
 /**
  * My Entries (AGENT.md decision #8): today + recent, receipts and expenses together,
@@ -37,7 +38,10 @@ export default function MyEntriesPage() {
       >
         ← Home
       </button>
-      <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)', marginBottom: 4 }}>My Entries</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)', marginBottom: 4 }}>My Entries</h1>
+        <HelpButton slug="fixing-a-queried-entry" />
+      </div>
       <div style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: 16 }}>
         Every receipt and expense you've entered. Queried items are highlighted — open one to fix and resubmit.
       </div>
