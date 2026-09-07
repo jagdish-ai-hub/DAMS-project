@@ -33,6 +33,8 @@ public interface ExpenseDocumentRepository extends JpaRepository<ExpenseDocument
 
     boolean existsByOrgIdAndDocumentNo(Long orgId, String documentNo);
 
+    boolean existsByOrgId(Long orgId);
+
     /** Owner dashboard — expenses still in the review pipeline (SUBMITTED / VERIFIED / QUERIED). */
     @Query("""
         select count(d) from ExpenseDocument d

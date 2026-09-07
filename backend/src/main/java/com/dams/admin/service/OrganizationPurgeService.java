@@ -96,6 +96,20 @@ public class OrganizationPurgeService {
     }
 
     /**
+     * True once the org has any transactional documents (plan.md rev7: deleting such an
+     * org must be refused — purge is only for mis-onboarded orgs with no live money).
+     * Masters/branches/users alone do not count.
+     */
+    @Transactional(readOnly = true)
+    public boolean hasTransactionalData(long orgId) {
+        return receiveDocumentRepo.existsByOrgId(orgId)
+            || expenseDocumentRepo.existsByOrgId(orgId)
+            || cashDocumentRepo.existsByOrgId(orgId)
+            || jobCardRepo.existsByOrgId(orgId)
+            || claimCloseRepo.existsByOrgId(orgId);
+    }
+
+    /**
      * Deletes all child rows of the org. The organization row itself is deleted by the caller.
      * Order matters (all FKs are ON DELETE RESTRICT unless noted):
      *   - job cards reference branch / customer / vehicle / masters, so they go first;

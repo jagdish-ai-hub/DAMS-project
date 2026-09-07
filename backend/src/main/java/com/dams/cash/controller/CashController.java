@@ -15,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 /**
  * The Cash page's day operations: the live drawer position, the Accountant's one-time branch
@@ -34,6 +35,7 @@ public class CashController {
 
     @GetMapping("/drawer")
     @Operation(summary = "Live drawer position + breakdown + today's movements for a branch/date")
+    @PreAuthorize("hasAnyAuthority('CASHIER','ACCOUNTANT')")
     public CashDrawerResponse drawer(
         @RequestParam(name = "branchId", required = false) Long branchId,
         @RequestParam(name = "date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
@@ -42,18 +44,21 @@ public class CashController {
 
     @PostMapping("/opening")
     @Operation(summary = "ACCOUNTANT — set a branch's first-ever opening cash balance")
+    @PreAuthorize("hasAuthority('ACCOUNTANT')")
     public ResponseEntity<CashDrawerResponse> setOpening(@Valid @RequestBody CashOpeningRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(cashCloseService.setOpening(request));
     }
 
     @PostMapping("/close-day")
     @Operation(summary = "CASHIER — close the day: counted amount + variance remark; locks the date")
+    @PreAuthorize("hasAuthority('CASHIER')")
     public ResponseEntity<CashDayCloseResponse> closeDay(@Valid @RequestBody CloseDayRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(cashCloseService.closeDay(request));
     }
 
     @GetMapping("/close-day")
     @Operation(summary = "Get the recorded close for a branch/date (404 if the day is still open)")
+    @PreAuthorize("hasAnyAuthority('CASHIER','ACCOUNTANT')")
     public CashDayCloseResponse getClose(
         @RequestParam(name = "branchId", required = false) Long branchId,
         @RequestParam(name = "date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {

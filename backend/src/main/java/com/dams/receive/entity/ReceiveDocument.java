@@ -54,9 +54,16 @@ public class ReceiveDocument {
     @Column(nullable = false)
     private boolean settled = false;
 
+    /**
+     * Monotonic line-number counter (V22). {@code lineNo} values are never reused —
+     * deletes are physical, so {@code max(line_no)+1} could re-stamp a voided line's
+     * {@code {documentNo}-L{n}} id that the audit trail already references. Only moves up.
+     */
+    @Column(name = "line_no_seq", nullable = false)
+    private int lineNoSeq = 0;
+
     @Column(name = "created_by", nullable = false, updatable = false)
     private Long createdBy;
-
     @Column(name = "last_modified_by")
     private Long lastModifiedBy;
 

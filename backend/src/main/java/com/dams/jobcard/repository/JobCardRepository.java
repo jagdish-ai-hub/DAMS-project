@@ -16,6 +16,8 @@ public interface JobCardRepository extends JpaRepository<JobCard, Long> {
     /** Owner dashboard — every job card in the org (outstanding-amount scan). */
     List<JobCard> findByOrgId(Long orgId);
 
+    boolean existsByOrgId(Long orgId);
+
     /** Batch id lookup scoped by org — resolves many job cards in one query (My Entries, queues). */
     List<JobCard> findByOrgIdAndIdIn(Long orgId, Collection<Long> ids);
 

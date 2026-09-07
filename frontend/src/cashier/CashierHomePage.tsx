@@ -8,6 +8,7 @@ import AddPaymentModal from './AddPaymentModal'
 import ViewReceiptsModal from './ViewReceiptsModal'
 import PrintReceiptModal from './PrintReceiptModal'
 import { Printer } from 'lucide-react'
+import HelpButton from '../help/HelpButton'
 
 /**
  * Cashier home (intial ui prototypes/cashier-home.html): universal search, results, a
@@ -128,7 +129,10 @@ function HomeSearch(props: {
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '32px 0 24px' }}>
       <div style={{ textAlign: 'center', marginBottom: 6 }}>
-        <h1 style={{ fontSize: '1.5rem', color: 'var(--navy)', marginBottom: 6 }}>Find a customer</h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+          <h1 style={{ fontSize: '1.5rem', color: 'var(--navy)', marginBottom: 6 }}>Find a customer</h1>
+          <HelpButton slug="finding-a-customer" />
+        </div>
         <div style={{ fontSize: '0.9rem', color: 'var(--muted)' }}>
           Search by name, vehicle number, job card, or invoice — anything works
         </div>
@@ -259,6 +263,7 @@ function ResultRow({ hit, onClick }: { hit: SearchHit; onClick: () => void }) {
         <span style={{ display: 'block', fontSize: '0.78rem', color: 'var(--muted)', marginTop: 1 }}>
           {hit.vehicles.join(', ') || 'No vehicle on file'} · {hit.jobCardCount} job card
           {hit.jobCardCount === 1 ? '' : 's'}
+          {(hit.branchCodes ?? []).length > 0 && <> · {(hit.branchCodes ?? []).join(', ')}</>}
         </span>
       </span>
       <span style={{ textAlign: 'right', fontSize: '0.78rem', flexShrink: 0 }}>

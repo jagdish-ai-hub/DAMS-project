@@ -6,6 +6,8 @@ import { reviewApi, type ReviewQueueItem, type ReviewType } from '../api/review'
 import { card, ErrorBanner, ghostBtn, primaryBtn, Skeleton, SkeletonRows, inr } from '../shell/ui'
 import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, type AnyDoc } from '../review/reviewShared'
 import GlobalSearch from '../shared/GlobalSearch'
+import HelpButton from '../help/HelpButton'
+import { useAuth } from '../auth/useAuth'
 import { Download } from 'lucide-react'
 import ExportModal from '../shared/ExportModal'
 import { useRiskMap, RiskDot, } from '../review/AiRiskBadge'
@@ -111,9 +113,12 @@ export default function ReviewQueuePage() {
     <div style={{ maxWidth: 1180, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
         <div>
-          <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)', marginBottom: 4 }}>Review Queue</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)', marginBottom: 4 }}>Review Queue</h1>
+            <HelpButton slug="reviewing-the-queue" />
+          </div>
           <div style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
-            Verify, query, reject or adjust each submitted entry. A verified entry moves on to the Finance Manager.
+            Verify, query, or adjust each submitted entry. A verified entry moves on to the Finance Manager.
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -475,8 +480,13 @@ function RecordDetail(props: {
   const [box, setBox] = useState<'query' | null>(null)
   const [boxText, setBoxText] = useState('')
 
-  const canReview = wf === 'SUBMITTED'
-  const canClose = expense && (wf === 'VERIFIED' || wf === 'APPROVED')
+  const { user } = useAuth()
+  // Maker-checker mirror: the server refuses these actions when you created or last
+  // touched the entry — hiding them avoids a dead-end click (server stays authoritative).
+  const isMaker = user != null && (user.userId === doc.createdBy
+    || (doc.lastModifiedBy != null && user.userId === doc.lastModifiedBy))
+  const canReview = wf === 'SUBMITTED' && !isMaker
+  const canClose = expense && (wf === 'VERIFIED' || wf === 'APPROVED') && !isMaker
   const overLimit = expense ? (doc as { overLimit: boolean }).overLimit : false
 
   async function run(fn: () => Promise<unknown>, message: string, keepOpen = false) {
@@ -528,7 +538,9 @@ function RecordDetail(props: {
 
       {!canReview && !canClose ? (
         <div style={{ ...card, textAlign: 'center', color: 'var(--faint)', fontSize: '0.84rem' }}>
-          No action needed from you right now.
+          {isMaker
+            ? 'You created or last edited this entry — maker-checker requires another reviewer.'
+            : 'No action needed from you right now.'}
         </div>
       ) : (
         <div style={{ ...card }}>

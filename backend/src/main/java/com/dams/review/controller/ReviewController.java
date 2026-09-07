@@ -18,6 +18,7 @@ import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 /**
  * The Accountant review step (Stage 7). Two read endpoints for the queue, and the
@@ -42,36 +43,42 @@ public class ReviewController {
 
     @GetMapping("/review/receipts")
     @Operation(summary = "Receipts awaiting this accountant's review (SUBMITTED, in their branches)")
+    @PreAuthorize("hasAuthority('ACCOUNTANT')")
     public List<ReviewQueueItem> receiptQueue() {
         return reviewService.receiptQueue();
     }
 
     @GetMapping("/review/expenses")
     @Operation(summary = "Expenses awaiting this accountant's review (SUBMITTED, in their branches)")
+    @PreAuthorize("hasAuthority('ACCOUNTANT')")
     public List<ReviewQueueItem> expenseQueue() {
         return reviewService.expenseQueue();
     }
 
     @GetMapping("/review/fm/receipts")
     @Operation(summary = "Finance Manager receipt queue — awaiting approval, open claims, recently closed")
+    @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
     public FmQueue fmReceiptQueue() {
         return reviewService.fmReceiptQueue();
     }
 
     @GetMapping("/review/fm/expenses")
     @Operation(summary = "Finance Manager expense queue — expenses awaiting final approval")
+    @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
     public FmQueue fmExpenseQueue() {
         return reviewService.fmExpenseQueue();
     }
 
     @GetMapping("/review/cash")
     @Operation(summary = "Cash movements awaiting this accountant's review (SUBMITTED, in their branches)")
+    @PreAuthorize("hasAuthority('ACCOUNTANT')")
     public List<ReviewQueueItem> cashQueue() {
         return reviewService.cashQueue();
     }
 
     @GetMapping("/review/fm/cash")
     @Operation(summary = "Finance Manager cash queue — movements awaiting final approval")
+    @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
     public FmQueue fmCashQueue() {
         return reviewService.fmCashQueue();
     }
@@ -80,30 +87,35 @@ public class ReviewController {
 
     @PostMapping("/receipts/{id}/verify")
     @Operation(summary = "Verify a submitted receipt — moves it to Finance Manager approval")
+    @PreAuthorize("hasAuthority('ACCOUNTANT')")
     public ReceiveDocumentResponse verifyReceipt(@PathVariable Long id) {
         return reviewService.verifyReceipt(id);
     }
 
     @PostMapping("/receipts/bulk-verify")
     @Operation(summary = "Bulk-verify submitted receipts — moves them to Finance Manager approval")
+    @PreAuthorize("hasAuthority('ACCOUNTANT')")
     public BulkVerifyResponse bulkVerifyReceipts(@Valid @RequestBody BulkVerifyRequest request) {
         return reviewService.bulkVerifyReceipts(request.ids());
     }
 
     @PostMapping("/receipts/{id}/query")
     @Operation(summary = "Query a receipt back to the cashier — Accountant (submitted) or FM (verified)")
+    @PreAuthorize("hasAnyAuthority('ACCOUNTANT','FINANCE_MANAGER')")
     public ReceiveDocumentResponse queryReceipt(@PathVariable Long id, @Valid @RequestBody QueryRequest request) {
         return reviewService.queryReceipt(id, request.note().trim());
     }
 
     @PostMapping("/receipts/{id}/reject")
     @Operation(summary = "Reject a receipt with a reason — Accountant (submitted) or FM (verified)")
+    @PreAuthorize("hasAnyAuthority('ACCOUNTANT','FINANCE_MANAGER')")
     public ReceiveDocumentResponse rejectReceipt(@PathVariable Long id, @Valid @RequestBody RejectRequest request) {
         return reviewService.rejectReceipt(id, request.reason().trim());
     }
 
     @PostMapping("/receipts/{id}/lines/{lineNo}/override")
     @Operation(summary = "Override one settlement line's amount (provisional — reason required)")
+    @PreAuthorize("hasAuthority('ACCOUNTANT')")
     public ReceiveDocumentResponse overrideReceiptLine(@PathVariable Long id, @PathVariable Integer lineNo,
                                                        @Valid @RequestBody LineOverrideRequest request) {
         return reviewService.overrideReceiptLine(id, lineNo, request.amount(), request.reason().trim());
@@ -111,6 +123,7 @@ public class ReviewController {
 
     @PostMapping("/receipts/{id}/approve")
     @Operation(summary = "Finance Manager: give a verified receipt final approval")
+    @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
     public ReceiveDocumentResponse approveReceipt(@PathVariable Long id) {
         return reviewService.approveReceipt(id);
     }
@@ -119,30 +132,35 @@ public class ReviewController {
 
     @PostMapping("/expenses/{id}/verify")
     @Operation(summary = "Verify a submitted expense — moves it to Finance Manager approval")
+    @PreAuthorize("hasAuthority('ACCOUNTANT')")
     public ExpenseDocumentResponse verifyExpense(@PathVariable Long id) {
         return reviewService.verifyExpense(id);
     }
 
     @PostMapping("/expenses/bulk-verify")
     @Operation(summary = "Bulk-verify submitted expenses — moves them to Finance Manager approval")
+    @PreAuthorize("hasAuthority('ACCOUNTANT')")
     public BulkVerifyResponse bulkVerifyExpenses(@Valid @RequestBody BulkVerifyRequest request) {
         return reviewService.bulkVerifyExpenses(request.ids());
     }
 
     @PostMapping("/expenses/{id}/query")
     @Operation(summary = "Query an expense back to the cashier — Accountant (submitted) or FM (verified)")
+    @PreAuthorize("hasAnyAuthority('ACCOUNTANT','FINANCE_MANAGER')")
     public ExpenseDocumentResponse queryExpense(@PathVariable Long id, @Valid @RequestBody QueryRequest request) {
         return reviewService.queryExpense(id, request.note().trim());
     }
 
     @PostMapping("/expenses/{id}/reject")
     @Operation(summary = "Reject an expense with a reason — Accountant (submitted) or FM (verified)")
+    @PreAuthorize("hasAnyAuthority('ACCOUNTANT','FINANCE_MANAGER')")
     public ExpenseDocumentResponse rejectExpense(@PathVariable Long id, @Valid @RequestBody RejectRequest request) {
         return reviewService.rejectExpense(id, request.reason().trim());
     }
 
     @PostMapping("/expenses/{id}/lines/{lineNo}/override")
     @Operation(summary = "Override one expense line's amount (provisional — reason required)")
+    @PreAuthorize("hasAuthority('ACCOUNTANT')")
     public ExpenseDocumentResponse overrideExpenseLine(@PathVariable Long id, @PathVariable Integer lineNo,
                                                        @Valid @RequestBody LineOverrideRequest request) {
         return reviewService.overrideExpenseLine(id, lineNo, request.amount(), request.reason().trim());
@@ -150,12 +168,14 @@ public class ReviewController {
 
     @PostMapping("/expenses/{id}/close")
     @Operation(summary = "Close an expense (VERIFIED/APPROVED; an over-limit expense needs FM approval first)")
+    @PreAuthorize("hasAuthority('ACCOUNTANT')")
     public ExpenseDocumentResponse closeExpense(@PathVariable Long id) {
         return reviewService.closeExpense(id);
     }
 
     @PostMapping("/expenses/{id}/approve")
     @Operation(summary = "Finance Manager: give a verified expense final approval")
+    @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
     public ExpenseDocumentResponse approveExpense(@PathVariable Long id) {
         return reviewService.approveExpense(id);
     }
@@ -164,24 +184,28 @@ public class ReviewController {
 
     @PostMapping("/cash-documents/{id}/verify")
     @Operation(summary = "Verify a submitted cash movement — moves it to Finance Manager approval")
+    @PreAuthorize("hasAuthority('ACCOUNTANT')")
     public CashDocumentResponse verifyCash(@PathVariable Long id) {
         return reviewService.verifyCash(id);
     }
 
     @PostMapping("/cash-documents/{id}/approve")
     @Operation(summary = "Finance Manager: give a verified cash movement final approval")
+    @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
     public CashDocumentResponse approveCash(@PathVariable Long id) {
         return reviewService.approveCash(id);
     }
 
     @PostMapping("/cash-documents/{id}/query")
     @Operation(summary = "Query a cash movement back to the cashier — Accountant (submitted) or FM (verified)")
+    @PreAuthorize("hasAnyAuthority('ACCOUNTANT','FINANCE_MANAGER')")
     public CashDocumentResponse queryCash(@PathVariable Long id, @Valid @RequestBody QueryRequest request) {
         return reviewService.queryCash(id, request.note().trim());
     }
 
     @PostMapping("/cash-documents/{id}/reject")
     @Operation(summary = "Reject a cash movement with a reason — Accountant (submitted) or FM (verified)")
+    @PreAuthorize("hasAnyAuthority('ACCOUNTANT','FINANCE_MANAGER')")
     public CashDocumentResponse rejectCash(@PathVariable Long id, @Valid @RequestBody RejectRequest request) {
         return reviewService.rejectCash(id, request.reason().trim());
     }

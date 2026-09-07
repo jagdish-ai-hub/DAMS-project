@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/api/v1/export")
@@ -29,6 +30,7 @@ public class ExportController {
 
     @GetMapping("/receipts")
     @Operation(summary = "Export receipts ledger to Tally/Excel compatible CSV")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT')")
     public ResponseEntity<byte[]> exportReceipts(
         @RequestParam(name = "branchId", required = false) Long branchId,
         @RequestParam(name = "from", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -45,6 +47,7 @@ public class ExportController {
 
     @GetMapping("/expenses")
     @Operation(summary = "Export expenses ledger to Tally/Excel compatible CSV")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT')")
     public ResponseEntity<byte[]> exportExpenses(
         @RequestParam(name = "branchId", required = false) Long branchId,
         @RequestParam(name = "from", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,

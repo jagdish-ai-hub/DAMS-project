@@ -554,6 +554,13 @@ public class ReviewService {
 
         doc.setWorkflowStatus(next);
         receiveDocumentRepo.save(doc);
+        if (next == WorkflowStatus.APPROVED) {
+            // Approved rows freeze with the document (mirrors expense close below) —
+            // the owner predicate alone would still leave already-stored rows deletable.
+            List<Long> lineIds = settlementLineRepo.findByOrgIdAndReceiveDocumentIdOrderByLineNoAsc(orgId, doc.getId())
+                .stream().map(SettlementLine::getId).toList();
+            attachmentService.freezeReceiveDocument(orgId, doc.getId(), lineIds);
+        }
         auditService.recordUserEvent(RECEIVE, doc.getId(), doc.getBranchId(), event, me.getId(),
             detail("documentNo", doc.getDocumentNo(), noteKey, noteVal));
         if (refreshSettle) {
@@ -573,6 +580,12 @@ public class ReviewService {
 
         doc.setWorkflowStatus(next);
         expenseDocumentRepo.save(doc);
+        if (next == ExpenseWorkflowStatus.APPROVED) {
+            // Approved rows freeze with the document (mirrors the receipt transition above).
+            List<Long> lineIds = expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(orgId, doc.getId())
+                .stream().map(ExpenseLine::getId).toList();
+            attachmentService.freezeExpenseDocument(orgId, doc.getId(), lineIds);
+        }
         auditService.recordUserEvent(EXPENSE, doc.getId(), doc.getBranchId(), event, me.getId(),
             detail("documentNo", doc.getDocumentNo(), noteKey, noteVal));
         log.info("ExpenseDocument {}->{}: orgId={} branchId={} docId={} by={}",

@@ -390,7 +390,9 @@ public class ReceiveDocumentService {
         if (inputs == null || inputs.isEmpty()) {
             return List.of();
         }
-        int nextLineNo = settlementLineRepo.maxLineNo(doc.getId()) + 1;
+        // Monotonic counter, never max(line_no)+1: deletes are physical, so the max
+        // would re-stamp a voided line's {documentNo}-L{n} id. Callers persist doc.
+        int nextLineNo = doc.getLineNoSeq() + 1;
         List<SettlementLine> saved = new java.util.ArrayList<>();
         for (SettlementLineInput input : inputs) {
             SettlementLine line = new SettlementLine();
@@ -407,6 +409,7 @@ public class ReceiveDocumentService {
             saved.add(settlementLineRepo.save(line));
             nextLineNo++;
         }
+        doc.setLineNoSeq(nextLineNo - 1);
         return saved;
     }
 
@@ -441,6 +444,21 @@ public class ReceiveDocumentService {
             .findByOrgIdAndReceiveDocumentIdOrderByLineNoAsc(orgId, doc.getId());
         if (lines.isEmpty()) {
             throw DamsException.badRequest("Add at least one settlement line before submitting");
+        }
+        // A cash-mode line added before the day-close must not slip into the locked
+        // day on submit — line-add time checks are not enough. Before numbering, so a
+        // refusal never consumes a document number.
+        Map<Long, SettlementMode> modes = new HashMap<>();
+        for (SettlementMode mode : settlementModeRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId)) {
+            modes.put(mode.getId(), mode);
+        }
+        for (SettlementLine l : lines) {
+            SettlementMode mode = modes.get(l.getSettlementModeId());
+            if (mode == null) {
+                throw DamsException.notFound("Settlement mode", l.getSettlementModeId());
+            }
+            cashDateLock.requireCashLineDateOpen(orgId, doc.getBranchId(), l.getTransactionDate(),
+                mode.isCash(), "settlement");
         }
         if (doc.getDocumentNo() == null) {
             Branch branch = branchRepo.findByIdAndOrgId(doc.getBranchId(), orgId)
@@ -533,7 +551,7 @@ public class ReceiveDocumentService {
         boolean claimClosed = claimClose != null;
         BigDecimal pending = pendingAmountCalculator.forJobCard(jc, claimClosed);
 
-        String createdByName = userRepo.findNameById(doc.getCreatedBy()).orElse(null);
+        String createdByName = userRepo.findNameByIdAndOrganization_Id(doc.getCreatedBy(), orgId).orElse(null);
         String branchCode = branch != null ? branch.getCode() : "?";
 
         return new ReceiveDocumentResponse(

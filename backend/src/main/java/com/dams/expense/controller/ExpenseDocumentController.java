@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 /**
  * Expense documents — the cashier's expense flow. Create (with inline receiver create,
@@ -44,48 +45,56 @@ public class ExpenseDocumentController {
 
     @PostMapping
     @Operation(summary = "Create an expense (inline receiver create, optional job-card tag)")
+    @PreAuthorize("hasAuthority('CASHIER')")
     public ResponseEntity<ExpenseDocumentResponse> create(@Valid @RequestBody CreateExpenseRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(expenseDocumentService.create(request));
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Get an expense document with its lines and derived fields")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER')")
     public ExpenseDocumentResponse get(@PathVariable Long id) {
         return expenseDocumentService.get(id);
     }
 
     @PatchMapping("/{id}")
     @Operation(summary = "Edit the expense header (draft or queried documents only)")
+    @PreAuthorize("hasAuthority('CASHIER')")
     public ExpenseDocumentResponse patch(@PathVariable Long id, @Valid @RequestBody ExpensePatchRequest request) {
         return expenseDocumentService.patch(id, request);
     }
 
     @PostMapping("/{id}/submit")
     @Operation(summary = "Submit a draft — assigns the gap-free document number and line ids")
+    @PreAuthorize("hasAuthority('CASHIER')")
     public ExpenseDocumentResponse submit(@PathVariable Long id) {
         return expenseDocumentService.submit(id);
     }
 
     @PostMapping("/{id}/resubmit")
     @Operation(summary = "Resubmit a queried document after fixing it")
+    @PreAuthorize("hasAuthority('CASHIER')")
     public ExpenseDocumentResponse resubmit(@PathVariable Long id) {
         return expenseDocumentService.resubmit(id);
     }
 
     @PostMapping("/{id}/transfer-to-claim")
     @Operation(summary = "Move the expense onto a warranty / AMC / goodwill claim")
+    @PreAuthorize("hasAuthority('CASHIER')")
     public ExpenseDocumentResponse transferToClaim(@PathVariable Long id) {
         return expenseDocumentService.transferToClaim(id);
     }
 
     @PostMapping("/{id}/lines")
     @Operation(summary = "Add Expense — append one line to an open document")
+    @PreAuthorize("hasAuthority('CASHIER')")
     public ExpenseDocumentResponse addLine(@PathVariable Long id, @Valid @RequestBody ExpenseLineInput input) {
         return expenseDocumentService.addLine(id, input);
     }
 
     @PatchMapping("/{id}/lines/{lineNo}")
     @Operation(summary = "Edit an expense line (draft or queried documents only)")
+    @PreAuthorize("hasAuthority('CASHIER')")
     public ExpenseDocumentResponse updateLine(@PathVariable Long id, @PathVariable Integer lineNo,
                                               @Valid @RequestBody ExpenseLineInput input) {
         return expenseDocumentService.updateLine(id, lineNo, input);
@@ -93,6 +102,7 @@ public class ExpenseDocumentController {
 
     @DeleteMapping("/{id}/lines/{lineNo}")
     @Operation(summary = "Remove an expense line (draft or queried documents only)")
+    @PreAuthorize("hasAuthority('CASHIER')")
     public ExpenseDocumentResponse deleteLine(@PathVariable Long id, @PathVariable Integer lineNo) {
         return expenseDocumentService.deleteLine(id, lineNo);
     }
@@ -101,6 +111,7 @@ public class ExpenseDocumentController {
 
     @PostMapping(value = "/{id}/attachments", consumes = "multipart/form-data")
     @Operation(summary = "Attach a PDF/image receipt to the whole document")
+    @PreAuthorize("hasAnyAuthority('CASHIER','ACCOUNTANT','FINANCE_MANAGER')")
     public ResponseEntity<AttachmentResponse> attachToDocument(@PathVariable Long id,
                                                                @RequestParam("file") MultipartFile file) {
         AttachmentResponse saved = attachmentService.upload(ParentType.EXPENSE_DOCUMENT, id, file);
@@ -109,12 +120,14 @@ public class ExpenseDocumentController {
 
     @GetMapping("/{id}/attachments")
     @Operation(summary = "List the document's attachments")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER')")
     public List<AttachmentResponse> documentAttachments(@PathVariable Long id) {
         return attachmentService.list(ParentType.EXPENSE_DOCUMENT, id);
     }
 
     @PostMapping(value = "/{id}/lines/{lineNo}/attachments", consumes = "multipart/form-data")
     @Operation(summary = "Attach a PDF/image receipt to one expense line")
+    @PreAuthorize("hasAnyAuthority('CASHIER','ACCOUNTANT','FINANCE_MANAGER')")
     public ResponseEntity<AttachmentResponse> attachToLine(@PathVariable Long id, @PathVariable Integer lineNo,
                                                            @RequestParam("file") MultipartFile file) {
         Long expenseLineId = expenseDocumentService.expenseLineId(id, lineNo);
@@ -124,6 +137,7 @@ public class ExpenseDocumentController {
 
     @GetMapping("/{id}/lines/{lineNo}/attachments")
     @Operation(summary = "List an expense line's attachments")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER')")
     public List<AttachmentResponse> lineAttachments(@PathVariable Long id, @PathVariable Integer lineNo) {
         Long expenseLineId = expenseDocumentService.expenseLineId(id, lineNo);
         return attachmentService.list(ParentType.EXPENSE_LINE, expenseLineId);

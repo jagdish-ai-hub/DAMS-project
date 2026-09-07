@@ -1,5 +1,7 @@
 package com.dams.search.service;
 
+import com.dams.branch.entity.Branch;
+import com.dams.branch.repository.BranchRepository;
 import com.dams.common.security.BranchScope;
 import com.dams.config.TenantContext;
 import com.dams.customer.entity.Customer;
@@ -20,11 +22,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 /**
@@ -55,6 +59,7 @@ public class SearchService {
     private final ExpenseDocumentRepository expenseDocumentRepo;
     private final BranchScope branchScope;
     private final PendingAmountCalculator pendingAmountCalculator;
+    private final BranchRepository branchRepo;
 
     public SearchService(CustomerRepository customerRepo,
                          VehicleRepository vehicleRepo,
@@ -62,7 +67,8 @@ public class SearchService {
                          ReceiveDocumentRepository receiveDocumentRepo,
                          ExpenseDocumentRepository expenseDocumentRepo,
                          BranchScope branchScope,
-                         PendingAmountCalculator pendingAmountCalculator) {
+                         PendingAmountCalculator pendingAmountCalculator,
+                         BranchRepository branchRepo) {
         this.customerRepo = customerRepo;
         this.vehicleRepo = vehicleRepo;
         this.jobCardRepo = jobCardRepo;
@@ -70,6 +76,7 @@ public class SearchService {
         this.expenseDocumentRepo = expenseDocumentRepo;
         this.branchScope = branchScope;
         this.pendingAmountCalculator = pendingAmountCalculator;
+        this.branchRepo = branchRepo;
     }
 
     @Transactional(readOnly = true)
@@ -144,15 +151,21 @@ public class SearchService {
         Map<Long, int[]> countByCustomer = new java.util.HashMap<>();
         Map<Long, BigDecimal> invoicedByCustomer = new java.util.HashMap<>();
         Map<Long, BigDecimal> outstandingByCustomer = new java.util.HashMap<>();
+        Map<Long, Set<Long>> branchesByCustomer = new HashMap<>();
         for (JobCard j : jobCardRepo.findByOrgIdAndCustomerIdInOrderByCreatedAtDesc(orgId, customerIds)) {
             if (!branchAllowed(allowedBranches, j.getBranchId())) {
                 continue;
             }
             countByCustomer.computeIfAbsent(j.getCustomerId(), k -> new int[1])[0]++;
+            branchesByCustomer.computeIfAbsent(j.getCustomerId(), k -> new TreeSet<>()).add(j.getBranchId());
             if (j.getInvoiceAmount() != null) {
                 invoicedByCustomer.merge(j.getCustomerId(), j.getInvoiceAmount(), BigDecimal::add);
             }
             outstandingByCustomer.merge(j.getCustomerId(), pendingAmountCalculator.forJobCard(j), BigDecimal::add);
+        }
+        Map<Long, String> branchCodes = new HashMap<>();
+        for (Branch branch : branchRepo.findByOrgIdOrderByCodeAsc(orgId)) {
+            branchCodes.put(branch.getId(), branch.getCode());
         }
 
         List<SearchResponse.Hit> hits = new ArrayList<>();
@@ -161,6 +174,17 @@ public class SearchService {
             if (c == null) {
                 continue;
             }
+            // Decision #2: identity may match org-wide (customers are not branch-scoped),
+            // but a branch-restricted caller only SEES customers with job cards in their
+            // branches — a name hit elsewhere is not their branch's customer.
+            if (allowedBranches.isPresent()
+                && countByCustomer.getOrDefault(id, new int[1])[0] == 0) {
+                continue;
+            }
+            List<String> hitBranches = branchesByCustomer.getOrDefault(id, Set.of()).stream()
+                .map(branchId -> branchCodes.getOrDefault(branchId, "?"))
+                .sorted()
+                .toList();
             hits.add(new SearchResponse.Hit(
                 c.getId(),
                 c.getName(),
@@ -169,7 +193,8 @@ public class SearchService {
                 countByCustomer.getOrDefault(id, new int[1])[0],
                 invoicedByCustomer.getOrDefault(id, BigDecimal.ZERO),
                 outstandingByCustomer.getOrDefault(id, BigDecimal.ZERO),
-                matchByCustomer.get(id)));
+                matchByCustomer.get(id),
+                hitBranches));
         }
         hits.sort((a, b) -> a.customerName().compareToIgnoreCase(b.customerName()));
 

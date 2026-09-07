@@ -196,7 +196,7 @@ export default function NewReceiptPage() {
     [loadedDoc, modes],
   )
   const attachFrozen = loadedDoc != null
-    && (loadedDoc.settled || loadedDoc.workflowStatus === 'REJECTED')
+    && (loadedDoc.settled || loadedDoc.workflowStatus === 'APPROVED' || loadedDoc.workflowStatus === 'REJECTED')
 
   const modeById = (id: number | '') => modes.find((m) => m.id === id)
 

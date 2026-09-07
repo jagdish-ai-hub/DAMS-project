@@ -228,6 +228,15 @@ public class AiWatchdogService {
                 "Receipt " + label(doc.getDocumentNo(), doc.getId()) + " was submitted outside workshop hours.",
                 codes.get(doc.getBranchId()), doc.getDocumentNo()));
         }
+        for (ExpenseDocument doc : expenseDocumentRepo
+            .findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(orgId, ExpenseWorkflowStatus.SUBMITTED)) {
+            if (!visible(allowed, branchId, doc.getBranchId()) || !isAfterHours(doc.getSubmittedAt())) {
+                continue;
+            }
+            items.add(new AnomalyItem("after-hours", "info",
+                "Expense " + label(doc.getDocumentNo(), doc.getId()) + " was submitted outside workshop hours.",
+                codes.get(doc.getBranchId()), doc.getDocumentNo()));
+        }
         return items;
     }
 

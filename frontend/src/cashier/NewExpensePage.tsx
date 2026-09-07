@@ -214,7 +214,7 @@ export default function NewExpensePage() {
     })),
     [loadedDoc, modes],
   )
-  const attachFrozen = loadedDoc?.workflowStatus === 'CLOSED' || loadedDoc?.workflowStatus === 'REJECTED'
+  const attachFrozen = loadedDoc?.workflowStatus === 'APPROVED' || loadedDoc?.workflowStatus === 'CLOSED' || loadedDoc?.workflowStatus === 'REJECTED'
   const modeById = (id: number | '') => modes.find((m) => m.id === id)
   const subById = (id: number | '') => subCats.find((s) => s.id === id)
 

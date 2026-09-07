@@ -30,6 +30,10 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
     @Query("select u.name from AppUser u where u.id = :id")
     Optional<String> findNameById(@Param("id") Long id);
 
+    /** Org-scoped variant — user ids from org-scoped rows must never resolve cross-org names. */
+    @Query("select u.name from AppUser u where u.id = :id and u.organization.id = :orgId")
+    Optional<String> findNameByIdAndOrganization_Id(@Param("id") Long id, @Param("orgId") Long orgId);
+
     /** {homeBranchId, count} for every cashier in the org — one query for the whole branch list. */
     @Query("""
         select u.homeBranchId, count(u.id) from AppUser u

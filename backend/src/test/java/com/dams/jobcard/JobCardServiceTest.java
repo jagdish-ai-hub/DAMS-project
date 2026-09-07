@@ -80,6 +80,8 @@ class JobCardServiceTest {
             pendingAmountCalculator, claimCloseRepo, paymentGuard);
         TenantContext.setOrgId(ORG);
         lenient().when(branchScope.currentUserId()).thenReturn(CASHIER_ID);
+        // Reads and patches now honour branch access — default the fixtures to visible.
+        lenient().when(branchScope.canSeeBranch(any())).thenReturn(true);
         lenient().when(pendingAmountCalculator.forJobCard(any(JobCard.class)))
             .thenReturn(java.math.BigDecimal.ZERO);
         lenient().when(claimCloseRepo.findByOrgIdAndJobCardId(any(), any())).thenReturn(Optional.empty());

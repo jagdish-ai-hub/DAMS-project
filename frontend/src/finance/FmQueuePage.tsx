@@ -7,6 +7,8 @@ import { jobCardsApi } from '../api/jobCards'
 import { card, ErrorBanner, ghostBtn, primaryBtn, inputStyle, Modal, Skeleton, SkeletonRows, inr } from '../shell/ui'
 import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, type AnyDoc } from '../review/reviewShared'
 import GlobalSearch from '../shared/GlobalSearch'
+import HelpButton from '../help/HelpButton'
+import { useAuth } from '../auth/useAuth'
 import AiClaimBanner from './AiClaimBanner'
 import { useRiskMap, RiskDot } from '../review/AiRiskBadge'
 
@@ -95,57 +97,9 @@ export default function FmQueuePage() {
         const { data } = await req
         if (live) setDoc(data as DetailDoc)
       } catch (e) {
-        if (type === 'receipt') {
-          try {
-            const jcRes = await jobCardsApi.get(selectedId)
-            const jc = jcRes.data
-            if (jc && live) {
-              setDoc({
-                id: jc.id,
-                documentNo: jc.reference,
-                workflowStatus: 'CLOSED',
-                settled: true,
-                jobCardId: jc.id,
-                jobCardReference: jc.reference,
-                branchId: jc.branchId,
-                branchCode: jc.branchCode,
-                branchName: jc.branchName,
-                customerId: jc.customerId,
-                customerName: jc.customerName,
-                customerPhone: jc.customerPhone,
-                vehicleNo: jc.vehicleNo,
-                dbmId: jc.dbmId,
-                invoiceNo: jc.invoiceNo,
-                invoiceAmount: jc.invoiceAmount,
-                b2b: jc.b2b,
-                gstNo: jc.gstNo,
-                categoryId: jc.categoryId,
-                categoryName: jc.categoryName,
-                isClaim: jc.isClaim,
-                businessStatusId: jc.businessStatusId,
-                businessStatusName: jc.businessStatusName,
-                pendingAmount: jc.pendingAmount,
-                settledViaClaimClose: jc.settledViaClaimClose,
-                claimFinalAmount: jc.claimFinalAmount,
-                claimOverridden: jc.claimOverridden,
-                claimOverrideReason: jc.claimOverrideReason,
-                totalReceived: jc.claimFinalAmount ?? 0,
-                canRecordPayment: false,
-                createdBy: 0,
-                createdByName: jc.claimClosedByName,
-                lastModifiedBy: null,
-                createdAt: jc.createdAt,
-                submittedAt: jc.claimClosedAt,
-                lines: [],
-                history: [],
-              } as unknown as ReceiveDocument)
-              return
-            }
-          } catch {
-            // fallback to original error
-          }
-        }
-        if (live) setError(apiError(e, 'Could not load that document.'))
+        // No synthetic fallback: queue rows carry real document ids, so a load
+        // failure is a real failure — name it instead of fabricating a record.
+        if (live) setError(apiError(e, `Could not load document #${selectedId}.`))
       }
     }
     load()
@@ -169,7 +123,10 @@ export default function FmQueuePage() {
     <div style={{ maxWidth: 1180, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
         <div>
-          <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)', marginBottom: 4 }}>Approvals & Claims</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)', marginBottom: 4 }}>Approvals & Claims</h1>
+            <HelpButton slug="approving-entries" />
+          </div>
           <div style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
             Give each verified entry final approval, and close warranty / AMC / CG claims.
           </div>
@@ -228,8 +185,14 @@ export default function FmQueuePage() {
                   <div className="lg:hidden mb-2">
                     <button type="button" onClick={() => setSelectedId(null)} style={{ ...ghostBtn, minHeight: 36, fontWeight: 700 }}>← Back to Queue</button>
                   </div>
-                  <Skeleton width={200} height={20} />
-                  <SkeletonRows rows={5} />
+                  {error ? (
+                    <div style={{ ...card, color: 'var(--red)', fontSize: '0.85rem' }}>{error}</div>
+                  ) : (
+                    <>
+                      <Skeleton width={200} height={20} />
+                      <SkeletonRows rows={5} />
+                    </>
+                  )}
                 </div>
               : <FmDetail type={type} doc={doc} onDone={afterAction} onError={setError} onBack={() => setSelectedId(null)} />}
         </div>
@@ -424,7 +387,13 @@ function FmDetail(props: {
   const [boxText, setBoxText] = useState('')
   const [claimModal, setClaimModal] = useState(false)
 
-  const canApprove = wf === 'VERIFIED'
+  const { user } = useAuth()
+  // Maker-checker mirror (claim close needs none — an FM can never be a maker by
+  // construction, and the service does not check it there either).
+  const isMaker = user != null && (user.userId === doc.createdBy
+    || (doc.lastModifiedBy != null && user.userId === doc.lastModifiedBy))
+  const canApprove = wf === 'VERIFIED' && !isMaker
+
   const isOpenClaim = !!receipt && receipt.isClaim && wf === 'APPROVED' && !receipt.settledViaClaimClose
   const isClosedClaim = !!receipt && receipt.settledViaClaimClose
 
@@ -481,7 +450,9 @@ function FmDetail(props: {
 
       {!canApprove && !isOpenClaim ? (
         <div style={{ ...card, textAlign: 'center', color: 'var(--faint)', fontSize: '0.84rem' }}>
-          No action needed from you right now.
+          {isMaker
+            ? 'You created or last edited this entry — maker-checker requires another reviewer.'
+            : 'No action needed from you right now.'}
         </div>
       ) : (
         <div style={{ ...card }}>

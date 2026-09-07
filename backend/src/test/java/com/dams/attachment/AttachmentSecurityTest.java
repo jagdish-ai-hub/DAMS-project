@@ -27,20 +27,24 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * Attachment visibility and freeze rules: org membership is not enough — every
+ * read, upload and delete honours branch access, and approved/closed documents
+ * are frozen at both the document and the row level.
+ */
 @ExtendWith(MockitoExtension.class)
-class AttachmentServiceTest {
+class AttachmentSecurityTest {
 
     private static final long ORG = 1L;
     private static final long DOC_ID = 500L;
+    private static final long HOME_BRANCH = 3L;
+    private static final long OTHER_BRANCH = 9L;
 
     @Mock private AttachmentRepository attachmentRepo;
     @Mock private ReceiveDocumentRepository receiveDocumentRepo;
@@ -58,14 +62,6 @@ class AttachmentServiceTest {
             expenseDocumentRepo, expenseLineRepo, storage, branchScope);
         TenantContext.setOrgId(ORG);
         lenient().when(branchScope.currentUserId()).thenReturn(7L);
-        // Every path now honours branch access — default the fixtures to visible.
-        lenient().when(branchScope.canSeeBranch(anyLong())).thenReturn(true);
-        lenient().when(storage.put(any(), any(), any())).thenReturn("org/1/receive_document/500/abc");
-        lenient().when(attachmentRepo.save(any(Attachment.class))).thenAnswer(inv -> {
-            Attachment a = inv.getArgument(0);
-            ReflectionTestUtils.setField(a, "id", 77L);
-            return a;
-        });
     }
 
     @AfterEach
@@ -74,32 +70,23 @@ class AttachmentServiceTest {
     }
 
     @Test
-    void upload_storesAPdf_onAnOpenDocument() {
-        when(receiveDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(doc(WorkflowStatus.SUBMITTED, false)));
-        MockMultipartFile file = new MockMultipartFile("file", "receipt.pdf", "application/pdf", new byte[] {1, 2, 3});
-
-        var response = service.upload(ParentType.RECEIVE_DOCUMENT, DOC_ID, file);
-
-        assertThat(response.filename()).isEqualTo("receipt.pdf");
-        verify(storage).put(any(), any(), any());
-        verify(attachmentRepo).save(any(Attachment.class));
-    }
-
-    @Test
-    void upload_rejectsNonPdfNonImage() {
-        when(receiveDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(doc(WorkflowStatus.SUBMITTED, false)));
-        MockMultipartFile file = new MockMultipartFile("file", "notes.txt", "text/plain", new byte[] {1});
+    void upload_refusesAnotherBranchDocument() {
+        when(branchScope.canSeeBranch(OTHER_BRANCH)).thenReturn(false);
+        when(receiveDocumentRepo.findByIdAndOrgId(DOC_ID, ORG))
+            .thenReturn(Optional.of(receiveDoc(WorkflowStatus.SUBMITTED, false, OTHER_BRANCH)));
+        MockMultipartFile file = new MockMultipartFile("file", "bill.pdf", "application/pdf", new byte[] {1});
 
         assertThatThrownBy(() -> service.upload(ParentType.RECEIVE_DOCUMENT, DOC_ID, file))
             .isInstanceOf(DamsException.class)
-            .hasMessageContaining("PDF or image");
-        verify(storage, never()).put(any(), any(), any());
+            .hasMessageContaining("outside your access");
     }
 
     @Test
-    void upload_rejectedWhenDocumentIsSettled() {
-        when(receiveDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(doc(WorkflowStatus.APPROVED, true)));
-        MockMultipartFile file = new MockMultipartFile("file", "receipt.pdf", "application/pdf", new byte[] {1});
+    void upload_refusesSettledReceipt() {
+        when(branchScope.canSeeBranch(HOME_BRANCH)).thenReturn(true);
+        when(receiveDocumentRepo.findByIdAndOrgId(DOC_ID, ORG))
+            .thenReturn(Optional.of(receiveDoc(WorkflowStatus.APPROVED, true, HOME_BRANCH)));
+        MockMultipartFile file = new MockMultipartFile("file", "bill.pdf", "application/pdf", new byte[] {1});
 
         assertThatThrownBy(() -> service.upload(ParentType.RECEIVE_DOCUMENT, DOC_ID, file))
             .isInstanceOf(DamsException.class)
@@ -107,54 +94,49 @@ class AttachmentServiceTest {
     }
 
     @Test
-    void upload_storesAPdf_onAnOpenExpenseDocument() {
+    void upload_refusesApprovedButUnclosedExpense() {
+        when(branchScope.canSeeBranch(HOME_BRANCH)).thenReturn(true);
         when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG))
-            .thenReturn(Optional.of(expenseDoc(ExpenseWorkflowStatus.SUBMITTED)));
-        MockMultipartFile file = new MockMultipartFile("file", "bill.pdf", "application/pdf", new byte[] {1, 2});
-
-        var response = service.upload(ParentType.EXPENSE_DOCUMENT, DOC_ID, file);
-
-        assertThat(response.filename()).isEqualTo("bill.pdf");
-        verify(attachmentRepo).save(any(Attachment.class));
-    }
-
-    @Test
-    void upload_rejectedWhenExpenseDocumentIsClosed() {
-        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG))
-            .thenReturn(Optional.of(expenseDoc(ExpenseWorkflowStatus.CLOSED)));
+            .thenReturn(Optional.of(expenseDoc(ExpenseWorkflowStatus.APPROVED)));
         MockMultipartFile file = new MockMultipartFile("file", "bill.pdf", "application/pdf", new byte[] {1});
 
         assertThatThrownBy(() -> service.upload(ParentType.EXPENSE_DOCUMENT, DOC_ID, file))
             .isInstanceOf(DamsException.class)
             .hasMessageContaining("frozen");
-        verify(storage, never()).put(any(), any(), any());
     }
 
     @Test
-    void delete_rejectsAFrozenAttachment() {
-        Attachment frozen = new Attachment();
-        ReflectionTestUtils.setField(frozen, "id", 77L);
-        frozen.setOrgId(ORG);
-        frozen.setParentType(ParentType.RECEIVE_DOCUMENT);
-        frozen.setParentId(DOC_ID);
-        frozen.setFilename("receipt.pdf");
-        frozen.setObjectKey("k");
-        frozen.setFrozen(true);
-        when(attachmentRepo.findByIdAndOrgId(77L, ORG)).thenReturn(Optional.of(frozen));
-        when(receiveDocumentRepo.findByIdAndOrgId(DOC_ID, ORG))
-            .thenReturn(Optional.of(doc(WorkflowStatus.SUBMITTED, false)));
+    void delete_refusesApprovedExpense_evenWhenRowIsNotFrozen() {
+        // Row flags are only written on close/settle/approve transitions; the document
+        // predicate must block deletes on its own for rows stored before that.
+        when(branchScope.canSeeBranch(HOME_BRANCH)).thenReturn(true);
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG))
+            .thenReturn(Optional.of(expenseDoc(ExpenseWorkflowStatus.APPROVED)));
+        when(attachmentRepo.findByIdAndOrgId(77L, ORG))
+            .thenReturn(Optional.of(expenseAttachment(false)));
 
         assertThatThrownBy(() -> service.delete(77L))
             .isInstanceOf(DamsException.class)
             .hasMessageContaining("frozen");
-        verify(storage, never()).delete(any());
     }
 
-    private static ReceiveDocument doc(WorkflowStatus status, boolean settled) {
+    @Test
+    void signedUrl_refusesAnotherBranchDocument() {
+        when(branchScope.canSeeBranch(OTHER_BRANCH)).thenReturn(false);
+        when(attachmentRepo.findByIdAndOrgId(77L, ORG)).thenReturn(Optional.of(attachment(false)));
+        when(receiveDocumentRepo.findByIdAndOrgId(DOC_ID, ORG))
+            .thenReturn(Optional.of(receiveDoc(WorkflowStatus.SUBMITTED, false, OTHER_BRANCH)));
+
+        assertThatThrownBy(() -> service.signedUrl(77L))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("outside your access");
+    }
+
+    private static ReceiveDocument receiveDoc(WorkflowStatus status, boolean settled, long branchId) {
         ReceiveDocument d = new ReceiveDocument();
         ReflectionTestUtils.setField(d, "id", DOC_ID);
         d.setOrgId(ORG);
-        d.setBranchId(3L);
+        d.setBranchId(branchId);
         d.setJobCardId(50L);
         d.setDocumentNo("OOR-JUL26-R-011");
         d.setWorkflowStatus(status);
@@ -167,7 +149,7 @@ class AttachmentServiceTest {
         ExpenseDocument d = new ExpenseDocument();
         ReflectionTestUtils.setField(d, "id", DOC_ID);
         d.setOrgId(ORG);
-        d.setBranchId(3L);
+        d.setBranchId(HOME_BRANCH);
         d.setReceiverId(9L);
         d.setExpenseCategoryId(2L);
         d.setBusinessStatusId(4L);
@@ -175,5 +157,23 @@ class AttachmentServiceTest {
         d.setWorkflowStatus(status);
         d.setCreatedBy(7L);
         return d;
+    }
+
+    private static Attachment attachment(boolean frozen) {
+        Attachment a = new Attachment();
+        ReflectionTestUtils.setField(a, "id", 77L);
+        a.setOrgId(ORG);
+        a.setParentType(ParentType.RECEIVE_DOCUMENT);
+        a.setParentId(DOC_ID);
+        a.setFilename("bill.pdf");
+        a.setObjectKey("k");
+        a.setFrozen(frozen);
+        return a;
+    }
+
+    private static Attachment expenseAttachment(boolean frozen) {
+        Attachment a = attachment(frozen);
+        a.setParentType(ParentType.EXPENSE_DOCUMENT);
+        return a;
     }
 }

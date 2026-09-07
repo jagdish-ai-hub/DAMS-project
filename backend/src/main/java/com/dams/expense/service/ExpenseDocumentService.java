@@ -54,6 +54,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -409,11 +410,12 @@ public class ExpenseDocumentService {
     }
 
     private List<ExpenseLine> appendLines(Long orgId, ExpenseDocument doc, List<ExpenseLineInput> inputs,
-                                          Long createdByUserId, Long expenseCategoryId) {
+                                           Long createdByUserId, Long expenseCategoryId) {
         if (inputs == null || inputs.isEmpty()) {
             return List.of();
         }
-        int nextLineNo = expenseLineRepo.maxLineNo(doc.getId()) + 1;
+        // Monotonic counter, never max(line_no)+1 — see ReceiveDocumentService.appendLines.
+        int nextLineNo = doc.getLineNoSeq() + 1;
         List<ExpenseLine> saved = new ArrayList<>();
         for (ExpenseLineInput input : inputs) {
             ExpenseLine line = new ExpenseLine();
@@ -428,6 +430,7 @@ public class ExpenseDocumentService {
             saved.add(expenseLineRepo.save(line));
             nextLineNo++;
         }
+        doc.setLineNoSeq(nextLineNo - 1);
         return saved;
     }
 
@@ -474,6 +477,21 @@ public class ExpenseDocumentService {
         List<ExpenseLine> lines = expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(orgId, doc.getId());
         if (lines.isEmpty()) {
             throw DamsException.badRequest("Add at least one expense line before submitting");
+        }
+        // A cash-mode line added before the day-close must not slip into the locked
+        // day on submit — line-add time checks are not enough. Before numbering, so a
+        // refusal never consumes a document number.
+        Map<Long, ExpenseMode> modes = new HashMap<>();
+        for (ExpenseMode mode : expenseModeRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId)) {
+            modes.put(mode.getId(), mode);
+        }
+        for (ExpenseLine l : lines) {
+            ExpenseMode mode = modes.get(l.getExpenseModeId());
+            if (mode == null) {
+                throw DamsException.notFound("Expense mode", l.getExpenseModeId());
+            }
+            cashDateLock.requireCashLineDateOpen(orgId, doc.getBranchId(), l.getTransactionDate(),
+                mode.isCash(), "expense");
         }
         if (doc.getDocumentNo() == null) {
             Branch branch = branchRepo.findByIdAndOrgId(doc.getBranchId(), orgId)
@@ -611,7 +629,7 @@ public class ExpenseDocumentService {
         List<ExpenseLine> lines = expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(orgId, doc.getId());
         List<ExpenseLineResponse> lineDtos = toLineDtos(orgId, lines);
         BigDecimal total = lines.stream().map(ExpenseLine::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
-        String createdByName = userRepo.findById(doc.getCreatedBy()).map(AppUser::getName).orElse(null);
+        String createdByName = userRepo.findByIdAndOrganization_Id(doc.getCreatedBy(), orgId).map(AppUser::getName).orElse(null);
 
         return new ExpenseDocumentResponse(
             doc.getId(),

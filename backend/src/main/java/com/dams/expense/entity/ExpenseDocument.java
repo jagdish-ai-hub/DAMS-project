@@ -66,6 +66,13 @@ public class ExpenseDocument {
     @Column(name = "over_limit", nullable = false)
     private boolean overLimit = false;
 
+    /**
+     * Monotonic line-number counter (V22) — see ReceiveDocument.lineNoSeq.
+     * Numbers are never reused even after a line is voided.
+     */
+    @Column(name = "line_no_seq", nullable = false)
+    private int lineNoSeq = 0;
+
     @Column(name = "created_by", nullable = false, updatable = false)
     private Long createdBy;
 

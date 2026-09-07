@@ -7,6 +7,22 @@
 
 ## Revision log
 
+- **rev 28 (2026-09-07)** — Full rulebook audit batch (AGENT.md/plan.md compliance).
+  Backend: submit/resubmit re-checks the cash-day lock per line before numbering
+  (V21 narrows the one-open index past REJECTED; V22 adds a monotonic `line_no_seq`
+  so voided line ids are never reused); attachments freeze at Approved/settled and
+  honour branch access on upload/list/signed-url/delete, with row freeze on approve;
+  job-card reads/patches check branch scope; org delete refuses transactional orgs
+  (rev7); web-layer `@PreAuthorize` mirrors service guards on review/receipt/expense/
+  cash/job-card/customer/export endpoints; org-scoped user-name lookup; search hits
+  and customer history honour the branch filter (picker stays org-wide for dedup).
+  Frontend: approved-state attachment freeze, maker-checker action hiding with notes,
+  FM load errors replace the fabricated record, FM-only user filter, receivers master
+  tab, per-screen help buttons, search branch badges, rev23 copy fix.
+  Left as designed: session-filter scoping, LB request-id passthrough, VERIFIED
+  attachments. Left for owner decision: FEAT-04 export vs AGENT.md decision #5.
+  Verified: `mvn verify` 171 green, `tsc`/`eslint`/`vitest` clean.
+
 - **rev 27 (2026-09-06)** — AI bug-fix pass (findings H1–H5, M1–M9, L2, L6): brief now
   counts real 90+ claim buckets via `AiOpsService` (the old `sub().contains("90+")`
   could never match); doc-lookup honours the branch filter and a miss cites nothing;

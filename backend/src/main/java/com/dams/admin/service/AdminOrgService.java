@@ -145,14 +145,19 @@ public class AdminOrgService {
      * Permanently delete an organization and everything under it (branches, users, masters,
      * receivers). Super Admin only — for removing a dealership onboarded by mistake.
      *
-     * Stage 4+ will refuse this once the org has any transactional documents; there are none
-     * yet, so no guard is needed here.
+     * Refuses once the org has any transactional documents (plan.md rev7) — wiping live
+     * money is never the fix for a data problem; correct it through the review flow.
      */
     @Transactional
     public void deleteOrganization(Long id) {
         Organization org = orgRepo.findById(id)
             .orElseThrow(() -> DamsException.notFound("Organization", id));
 
+        if (purgeService.hasTransactionalData(org.getId())) {
+            throw DamsException.conflict("Organization '" + org.getName() + "' (id " + org.getId()
+                + ") has transactional documents (receipts, expenses, cash, job cards or claims)"
+                + " and cannot be deleted — deactivate its users instead");
+        }
         purgeService.purgeChildren(org.getId());
         orgRepo.delete(org);
 

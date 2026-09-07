@@ -222,6 +222,52 @@ class ExpenseDocumentServiceTest {
     }
 
     @Test
+    void submit_refusesCashLineInLockedDay_withoutConsumingNumber() {
+        ExpenseDocument draft = draftDoc();
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(draft));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, DOC_ID))
+            .thenReturn(List.of(persistedLine(1, new BigDecimal("500"))));
+        ExpenseMode cashMode = mode();
+        cashMode.setCash(true);
+        lenient().when(expenseModeRepo.findByOrgIdOrderBySortOrderAscIdAsc(ORG))
+            .thenReturn(List.of(cashMode));
+        org.mockito.Mockito.doThrow(DamsException.conflict("A cash expense line dated 2026-08-30 cannot be recorded"))
+            .when(cashDateLock).requireCashLineDateOpen(eq(ORG), eq(HOME_BRANCH),
+                eq(java.time.LocalDate.of(2026, 8, 30)), eq(true), eq("expense"));
+
+        assertThatThrownBy(() -> service.submit(DOC_ID))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("cash expense line");
+        verify(cashDateLock).requireCashLineDateOpen(eq(ORG), eq(HOME_BRANCH),
+            eq(java.time.LocalDate.of(2026, 8, 30)), eq(true), eq("expense"));
+        verify(documentNumberService, never()).nextNumber(any(), any(), any());
+        assertThat(draft.getDocumentNo()).isNull();
+        assertThat(draft.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.DRAFT);
+    }
+
+    @Test
+    void lineNumbers_neverReused_afterDelete() {
+        ExpenseDocument doc = submittedDoc(JC_PLAIN);
+        doc.setWorkflowStatus(ExpenseWorkflowStatus.QUERIED);
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(doc));
+
+        service.addLine(DOC_ID, lineInput(new BigDecimal("100")));
+        service.addLine(DOC_ID, lineInput(new BigDecimal("200")));
+
+        ExpenseLine first = persistedLine(1, new BigDecimal("100"));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdAndLineNo(ORG, DOC_ID, 1))
+            .thenReturn(Optional.of(first));
+        service.deleteLine(DOC_ID, 1);
+
+        service.addLine(DOC_ID, lineInput(new BigDecimal("300")));
+
+        ArgumentCaptor<ExpenseLine> lines = ArgumentCaptor.forClass(ExpenseLine.class);
+        verify(expenseLineRepo, org.mockito.Mockito.times(3)).save(lines.capture());
+        assertThat(lines.getAllValues()).extracting(ExpenseLine::getLineNo).containsExactly(1, 2, 3);
+        assertThat(doc.getLineNoSeq()).isEqualTo(3);
+    }
+
+    @Test
     void transferToClaim_isRejected_whenTheJobCardIsNotAClaimCategory() {
         ExpenseDocument doc = submittedDoc(JC_PLAIN);
         when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(doc));

@@ -240,7 +240,7 @@ public class CashDocumentService {
         Branch branch = branchRepo.findByIdAndOrgId(doc.getBranchId(), orgId).orElse(null);
         String bankName = doc.getBankId() == null ? null
             : bankRepo.findByIdAndOrgId(doc.getBankId(), orgId).map(b -> b.getName()).orElse(null);
-        String createdByName = userRepo.findById(doc.getCreatedBy()).map(AppUser::getName).orElse(null);
+        String createdByName = userRepo.findByIdAndOrganization_Id(doc.getCreatedBy(), orgId).map(AppUser::getName).orElse(null);
 
         return new CashDocumentResponse(
             doc.getId(),

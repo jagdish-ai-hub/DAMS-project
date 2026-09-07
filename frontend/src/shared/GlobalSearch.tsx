@@ -227,6 +227,7 @@ export default function GlobalSearch() {
                 </span>
                 <span style={{ display: 'block', fontSize: '0.74rem', color: 'var(--muted)' }}>
                   {(h.vehicles.join(', ') || 'No vehicle')} · {h.jobCardCount} job card{h.jobCardCount === 1 ? '' : 's'}
+                  {(h.branchCodes ?? []).length > 0 && <> · {(h.branchCodes ?? []).join(', ')}</>}
                 </span>
               </span>
               <span style={{
