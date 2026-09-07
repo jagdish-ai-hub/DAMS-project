@@ -15,6 +15,7 @@ import com.dams.cash.entity.CashWorkflowStatus;
 import com.dams.cash.repository.CashDocumentRepository;
 import com.dams.common.exception.DamsException;
 import com.dams.config.TenantContext;
+import com.dams.masters.entity.Bank;
 import com.dams.masters.repository.BankRepository;
 import com.dams.user.entity.AppUser;
 import com.dams.user.repository.AppUserRepository;
@@ -129,6 +130,7 @@ public class CashDocumentService {
         Long orgId = TenantContext.requireOrgId();
         AppUser me = guard.requireCashier(orgId);
         CashDocument doc = load(orgId, id);
+        requireOwnBranch(me, doc);
         if (doc.getWorkflowStatus() != CashWorkflowStatus.DRAFT) {
             throw DamsException.conflict("Only a draft can be submitted (document " + describe(doc)
                 + " is " + doc.getWorkflowStatus() + ")");
@@ -143,6 +145,7 @@ public class CashDocumentService {
         Long orgId = TenantContext.requireOrgId();
         AppUser me = guard.requireCashier(orgId);
         CashDocument doc = load(orgId, id);
+        requireOwnBranch(me, doc);
         if (doc.getWorkflowStatus() != CashWorkflowStatus.QUERIED) {
             throw DamsException.conflict("Only a queried document can be resubmitted (document "
                 + describe(doc) + " is " + doc.getWorkflowStatus() + ")");
@@ -157,12 +160,17 @@ public class CashDocumentService {
         Long orgId = TenantContext.requireOrgId();
         AppUser me = guard.requireCashier(orgId);
         CashDocument doc = load(orgId, id);
+        requireOwnBranch(me, doc);
         if (doc.getWorkflowStatus() != CashWorkflowStatus.DRAFT
             && doc.getWorkflowStatus() != CashWorkflowStatus.QUERIED) {
             throw DamsException.conflict("A cash movement can only be edited while it is a draft or"
                 + " queried (document " + describe(doc) + " is " + doc.getWorkflowStatus() + ")");
         }
-        cashDateLock.requireCashDateOpen(orgId, doc.getBranchId(), doc.getTransactionDate());
+        // A draft movement was never in the drawer (only non-DRAFT movements count), so the
+        // existing-date check applies to QUERIED edits only; the new date is always checked below.
+        if (doc.getWorkflowStatus() != CashWorkflowStatus.DRAFT) {
+            cashDateLock.requireCashDateOpen(orgId, doc.getBranchId(), doc.getTransactionDate());
+        }
         if (request.getDirection() != null) {
             doc.setDirection(request.getDirection());
         }
@@ -192,8 +200,9 @@ public class CashDocumentService {
     @Transactional
     public void delete(Long id) {
         Long orgId = TenantContext.requireOrgId();
-        guard.requireCashier(orgId);
+        AppUser me = guard.requireCashier(orgId);
         CashDocument doc = load(orgId, id);
+        requireOwnBranch(me, doc);
         if (doc.getWorkflowStatus() != CashWorkflowStatus.DRAFT) {
             throw DamsException.conflict("Only a draft cash movement can be deleted (document "
                 + describe(doc) + " is " + doc.getWorkflowStatus() + ")");
@@ -225,14 +234,30 @@ public class CashDocumentService {
         if (bankId == null) {
             return null;
         }
-        return bankRepo.findByIdAndOrgId(bankId, orgId)
-            .orElseThrow(() -> DamsException.notFound("Bank", bankId))
-            .getId();
+        Bank bank = bankRepo.findByIdAndOrgId(bankId, orgId)
+            .orElseThrow(() -> DamsException.notFound("Bank", bankId));
+        if (!bank.isActive()) {
+            throw DamsException.badRequest("Bank '" + bank.getName() + "' is inactive");
+        }
+        return bank.getId();
     }
 
     private CashDocument load(Long orgId, Long id) {
         return cashDocumentRepo.findByIdAndOrgId(id, orgId)
             .orElseThrow(() -> DamsException.notFound("Cash document", id));
+    }
+
+    /**
+     * A cashier posts only under their own home branch (AGENT.md decision #2) — the
+     * multi-branch toggle widens search/view, never where a document posts. Without this,
+     * any cashier could submit/edit/delete another branch's movement by id and corrupt
+     * that branch's drawer.
+     */
+    private void requireOwnBranch(AppUser me, CashDocument doc) {
+        if (!doc.getBranchId().equals(me.getHomeBranchId())) {
+            throw DamsException.forbidden("Cash document " + describe(doc)
+                + " belongs to another branch — you can only change movements of your home branch");
+        }
     }
 
     public CashDocumentResponse assemble(CashDocument doc) {

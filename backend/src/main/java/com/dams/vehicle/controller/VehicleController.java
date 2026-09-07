@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -29,6 +30,7 @@ public class VehicleController {
     }
 
     @GetMapping
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Look up a vehicle by number (?vehicle_no=)")
     public VehicleResponse byNumber(@RequestParam(name = "vehicle_no") String vehicleNo) {
         return vehicleService.findByNumber(vehicleNo)
@@ -36,6 +38,7 @@ public class VehicleController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyAuthority('CASHIER', 'ACCOUNTANT', 'FINANCE_MANAGER')")
     @Operation(summary = "Register a vehicle for a customer (deduped on the number)")
     public ResponseEntity<VehicleResponse> create(@Valid @RequestBody VehicleRequest request) {
         VehicleService.CreateResult result = vehicleService.createOrGet(request);

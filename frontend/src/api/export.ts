@@ -6,7 +6,7 @@ export const exportApi = {
     if (branchId) params.append('branchId', String(branchId))
     if (from) params.append('from', from)
     if (to) params.append('to', to)
-    const response = await api.get(`/export/receipts?${params.toString()}`, {
+    const response = await api.get(`/api/v1/export/receipts?${params.toString()}`, {
       responseType: 'blob',
     })
     const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' })
@@ -25,7 +25,7 @@ export const exportApi = {
     if (branchId) params.append('branchId', String(branchId))
     if (from) params.append('from', from)
     if (to) params.append('to', to)
-    const response = await api.get(`/export/expenses?${params.toString()}`, {
+    const response = await api.get(`/api/v1/export/expenses?${params.toString()}`, {
       responseType: 'blob',
     })
     const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' })

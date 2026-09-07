@@ -27,10 +27,7 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
     long countByHomeBranchId(Long homeBranchId);
 
     /** Just the display name — avoids loading the whole AppUser (+ its org join) for a label. */
-    @Query("select u.name from AppUser u where u.id = :id")
-    Optional<String> findNameById(@Param("id") Long id);
-
-    /** Org-scoped variant — user ids from org-scoped rows must never resolve cross-org names. */
+    /** Org-scoped — user ids from org-scoped rows must never resolve cross-org names. */
     @Query("select u.name from AppUser u where u.id = :id and u.organization.id = :orgId")
     Optional<String> findNameByIdAndOrganization_Id(@Param("id") Long id, @Param("orgId") Long orgId);
 

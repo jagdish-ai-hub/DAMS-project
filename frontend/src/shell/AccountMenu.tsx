@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
+import { branchLabel, useBranchNames } from '../shared/useBranchNames'
 import type { Role } from '../auth/AuthContext'
 
 const ROLE_LABEL: Record<Role, string> = {
@@ -20,6 +21,7 @@ export default function AccountMenu() {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const branchNames = useBranchNames(open)
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -44,7 +46,7 @@ export default function AccountMenu() {
   const branchContext =
     user.role === 'CASHIER'
       ? user.homeBranchId
-        ? `Branch #${user.homeBranchId}`
+        ? branchLabel(branchNames, user.homeBranchId)
         : 'No home branch set'
       : user.role === 'ACCOUNTANT'
         ? user.branchIds.length > 0

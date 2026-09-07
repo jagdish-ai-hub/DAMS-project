@@ -6,7 +6,6 @@ import com.dams.audit.entity.AuditEvent;
 import com.dams.audit.entity.EventType;
 import com.dams.audit.repository.AuditEventRepository;
 import com.dams.config.TenantContext;
-import com.dams.user.entity.AppUser;
 import com.dams.user.repository.AppUserRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -68,7 +67,7 @@ public class DocumentHistoryService {
             return "System";
         }
         return cache.computeIfAbsent(e.getActorId(), id ->
-            userRepo.findById(id).map(AppUser::getName).orElse("User #" + id));
+            userRepo.findNameByIdAndOrganization_Id(id, e.getOrgId()).orElse("User #" + id));
     }
 
     private String action(AuditEvent e) {

@@ -222,6 +222,19 @@ class ExpenseDocumentServiceTest {
     }
 
     @Test
+    void submit_refusesAnotherBranchOverheadDocument() {
+        ExpenseDocument foreign = draftDoc();
+        foreign.setBranchId(999L);   // branch overhead from another branch — no job card to check
+        foreign.setJobCardId(null);
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(foreign));
+
+        assertThatThrownBy(() -> service.submit(DOC_ID))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("another branch");
+        verify(expenseDocumentRepo, never()).save(any());
+    }
+
+    @Test
     void submit_refusesCashLineInLockedDay_withoutConsumingNumber() {
         ExpenseDocument draft = draftDoc();
         when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(draft));

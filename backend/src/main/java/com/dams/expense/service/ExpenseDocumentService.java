@@ -226,6 +226,7 @@ public class ExpenseDocumentService {
         Long orgId = TenantContext.requireOrgId();
         ExpenseDocument doc = load(orgId, documentId);
         AppUser me = postingGuard.requireCanPost(orgId, jobCardOrNull(orgId, doc));
+        requireOwnDoc(me, doc);
         requireAcceptsLines(doc);
 
         ExpenseLine line = appendLines(orgId, doc, List.of(input), me.getId(), doc.getExpenseCategoryId()).get(0);
@@ -245,6 +246,7 @@ public class ExpenseDocumentService {
         Long orgId = TenantContext.requireOrgId();
         ExpenseDocument doc = load(orgId, documentId);
         AppUser me = postingGuard.requireCanPost(orgId, jobCardOrNull(orgId, doc));
+        requireOwnDoc(me, doc);
 
         if (doc.getWorkflowStatus() != ExpenseWorkflowStatus.DRAFT) {
             throw DamsException.conflict("Only a draft can be submitted (document " + describe(doc)
@@ -261,6 +263,7 @@ public class ExpenseDocumentService {
         Long orgId = TenantContext.requireOrgId();
         ExpenseDocument doc = load(orgId, documentId);
         AppUser me = postingGuard.requireCanPost(orgId, jobCardOrNull(orgId, doc));
+        requireOwnDoc(me, doc);
 
         if (doc.getWorkflowStatus() != ExpenseWorkflowStatus.QUERIED) {
             throw DamsException.conflict("Only a queried document can be resubmitted (document "
@@ -276,6 +279,7 @@ public class ExpenseDocumentService {
         Long orgId = TenantContext.requireOrgId();
         ExpenseDocument doc = load(orgId, documentId);
         AppUser me = postingGuard.requireCanPost(orgId, jobCardOrNull(orgId, doc));
+        requireOwnDoc(me, doc);
         requireEditableHeader(doc);
 
         if (request.getJobCardId() != null && !request.getJobCardId().equals(doc.getJobCardId())) {
@@ -313,15 +317,20 @@ public class ExpenseDocumentService {
         Long orgId = TenantContext.requireOrgId();
         ExpenseDocument doc = load(orgId, documentId);
         AppUser me = postingGuard.requireCanPost(orgId, jobCardOrNull(orgId, doc));
+        requireOwnDoc(me, doc);
         requireEditableLines(doc);
 
         ExpenseLine line = expenseLineRepo.findByOrgIdAndExpenseDocumentIdAndLineNo(orgId, documentId, lineNo)
             .orElseThrow(() -> DamsException.notFound("Expense line", "lineNo", lineNo));
 
         // Editing a cash-mode line on an already-closed cash day would rewrite its drawer — refuse.
-        ExpenseMode existingMode = expenseModeRepo.findByIdAndOrgId(line.getExpenseModeId(), orgId).orElse(null);
-        cashDateLock.requireCashLineDateOpen(orgId, doc.getBranchId(), line.getTransactionDate(),
-            existingMode != null && existingMode.isCash(), "expense");
+        // Draft lines were never in the drawer (only non-DRAFT lines count), so a draft line can
+        // always be re-dated or removed; the new date is still lock-checked in applyLineInput.
+        if (doc.getWorkflowStatus() != ExpenseWorkflowStatus.DRAFT) {
+            ExpenseMode existingMode = expenseModeRepo.findByIdAndOrgId(line.getExpenseModeId(), orgId).orElse(null);
+            cashDateLock.requireCashLineDateOpen(orgId, doc.getBranchId(), line.getTransactionDate(),
+                existingMode != null && existingMode.isCash(), "expense");
+        }
 
         applyLineInput(orgId, doc.getBranchId(), line, input, doc.getExpenseCategoryId());
         expenseLineRepo.save(line);
@@ -336,14 +345,18 @@ public class ExpenseDocumentService {
         Long orgId = TenantContext.requireOrgId();
         ExpenseDocument doc = load(orgId, documentId);
         AppUser me = postingGuard.requireCanPost(orgId, jobCardOrNull(orgId, doc));
+        requireOwnDoc(me, doc);
         requireEditableLines(doc);
 
         ExpenseLine line = expenseLineRepo.findByOrgIdAndExpenseDocumentIdAndLineNo(orgId, documentId, lineNo)
             .orElseThrow(() -> DamsException.notFound("Expense line", "lineNo", lineNo));
         // Removing a cash-mode line from an already-closed cash day would rewrite its drawer — refuse.
-        ExpenseMode existingMode = expenseModeRepo.findByIdAndOrgId(line.getExpenseModeId(), orgId).orElse(null);
-        cashDateLock.requireCashLineDateOpen(orgId, doc.getBranchId(), line.getTransactionDate(),
-            existingMode != null && existingMode.isCash(), "expense");
+        // Draft lines were never in the drawer, so a draft line can always be removed.
+        if (doc.getWorkflowStatus() != ExpenseWorkflowStatus.DRAFT) {
+            ExpenseMode existingMode = expenseModeRepo.findByIdAndOrgId(line.getExpenseModeId(), orgId).orElse(null);
+            cashDateLock.requireCashLineDateOpen(orgId, doc.getBranchId(), line.getTransactionDate(),
+                existingMode != null && existingMode.isCash(), "expense");
+        }
         // line_no is not renumbered — the number (and later the line id) is never reused.
         expenseLineRepo.delete(line);
         doc.setLastModifiedBy(me.getId());
@@ -363,6 +376,7 @@ public class ExpenseDocumentService {
         Long orgId = TenantContext.requireOrgId();
         ExpenseDocument doc = load(orgId, documentId);
         AppUser me = postingGuard.requireCanPost(orgId, jobCardOrNull(orgId, doc));
+        requireOwnDoc(me, doc);
 
         if (doc.getWorkflowStatus() == ExpenseWorkflowStatus.REJECTED
             || doc.getWorkflowStatus() == ExpenseWorkflowStatus.CLOSED) {
@@ -460,9 +474,12 @@ public class ExpenseDocumentService {
         cashDateLock.requireCashLineDateOpen(orgId, branchId, input.getTransactionDate(), mode.isCash(), "expense");
         Long bankId = null;
         if (input.getBankId() != null) {
-            bankId = bankRepo.findByIdAndOrgId(input.getBankId(), orgId)
-                .orElseThrow(() -> DamsException.notFound("Bank", input.getBankId()))
-                .getId();
+            Bank bank = bankRepo.findByIdAndOrgId(input.getBankId(), orgId)
+                .orElseThrow(() -> DamsException.notFound("Bank", input.getBankId()));
+            if (!bank.isActive()) {
+                throw DamsException.badRequest("Bank '" + bank.getName() + "' is inactive");
+            }
+            bankId = bank.getId();
         }
         line.setTransactionDate(input.getTransactionDate());
         line.setSubCategoryId(sub.getId());
@@ -581,6 +598,18 @@ public class ExpenseDocumentService {
         return doc.getJobCardId() == null ? null
             : jobCardRepo.findByIdAndOrgId(doc.getJobCardId(), orgId)
                 .orElseThrow(() -> DamsException.notFound("Job card", doc.getJobCardId()));
+    }
+
+    /**
+     * An overhead expense (no job card) still belongs to exactly one branch — the one it was
+     * created under. The guard above only constrains the job-card dimension, so without this a
+     * cashier could mutate another branch's overhead document by id.
+     */
+    private void requireOwnDoc(AppUser me, ExpenseDocument doc) {
+        if (!doc.getBranchId().equals(me.getHomeBranchId())) {
+            throw DamsException.forbidden("Expense document " + describe(doc)
+                + " belongs to another branch — you can only change documents of your home branch");
+        }
     }
 
     private ExpenseCategory requireActiveCategory(Long orgId, Long id) {

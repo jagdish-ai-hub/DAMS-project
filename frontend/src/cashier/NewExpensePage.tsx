@@ -8,9 +8,10 @@ import {
   type DocumentHistoryEntry,
   type ExpenseDocument,
 } from '../api/expenses'
-import { card, ErrorBanner, inr, primaryBtn, ghostBtn, inputStyle, Spinner, istToday } from '../shell/ui'
+import { card, ErrorBanner, inr, primaryBtn, ghostBtn, inputStyle, Spinner, istToday, fmtDateTime } from '../shell/ui'
 import AttachmentsPanel, { type LineTarget } from './AttachmentsPanel'
 import { useDraftRecovery } from '../shared/useDraftRecovery'
+import { useAuth } from '../auth/useAuth'
 
 /** The most recent accountant question / rejection reason, for the fix-and-resubmit banner. */
 function queryNote(history: DocumentHistoryEntry[]): string | null {
@@ -58,6 +59,7 @@ type JobCardOpt = { id: number; reference: string; categoryName: string | null }
 export default function NewExpensePage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
+  const { user } = useAuth()
   const editDocId = params.get('editDoc') ? Number(params.get('editDoc')) : null
   const prefillCustomerId = params.get('customerId') ? Number(params.get('customerId')) : null
   const prefillJobCardId = params.get('jobCardId') ? Number(params.get('jobCardId')) : null
@@ -90,13 +92,16 @@ export default function NewExpensePage() {
     lines,
   }), [receiverName, jobCardId, expenseCategoryId, businessStatusId, lines])
 
+  // Draft key is scoped to org+user — testers share machines and switch accounts constantly,
+  // so a global key would offer one cashier another's half-typed lines.
+  const draftStorageKey = `dams_${user?.orgId ?? 0}_${user?.userId ?? 0}_expense_draft`
   const {
     hasDraft,
     draftTimestamp,
     restoreDraft,
     discardDraft,
     clearDraft,
-  } = useDraftRecovery<typeof draftData>('dams_expense_draft', draftData, !editDocId && !loadedDoc)
+  } = useDraftRecovery<typeof draftData>(draftStorageKey, draftData, !editDocId && !loadedDoc)
 
   // masters
   useEffect(() => {
@@ -529,6 +534,9 @@ export default function NewExpensePage() {
 
   const isQueried = loadedDoc?.workflowStatus === 'QUERIED'
   const inEditMode = editDocId != null
+  // Only DRAFT / QUERIED documents are server-editable (AGENT.md: no post-approval correction
+  // in v1). Anything else opened via My Entries renders read-only — no doomed submits.
+  const readOnly = loadedDoc != null && loadedDoc.workflowStatus !== 'DRAFT' && loadedDoc.workflowStatus !== 'QUERIED'
   const showTransferButton =
     inEditMode &&
     loadedDoc != null &&
@@ -557,6 +565,13 @@ export default function NewExpensePage() {
       )}
       <ErrorBanner message={error} />
 
+      {readOnly && loadedDoc && (
+        <div style={{ background: 'var(--gray-bg)', border: '1px solid var(--line)', color: 'var(--muted)', borderRadius: 8, padding: '10px 13px', fontSize: '0.82rem', marginBottom: 12 }}>
+          <strong>This entry is {loadedDoc.workflowStatus} — read-only.</strong>
+          {' '}Only draft and queried entries can be changed. Ask the reviewer to query it back if a correction is needed.
+        </div>
+      )}
+
       {loadedDoc?.workflowStatus === 'QUERIED' && queryNote(loadedDoc.history) && (
         <div style={{ background: 'var(--amber-bg)', border: '1px solid #EAD3AE', color: 'var(--amber)', borderRadius: 8, padding: '10px 13px', fontSize: '0.82rem', marginBottom: 12 }}>
           <strong>Query from the accountant:</strong> {queryNote(loadedDoc.history)}
@@ -570,7 +585,7 @@ export default function NewExpensePage() {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap',
         }}>
           <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>
-            📋 Unsaved expense draft found from {draftTimestamp?.toLocaleTimeString()} ({draftTimestamp?.toLocaleDateString()}). Would you like to restore it?
+            📋 Unsaved expense draft found from {draftTimestamp ? fmtDateTime(draftTimestamp.toISOString()) : ''}. Would you like to restore it?
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button
@@ -601,6 +616,7 @@ export default function NewExpensePage() {
       )}
 
       <section style={{ ...card, padding: 0, marginTop: 12 }}>
+        <fieldset disabled={readOnly} style={{ border: 'none', margin: 0, padding: 0, minWidth: 0 }}>
         <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 10 }}>
           <h3 style={{ fontSize: '0.94rem', fontWeight: 700 }}>Expense Entry</h3>
           <span style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>petty cash — one record per vendor / cause</span>
@@ -702,7 +718,7 @@ export default function NewExpensePage() {
                   return (
                     <tr key={i}>
                       <td style={cellStyle}>
-                        <input type="date" value={l.transactionDate} onChange={(e) => setLine(i, { transactionDate: e.target.value })} style={cellInput} />
+                        <input type="date" value={l.transactionDate} max={istToday()} onChange={(e) => setLine(i, { transactionDate: e.target.value })} style={cellInput} />
                       </td>
                       <td style={cellStyle}>
                         <select value={l.subCategoryId} onChange={(e) => setLine(i, { subCategoryId: Number(e.target.value) })} style={cellInput}>
@@ -756,6 +772,7 @@ export default function NewExpensePage() {
               </tbody>
             </table>
           </div>
+          {!readOnly && (
           <button
             type="button"
             onClick={addLine}
@@ -763,6 +780,7 @@ export default function NewExpensePage() {
           >
             ＋ Add expense row
           </button>
+          )}
 
           {limitWarnings.length > 0 && (
             <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -781,6 +799,7 @@ export default function NewExpensePage() {
             <Foot k="Total Expenses" v={inr(total)} />
           </div>
 
+          {!readOnly && (
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 16, marginTop: 8, borderTop: '1px solid var(--line)', flexWrap: 'wrap' }}>
             <button type="button" onClick={() => navigate(-1)} style={ghostBtn} disabled={busy}>Cancel</button>
             {showTransferButton && (
@@ -806,7 +825,9 @@ export default function NewExpensePage() {
               </>
             )}
           </div>
+          )}
         </div>
+        </fieldset>
       </section>
     </div>
   )

@@ -35,7 +35,6 @@ import com.dams.masters.repository.ReceiveCategoryRepository;
 import com.dams.masters.repository.SettlementModeRepository;
 import com.dams.receive.repository.ReceiveDocumentRepository;
 import com.dams.receive.repository.SettlementLineRepository;
-import com.dams.user.entity.AppUser;
 import com.dams.user.repository.AppUserRepository;
 import com.dams.vehicle.entity.Vehicle;
 import com.dams.vehicle.repository.VehicleRepository;
@@ -339,7 +338,7 @@ public class DashboardService {
                 PageRequest.of(0, Math.max(1, Math.min(limit, 50))))) {
             String docNo = documentNoFor(orgId, e.getEntityType(), e.getEntityId());
             out.add(new ActivityItem(
-                actorName(e.getActorId(), userNames),
+                actorName(orgId, e.getActorId(), userNames),
                 humanAction(e.getEventType(), e.getDetail()),
                 docNo,
                 describeEntity(e.getEntityType()),
@@ -410,11 +409,12 @@ public class DashboardService {
         return m;
     }
 
-    private String actorName(Long actorId, Map<Long, String> cache) {
+    private String actorName(Long orgId, Long actorId, Map<Long, String> cache) {
         if (actorId == null) {
             return "System";
         }
-        return cache.computeIfAbsent(actorId, id -> userRepo.findById(id).map(AppUser::getName).orElse("User #" + id));
+        return cache.computeIfAbsent(actorId,
+            id -> userRepo.findNameByIdAndOrganization_Id(id, orgId).orElse("User #" + id));
     }
 
     private String documentNoFor(Long orgId, String entityType, Long entityId) {

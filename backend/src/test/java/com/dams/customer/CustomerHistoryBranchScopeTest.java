@@ -57,6 +57,7 @@ class CustomerHistoryBranchScopeTest {
     @Mock private PendingAmountCalculator pendingAmountCalculator;
     @Mock private ReceivePaymentGuard paymentGuard;
     @Mock private BranchScope branchScope;
+    @Mock private com.dams.jobcard.repository.ClaimCloseRepository claimCloseRepo;
 
     private CustomerService service;
 
@@ -64,7 +65,7 @@ class CustomerHistoryBranchScopeTest {
     void setUp() {
         service = new CustomerService(customerRepo, vehicleRepo, jobCardRepo, branchRepo,
             categoryRepo, statusRepo, receiveDocumentRepo, settlementLineRepo, settlementModeRepo,
-            pendingAmountCalculator, paymentGuard, branchScope);
+            pendingAmountCalculator, paymentGuard, branchScope, claimCloseRepo);
         TenantContext.setOrgId(ORG);
         lenient().when(pendingAmountCalculator.forJobCard(any(JobCard.class)))
             .thenReturn(BigDecimal.ZERO);

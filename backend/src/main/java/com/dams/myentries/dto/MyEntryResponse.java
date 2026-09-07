@@ -19,6 +19,7 @@ public record MyEntryResponse(
     String documentNo,          // null while still a draft
     String workflowStatus,
     boolean settled,            // receipts only; false for expenses
+    boolean claimOverridden,    // receipts only: FM closed the claim at a different final amount
     Long jobCardId,             // null for a branch-overhead expense
     String jobCardReference,
     String partyName,           // customer (receipt) or receiver (expense)

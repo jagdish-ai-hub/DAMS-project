@@ -9,6 +9,7 @@ import com.dams.cash.dto.CashDocumentResponse;
 import com.dams.cash.entity.CashDocument;
 import com.dams.cash.entity.CashWorkflowStatus;
 import com.dams.cash.repository.CashDocumentRepository;
+import com.dams.cash.service.CashDateLock;
 import com.dams.cash.service.CashDocumentService;
 import com.dams.common.exception.DamsException;
 import com.dams.common.security.BranchScope;
@@ -26,9 +27,13 @@ import com.dams.jobcard.entity.JobCard;
 import com.dams.jobcard.repository.ClaimCloseRepository;
 import com.dams.jobcard.repository.JobCardRepository;
 import com.dams.masters.entity.ExpenseCategory;
+import com.dams.masters.entity.ExpenseMode;
 import com.dams.masters.entity.ReceiveCategory;
+import com.dams.masters.entity.SettlementMode;
 import com.dams.masters.repository.ExpenseCategoryRepository;
+import com.dams.masters.repository.ExpenseModeRepository;
 import com.dams.masters.repository.ReceiveCategoryRepository;
+import com.dams.masters.repository.SettlementModeRepository;
 import com.dams.receive.dto.ReceiveDocumentResponse;
 import com.dams.receive.entity.ReceiveDocument;
 import com.dams.receive.entity.SettlementLine;
@@ -101,6 +106,9 @@ public class ReviewService {
     private final ExpenseDocumentService expenseDocumentService;
     private final CashDocumentRepository cashDocumentRepo;
     private final CashDocumentService cashDocumentService;
+    private final CashDateLock cashDateLock;
+    private final SettlementModeRepository settlementModeRepo;
+    private final ExpenseModeRepository expenseModeRepo;
 
     public ReviewService(ReceiveDocumentRepository receiveDocumentRepo,
                          SettlementLineRepository settlementLineRepo,
@@ -120,7 +128,10 @@ public class ReviewService {
                          ReceiveDocumentService receiveDocumentService,
                          ExpenseDocumentService expenseDocumentService,
                          CashDocumentRepository cashDocumentRepo,
-                         CashDocumentService cashDocumentService) {
+                         CashDocumentService cashDocumentService,
+                         CashDateLock cashDateLock,
+                         SettlementModeRepository settlementModeRepo,
+                         ExpenseModeRepository expenseModeRepo) {
         this.receiveDocumentRepo = receiveDocumentRepo;
         this.settlementLineRepo = settlementLineRepo;
         this.expenseDocumentRepo = expenseDocumentRepo;
@@ -140,6 +151,9 @@ public class ReviewService {
         this.expenseDocumentService = expenseDocumentService;
         this.cashDocumentRepo = cashDocumentRepo;
         this.cashDocumentService = cashDocumentService;
+        this.cashDateLock = cashDateLock;
+        this.settlementModeRepo = settlementModeRepo;
+        this.expenseModeRepo = expenseModeRepo;
     }
 
     // ============================================================ accountant queue
@@ -384,6 +398,11 @@ public class ReviewService {
         if (before.compareTo(newAmount) == 0) {
             throw DamsException.badRequest("The override amount is the same as the current amount");
         }
+        // An override changes what the drawer counts (SUBMITTED lines are in the drawer), so a
+        // cash-mode line on a closed cash day cannot be overridden — same lock as cashier edits.
+        SettlementMode mode = settlementModeRepo.findByIdAndOrgId(line.getSettlementModeId(), orgId).orElse(null);
+        cashDateLock.requireCashLineDateOpen(orgId, doc.getBranchId(), line.getTransactionDate(),
+            mode != null && mode.isCash(), "settlement");
         line.setOverriddenBy(me.getId());
         line.setOverrideReason(reason);
         line.setOverriddenAt(Instant.now());
@@ -482,6 +501,10 @@ public class ReviewService {
         if (before.compareTo(newAmount) == 0) {
             throw DamsException.badRequest("The override amount is the same as the current amount");
         }
+        // Same drawer lock as the receipt side: an override on a closed cash day is refused.
+        ExpenseMode mode = expenseModeRepo.findByIdAndOrgId(line.getExpenseModeId(), orgId).orElse(null);
+        cashDateLock.requireCashLineDateOpen(orgId, doc.getBranchId(), line.getTransactionDate(),
+            mode != null && mode.isCash(), "expense");
         boolean overLimitBefore = doc.isOverLimit();
         line.setOverriddenBy(me.getId());
         line.setOverrideReason(reason);

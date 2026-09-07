@@ -134,6 +134,7 @@ public class JobCardService {
     public JobCardResponse patch(Long id, JobCardPatchRequest request) {
         Long orgId = TenantContext.requireOrgId();
         JobCard jc = loadVisible(id);
+        requireWriteAccess(orgId, jc);
 
         // Free-to-edit references
         if (request.getInvoiceNo() != null) {
@@ -242,6 +243,21 @@ public class JobCardService {
     }
 
     /**
+     * A cashier rewrites only their own home branch's job cards (invoice, category, vehicle…).
+     * Visibility ({@code loadVisible}) is wider than writability when the multi-branch toggle
+     * is ON — without this, a cashier could corrupt another branch's pending amounts.
+     */
+    private void requireWriteAccess(Long orgId, JobCard jc) {
+        AppUser me = userRepo.findByIdAndOrganization_Id(branchScope.currentUserId(), orgId)
+            .orElseThrow(() -> DamsException.forbidden("The signed-in user is not part of this organization"));
+        if (me.getRole() == Role.CASHIER && !jc.getBranchId().equals(me.getHomeBranchId())) {
+            throw DamsException.forbidden("Job card " + JobCardResponse.reference(
+                branchRepo.findByIdAndOrgId(jc.getBranchId(), orgId).map(Branch::getCode).orElse("?"), jc.getId())
+                + " belongs to another branch — you can only edit job cards of your home branch");
+        }
+    }
+
+    /**
      * CASHIER: always their home branch (the request's branchId is ignored).
      * Everyone else: the requested branch, which must exist and be within their branch scope.
      */
@@ -334,7 +350,7 @@ public class JobCardService {
         BigDecimal pending = pendingAmountCalculator.forJobCard(jc);
         boolean claimClosed = claimClose != null;
         String claimClosedByName = claimClose == null ? null
-            : userRepo.findById(claimClose.getClosedBy()).map(AppUser::getName).orElse(null);
+            : userRepo.findNameByIdAndOrganization_Id(claimClose.getClosedBy(), orgId).orElse(null);
 
         return new JobCardResponse(
             jc.getId(),

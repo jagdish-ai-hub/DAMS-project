@@ -7,6 +7,7 @@ import { card, ErrorBanner, Skeleton, SkeletonRows, inr, initials, fmtDateShort 
 import AddPaymentModal from './AddPaymentModal'
 import ViewReceiptsModal from './ViewReceiptsModal'
 import PrintReceiptModal from './PrintReceiptModal'
+import ClaimFinalBadge from '../shared/ClaimFinalBadge'
 import { Printer } from 'lucide-react'
 import HelpButton from '../help/HelpButton'
 
@@ -476,6 +477,11 @@ function CustomerHistoryView(props: {
                           Claim
                         </span>
                       )}
+                      {j.claimOverridden && (
+                        <span style={{ marginLeft: 6 }}>
+                          <ClaimFinalBadge finalAmount={j.claimFinalAmount} />
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: '0.74rem', color: 'var(--faint)' }}>
                       {j.businessStatusName}
@@ -502,7 +508,7 @@ function CustomerHistoryView(props: {
                       onClick={() => setReceiptsTarget({
                         receiptId: j.receiveDocumentId!,
                         subtitle: `${j.reference} · whole receipt`,
-                        frozen: j.receiveDocumentSettled || j.workflowStatus === 'REJECTED',
+                        frozen: j.receiveDocumentSettled || j.workflowStatus === 'APPROVED' || j.workflowStatus === 'REJECTED',
                       })}
                       style={{ border: 'none', background: 'none', color: 'var(--navy2)', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
                     >

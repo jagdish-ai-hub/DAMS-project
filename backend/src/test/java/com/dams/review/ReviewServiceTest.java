@@ -88,6 +88,9 @@ class ReviewServiceTest {
     @Mock private ExpenseDocumentService expenseDocumentService;
     @Mock private com.dams.cash.repository.CashDocumentRepository cashDocumentRepo;
     @Mock private com.dams.cash.service.CashDocumentService cashDocumentService;
+    @Mock private com.dams.cash.service.CashDateLock cashDateLock;
+    @Mock private com.dams.masters.repository.SettlementModeRepository settlementModeRepo;
+    @Mock private com.dams.masters.repository.ExpenseModeRepository expenseModeRepo;
 
     private ReviewService service;
 
@@ -96,7 +99,7 @@ class ReviewServiceTest {
         service = new ReviewService(receiveDocumentRepo, settlementLineRepo, expenseDocumentRepo, expenseLineRepo,
             jobCardRepo, customerRepo, receiveCategoryRepo, expenseCategoryRepo, receiverRepo, claimCloseRepo,
             branchRepo, branchScope, guard, auditService, attachmentService, receiveDocumentService, expenseDocumentService,
-            cashDocumentRepo, cashDocumentService);
+            cashDocumentRepo, cashDocumentService, cashDateLock, settlementModeRepo, expenseModeRepo);
         TenantContext.setOrgId(ORG);
         lenient().when(guard.requireAccountant()).thenReturn(actor(Role.ACCOUNTANT));
         lenient().when(guard.requireFinanceManager()).thenReturn(actor(Role.FINANCE_MANAGER));
@@ -201,6 +204,25 @@ class ReviewServiceTest {
         assertThatThrownBy(() -> service.overrideReceiptLine(R_ID, 1, new BigDecimal("800.00"), "no-op"))
             .isInstanceOf(DamsException.class)
             .hasMessageContaining("same as the current amount");
+    }
+
+    @Test
+    void overrideReceiptLine_conflict_whenCashLineDayIsClosed() {
+        ReceiveDocument doc = receiveDoc(WorkflowStatus.SUBMITTED);
+        SettlementLine line = settlementLine(1, new BigDecimal("800"));
+        when(receiveDocumentRepo.findByIdAndOrgId(R_ID, ORG)).thenReturn(Optional.of(doc));
+        when(settlementLineRepo.findByOrgIdAndReceiveDocumentIdAndLineNo(ORG, R_ID, 1)).thenReturn(Optional.of(line));
+        com.dams.masters.entity.SettlementMode cashMode = new com.dams.masters.entity.SettlementMode();
+        cashMode.setCash(true);
+        when(settlementModeRepo.findByIdAndOrgId(1L, ORG)).thenReturn(Optional.of(cashMode));
+        doThrow(DamsException.conflict("day is closed"))
+            .when(cashDateLock).requireCashLineDateOpen(eq(ORG), eq(BRANCH), eq(line.getTransactionDate()),
+                eq(true), eq("settlement"));
+
+        assertThatThrownBy(() -> service.overrideReceiptLine(R_ID, 1, new BigDecimal("1000"), "Rate corrected"))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("day is closed");
+        verify(receiveDocumentService, never()).refreshSettlement(R_ID);
     }
 
     // ---------------------------------------------------- accountant: expenses

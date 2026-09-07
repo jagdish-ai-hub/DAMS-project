@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { authApi } from '../api/auth'
 import { orgSettingsApi, type OrgSettings } from '../api/orgSettings'
 import { useAuth } from '../auth/useAuth'
+import { branchLabel, useBranchNames } from '../shared/useBranchNames'
 import type { Role } from '../auth/AuthContext'
 import { card, ErrorBanner, Field, ghostBtn, primaryBtn, Spinner, TextInput, initials } from '../shell/ui'
 
@@ -19,11 +20,12 @@ const ROLE_LABEL: Record<Role, string> = {
 
 export default function SettingsPage() {
   const { user } = useAuth()
+  const branchNames = useBranchNames(true)
   if (!user) return null
 
   const branchContext =
     user.role === 'CASHIER'
-      ? user.homeBranchId ? `Home branch #${user.homeBranchId}` : 'No home branch set'
+      ? user.homeBranchId ? branchLabel(branchNames, user.homeBranchId) : 'No home branch set'
       : user.role === 'ACCOUNTANT'
         ? user.branchIds.length > 0
           ? `${user.branchIds.length} branch${user.branchIds.length === 1 ? '' : 'es'} assigned`

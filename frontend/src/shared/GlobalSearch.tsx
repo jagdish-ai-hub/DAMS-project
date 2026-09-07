@@ -3,6 +3,7 @@ import { searchApi, type SearchHit } from '../api/search'
 import { aiApi, type SmartHit } from '../api/ai'
 import { customersApi, type CustomerHistory } from '../api/customers'
 import ViewReceiptsModal from '../cashier/ViewReceiptsModal'
+import ClaimFinalBadge from './ClaimFinalBadge'
 import { Modal, ErrorBanner, SkeletonRows, ghostBtn, inr, initials, fmtDateShort } from '../shell/ui'
 
 function apiError(err: unknown, fallback: string) {
@@ -306,6 +307,11 @@ function CustomerDrawer({ customerId, onClose }: { customerId: number; onClose: 
                         Inv #{j.invoiceNo}
                       </span>
                     )}
+                    {j.claimOverridden && (
+                      <span style={{ marginLeft: 8 }}>
+                        <ClaimFinalBadge finalAmount={j.claimFinalAmount} />
+                      </span>
+                    )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: '0.78rem' }}>
@@ -328,7 +334,7 @@ function CustomerDrawer({ customerId, onClose }: { customerId: number; onClose: 
                         onClick={() => setDocs({
                           receiptId: j.receiveDocumentId!,
                           subtitle: `${j.reference} · whole receipt`,
-                          frozen: j.receiveDocumentSettled || j.workflowStatus === 'REJECTED',
+                          frozen: j.receiveDocumentSettled || j.workflowStatus === 'APPROVED' || j.workflowStatus === 'REJECTED',
                         })}
                         style={{ ...ghostBtn, fontSize: '0.72rem' }}
                       >

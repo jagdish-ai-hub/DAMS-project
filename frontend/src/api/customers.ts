@@ -35,6 +35,8 @@ export interface JobCardSummary {
   canRecordPayment: boolean
   receiveDocumentId: number | null
   receiveDocumentSettled: boolean
+  claimOverridden: boolean
+  claimFinalAmount: number | null
   createdAt: string
 }
 

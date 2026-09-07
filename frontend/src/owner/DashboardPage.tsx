@@ -8,7 +8,7 @@ import {
   dashboardApi,
   type DashboardPeriod, type DashboardSummary, type OutstandingItem, type ActivityItem,
 } from '../api/dashboard'
-import { card, ErrorBanner, Skeleton, inr, fmtDate, fmtDateTime, primaryBtn, ghostBtn } from '../shell/ui'
+import { card, ErrorBanner, Skeleton, inr, fmtDate, fmtDateTime, istToday, primaryBtn, ghostBtn } from '../shell/ui'
 import GlobalSearch from '../shared/GlobalSearch'
 import AskDamsPanel from './AskDamsPanel'
 import AiInsightsSection from './AiInsightsSection'
@@ -69,7 +69,7 @@ export default function DashboardPage() {
 
   const cashAlerts = useMemo(() => {
     if (!summary) return []
-    const todayStr = new Date().toISOString().slice(0, 10)
+    const todayStr = istToday()
     const list: { branchCode: string; message: string; severity: 'warning' | 'critical' }[] = []
     for (const b of summary.branchComparison) {
       if (!b.lastClosed) {

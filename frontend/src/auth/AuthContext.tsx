@@ -70,9 +70,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   })
 
   const login = useCallback((accessToken: string, name: string) => {
+    const parsed = parseUser(accessToken, name)
+    if (!parsed) {
+      // Never leave a token we cannot read — it would 401 on the next call anyway.
+      clearSession()
+      setUser(null)
+      return
+    }
     sessionStorage.setItem(ACCESS_TOKEN_KEY, accessToken)
     sessionStorage.setItem(USER_NAME_KEY, name)
-    setUser(parseUser(accessToken, name))
+    setUser(parsed)
   }, [])
 
   const logout = useCallback(() => {

@@ -195,6 +195,10 @@ export function Modal(props: { title: string; subtitle?: string; onClose: () => 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
+        // A nested top-level overlay (e.g. the attachment lightbox opened from inside this
+        // modal) handles its own Escape — closing the parent here would strand it open.
+        const t = e.target as Element | null
+        if (t?.closest?.('[data-top-overlay]')) return
         e.stopPropagation()
         onClose()
       }

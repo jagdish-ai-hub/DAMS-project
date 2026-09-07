@@ -44,6 +44,8 @@ public record CustomerHistoryResponse(
         boolean canRecordPayment,    // cashier, own branch, open balance
         Long receiveDocumentId,      // the open document's id, else the most recent, else null
         boolean receiveDocumentSettled,
+        boolean claimOverridden,     // FM closed the claim at a different final amount ("Overridden · Final")
+        BigDecimal claimFinalAmount,
         Instant createdAt
     ) {}
 

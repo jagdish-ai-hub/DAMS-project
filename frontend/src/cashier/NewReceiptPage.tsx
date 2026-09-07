@@ -4,12 +4,13 @@ import { mastersApi, type MasterRow } from '../api/masters'
 import { customersApi } from '../api/customers'
 import { jobCardsApi } from '../api/jobCards'
 import { receiptsApi, type CreateReceiptRequest, type DocumentHistoryEntry, type ReceiveDocument } from '../api/receipts'
-import { card, ErrorBanner, inr, primaryBtn, ghostBtn, inputStyle, Spinner, istToday } from '../shell/ui'
+import { card, ErrorBanner, inr, primaryBtn, ghostBtn, inputStyle, Spinner, istToday, fmtDateTime } from '../shell/ui'
 import AttachmentsPanel, { type LineTarget } from './AttachmentsPanel'
 import { Printer, QrCode } from 'lucide-react'
 import PrintReceiptModal from './PrintReceiptModal'
 import UpiQrModal from './UpiQrModal'
 import { useDraftRecovery } from '../shared/useDraftRecovery'
+import { useAuth } from '../auth/useAuth'
 
 /** The most recent accountant question / rejection reason, for the fix-and-resubmit banner. */
 function queryNote(history: DocumentHistoryEntry[]): string | null {
@@ -49,6 +50,7 @@ function apiError(err: unknown, fallback: string) {
 export default function NewReceiptPage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
+  const { user } = useAuth()
   const editDocId = params.get('editDoc') ? Number(params.get('editDoc')) : null
   const prefillCustomerId = params.get('customerId') ? Number(params.get('customerId')) : null
 
@@ -92,13 +94,16 @@ export default function NewReceiptPage() {
     lines,
   }), [customerId, customerName, vehicleNo, dbmId, invoiceNo, invoiceAmount, categoryId, businessStatusId, b2b, gstNo, lines])
 
+  // Draft key is scoped to org+user — testers share machines and switch accounts constantly,
+  // so a global key would offer one cashier another's half-typed lines.
+  const draftStorageKey = `dams_${user?.orgId ?? 0}_${user?.userId ?? 0}_receipt_draft`
   const {
     hasDraft,
     draftTimestamp,
     restoreDraft,
     discardDraft,
     clearDraft,
-  } = useDraftRecovery<typeof draftData>('dams_receipt_draft', draftData, !editDocId && !loadedDoc)
+  } = useDraftRecovery<typeof draftData>(draftStorageKey, draftData, !editDocId && !loadedDoc)
 
   // masters + optional prefill / edit-load
   useEffect(() => {
@@ -485,6 +490,9 @@ export default function NewReceiptPage() {
 
   const isQueried = loadedDoc?.workflowStatus === 'QUERIED'
   const inEditMode = editDocId != null
+  // Only DRAFT / QUERIED documents are server-editable (AGENT.md: no post-approval correction
+  // in v1). Anything else opened via My Entries renders read-only — no doomed submits.
+  const readOnly = loadedDoc != null && loadedDoc.workflowStatus !== 'DRAFT' && loadedDoc.workflowStatus !== 'QUERIED'
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
@@ -506,6 +514,13 @@ export default function NewReceiptPage() {
       )}
       <ErrorBanner message={error} />
 
+      {readOnly && loadedDoc && (
+        <div style={{ background: 'var(--gray-bg)', border: '1px solid var(--line)', color: 'var(--muted)', borderRadius: 8, padding: '10px 13px', fontSize: '0.82rem', marginBottom: 12 }}>
+          <strong>This entry is {loadedDoc.workflowStatus}{loadedDoc.settled ? ' · Settled' : ''} — read-only.</strong>
+          {' '}Only draft and queried entries can be changed. Ask the reviewer to query it back if a correction is needed.
+        </div>
+      )}
+
       {loadedDoc?.workflowStatus === 'QUERIED' && queryNote(loadedDoc.history) && (
         <div style={{ background: 'var(--amber-bg)', border: '1px solid #EAD3AE', color: 'var(--amber)', borderRadius: 8, padding: '10px 13px', fontSize: '0.82rem', marginBottom: 12 }}>
           <strong>Query from the accountant:</strong> {queryNote(loadedDoc.history)}
@@ -519,7 +534,7 @@ export default function NewReceiptPage() {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap',
         }}>
           <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>
-            📋 Unsaved draft found from {draftTimestamp?.toLocaleTimeString()} ({draftTimestamp?.toLocaleDateString()}). Would you like to restore it?
+            📋 Unsaved draft found from {draftTimestamp ? fmtDateTime(draftTimestamp.toISOString()) : ''}. Would you like to restore it?
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button
@@ -556,6 +571,7 @@ export default function NewReceiptPage() {
       )}
 
       <section style={{ ...card, padding: 0, marginTop: 12 }}>
+        <fieldset disabled={readOnly} style={{ border: 'none', margin: 0, padding: 0, minWidth: 0 }}>
         <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <h3 style={{ fontSize: '0.94rem', fontWeight: 700 }}>Receive Entry</h3>
           <span style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>customer receipt — one record per job / cause</span>
@@ -694,7 +710,7 @@ export default function NewReceiptPage() {
                   return (
                     <tr key={i}>
                       <td style={cellStyle}>
-                        <input type="date" value={l.transactionDate} onChange={(e) => setLine(i, { transactionDate: e.target.value })} style={cellInput} />
+                        <input type="date" value={l.transactionDate} max={istToday()} onChange={(e) => setLine(i, { transactionDate: e.target.value })} style={cellInput} />
                       </td>
                       <td style={cellStyle}>
                         <select value={l.settlementModeId} onChange={(e) => setLine(i, { settlementModeId: Number(e.target.value) })} style={cellInput}>
@@ -765,6 +781,7 @@ export default function NewReceiptPage() {
               </tbody>
             </table>
           </div>
+          {!readOnly && (
           <button
             type="button"
             onClick={addLine}
@@ -772,12 +789,14 @@ export default function NewReceiptPage() {
           >
             ＋ Add settlement row
           </button>
+          )}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 28, padding: '12px 6px 4px', borderTop: '2px solid var(--line)', marginTop: 12, flexWrap: 'wrap' }}>
             <Foot k="Total Received" v={inr(totalReceived)} tone="green" />
             <Foot k="Pending" v={invoiceAmount ? inr(pending) : '—'} tone={pending > 0 ? 'amber' : undefined} />
           </div>
 
+          {!readOnly && (
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 16, marginTop: 8, borderTop: '1px solid var(--line)', flexWrap: 'wrap' }}>
             <button type="button" onClick={() => navigate(-1)} style={ghostBtn} disabled={busy}>Cancel</button>
             {isQueried ? (
@@ -800,7 +819,9 @@ export default function NewReceiptPage() {
               </>
             )}
           </div>
+          )}
         </div>
+        </fieldset>
       </section>
 
       {showPrintModal && loadedDoc && (

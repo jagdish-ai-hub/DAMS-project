@@ -16,7 +16,9 @@ import com.dams.expense.entity.ExpenseWorkflowStatus;
 import com.dams.expense.repository.ExpenseDocumentRepository;
 import com.dams.expense.repository.ExpenseLineRepository;
 import com.dams.jobcard.dto.JobCardResponse;
+import com.dams.jobcard.entity.ClaimClose;
 import com.dams.jobcard.entity.JobCard;
+import com.dams.jobcard.repository.ClaimCloseRepository;
 import com.dams.jobcard.repository.JobCardRepository;
 import com.dams.jobcard.service.PendingAmountCalculator;
 import com.dams.myentries.dto.MyEntryResponse;
@@ -62,6 +64,7 @@ public class MyEntriesService {
     private final BranchRepository branchRepo;
     private final PendingAmountCalculator pendingAmountCalculator;
     private final BranchScope branchScope;
+    private final ClaimCloseRepository claimCloseRepo;
 
     public MyEntriesService(ReceiveDocumentRepository receiveDocumentRepo,
                             SettlementLineRepository settlementLineRepo,
@@ -73,7 +76,8 @@ public class MyEntriesService {
                             ReceiverRepository receiverRepo,
                             BranchRepository branchRepo,
                             PendingAmountCalculator pendingAmountCalculator,
-                            BranchScope branchScope) {
+                            BranchScope branchScope,
+                            ClaimCloseRepository claimCloseRepo) {
         this.receiveDocumentRepo = receiveDocumentRepo;
         this.settlementLineRepo = settlementLineRepo;
         this.expenseDocumentRepo = expenseDocumentRepo;
@@ -85,6 +89,7 @@ public class MyEntriesService {
         this.branchRepo = branchRepo;
         this.pendingAmountCalculator = pendingAmountCalculator;
         this.branchScope = branchScope;
+        this.claimCloseRepo = claimCloseRepo;
     }
 
     @Transactional(readOnly = true)
@@ -124,6 +129,10 @@ public class MyEntriesService {
         Map<Long, List<SettlementLine>> linesByDoc = settlementLineRepo
             .findByOrgIdAndReceiveDocumentIdInOrderByLineNoAsc(orgId, docIds).stream()
             .collect(Collectors.groupingBy(SettlementLine::getReceiveDocumentId));
+        // Closed claims, batched — drives the "Overridden · Final" marking per row.
+        Map<Long, ClaimClose> closeByJobCard = jobCardIds.isEmpty() ? Map.of()
+            : claimCloseRepo.findByOrgIdAndJobCardIdIn(orgId, jobCardIds).stream()
+                .collect(Collectors.toMap(ClaimClose::getJobCardId, Function.identity(), (a, b) -> a));
 
         return docs.stream().map(doc -> {
             JobCard jc = jobCards.get(doc.getJobCardId());
@@ -132,6 +141,7 @@ public class MyEntriesService {
             List<SettlementLine> lines = linesByDoc.getOrDefault(doc.getId(), List.of());
             BigDecimal total = lines.stream().map(SettlementLine::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
             BigDecimal pending = jc != null ? pendingByJc.getOrDefault(jc.getId(), BigDecimal.ZERO) : BigDecimal.ZERO;
+            ClaimClose close = closeByJobCard.get(doc.getJobCardId());
 
             return new MyEntryResponse(
                 doc.getId(),
@@ -139,6 +149,7 @@ public class MyEntriesService {
                 doc.getDocumentNo(),
                 doc.getWorkflowStatus().name(),
                 doc.isSettled(),
+                close != null && close.isOverridden(),
                 doc.getJobCardId(),
                 JobCardResponse.reference(branch != null ? branch.getCode() : "?", doc.getJobCardId()),
                 customer != null ? customer.getName() : null,
@@ -183,6 +194,7 @@ public class MyEntriesService {
                 doc.getDocumentNo(),
                 doc.getWorkflowStatus().name(),
                 false,
+                false,
                 doc.getJobCardId(),
                 doc.getJobCardId() == null ? null
                     : JobCardResponse.reference(branch != null ? branch.getCode() : "?", doc.getJobCardId()),
@@ -210,6 +222,7 @@ public class MyEntriesService {
                 "CASH",
                 doc.getDocumentNo(),
                 doc.getWorkflowStatus().name(),
+                false,
                 false,
                 null,
                 null,

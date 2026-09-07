@@ -11,7 +11,9 @@ import com.dams.customer.dto.CustomerResponse;
 import com.dams.customer.entity.Customer;
 import com.dams.customer.repository.CustomerRepository;
 import com.dams.jobcard.dto.JobCardResponse;
+import com.dams.jobcard.entity.ClaimClose;
 import com.dams.jobcard.entity.JobCard;
+import com.dams.jobcard.repository.ClaimCloseRepository;
 import com.dams.jobcard.repository.JobCardRepository;
 import com.dams.jobcard.service.PendingAmountCalculator;
 import com.dams.masters.entity.ReceiveBusinessStatus;
@@ -64,6 +66,7 @@ public class CustomerService {
     private final PendingAmountCalculator pendingAmountCalculator;
     private final ReceivePaymentGuard paymentGuard;
     private final BranchScope branchScope;
+    private final ClaimCloseRepository claimCloseRepo;
 
     public CustomerService(CustomerRepository customerRepo,
                            VehicleRepository vehicleRepo,
@@ -76,7 +79,8 @@ public class CustomerService {
                            SettlementModeRepository settlementModeRepo,
                            PendingAmountCalculator pendingAmountCalculator,
                            ReceivePaymentGuard paymentGuard,
-                           BranchScope branchScope) {
+                           BranchScope branchScope,
+                           ClaimCloseRepository claimCloseRepo) {
         this.customerRepo = customerRepo;
         this.vehicleRepo = vehicleRepo;
         this.jobCardRepo = jobCardRepo;
@@ -89,6 +93,7 @@ public class CustomerService {
         this.pendingAmountCalculator = pendingAmountCalculator;
         this.paymentGuard = paymentGuard;
         this.branchScope = branchScope;
+        this.claimCloseRepo = claimCloseRepo;
     }
 
     @Transactional(readOnly = true)
@@ -167,6 +172,10 @@ public class CustomerService {
         Map<Long, List<ReceiveDocument>> docsByJobCard = docs.stream()
             .collect(Collectors.groupingBy(ReceiveDocument::getJobCardId));
         List<Long> docIds = docs.stream().map(ReceiveDocument::getId).toList();
+        // Closed claims, batched — drives the "Overridden · Final" marking on each job card.
+        Map<Long, ClaimClose> closeByJobCard = jobCardIds.isEmpty() ? Map.of()
+            : claimCloseRepo.findByOrgIdAndJobCardIdIn(orgId, jobCardIds).stream()
+                .collect(Collectors.toMap(ClaimClose::getJobCardId, Function.identity(), (a, b) -> a));
         List<SettlementLine> allLines = docIds.isEmpty() ? List.of()
             : settlementLineRepo.findByOrgIdAndReceiveDocumentIdInOrderByLineNoAsc(orgId, docIds);
         Map<Long, Long> jobCardByDoc = docs.stream()
@@ -185,6 +194,7 @@ public class CustomerService {
             List<ReceiveDocument> jcDocs = docsByJobCard.get(j.getId());
             String workflow = workflowStatusFor(jcDocs);
             ReceiveDocument primaryDoc = primaryDocFor(jcDocs);
+            ClaimClose close = closeByJobCard.get(j.getId());
             return new CustomerHistoryResponse.JobCardSummary(
                 j.getId(),
                 JobCardResponse.reference(b != null ? b.getCode() : "?", j.getId()),
@@ -202,6 +212,8 @@ public class CustomerService {
                 paymentGuard.canRecordPayment(orgId, j, pending, claimClosed),
                 primaryDoc != null ? primaryDoc.getId() : null,
                 primaryDoc != null && primaryDoc.isSettled(),
+                close != null && close.isOverridden(),
+                close != null ? close.getFinalAmount() : null,
                 j.getCreatedAt());
         }).toList();
 

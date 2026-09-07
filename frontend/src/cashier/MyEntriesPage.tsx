@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { myEntriesApi, type MyEntry } from '../api/myEntries'
 import { card, ErrorBanner, inr, Badge, ghostBtn, SkeletonRows } from '../shell/ui'
+import ClaimFinalBadge from '../shared/ClaimFinalBadge'
 import HelpButton from '../help/HelpButton'
 
 /**
@@ -23,8 +24,8 @@ export default function MyEntriesPage() {
   const earlier = entries?.filter((e) => !e.today) ?? []
 
   function openEntry(e: MyEntry) {
-    // Draft / queried open editable for fix-and-resubmit; others open read-only in the same
-    // form (a dedicated review view lands with the Accountant queue in Stage 7).
+    // Draft / queried entries open editable for fix-and-resubmit; anything further along
+    // (submitted, verified, approved, closed, rejected, settled) opens the same form read-only.
     const path = e.kind === 'EXPENSE' ? '/app/new-expense' : e.kind === 'CASH' ? '/app/cash' : '/app/new-receipt'
     navigate(`${path}?editDoc=${e.id}`)
   }
@@ -43,7 +44,7 @@ export default function MyEntriesPage() {
         <HelpButton slug="fixing-a-queried-entry" />
       </div>
       <div style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: 16 }}>
-        Every receipt and expense you've entered. Queried items are highlighted — open one to fix and resubmit.
+        Every receipt, expense and cash movement you've entered. Queried items are highlighted — open one to fix and resubmit.
       </div>
 
       <ErrorBanner message={error} />
@@ -119,6 +120,7 @@ function Group({ title, rows, onOpen }: { title: string; rows: MyEntry[]; onOpen
                   </span>
                 )}
                 <Badge tone={badgeTone(e)}>{e.settled ? 'SETTLED' : e.workflowStatus}</Badge>
+                {e.claimOverridden && <ClaimFinalBadge />}
                 <button type="button" onClick={() => onOpen(e)} style={{ ...ghostBtn, minHeight: 34, display: 'inline-flex', alignItems: 'center' }}>
                   {e.queried ? 'Fix & Resubmit' : 'Open'}
                 </button>

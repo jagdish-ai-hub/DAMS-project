@@ -8,6 +8,7 @@ export interface MyEntry {
   documentNo: string | null
   workflowStatus: string
   settled: boolean
+  claimOverridden: boolean   // receipts only: FM closed the claim at a different final amount
   jobCardId: number | null
   jobCardReference: string | null
   partyName: string | null        // customer (receipt) or receiver (expense)

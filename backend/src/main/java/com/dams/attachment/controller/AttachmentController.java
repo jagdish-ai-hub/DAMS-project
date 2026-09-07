@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Optional;
@@ -39,6 +40,7 @@ public class AttachmentController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "Get a short-lived signed URL for an attachment")
     public SignedUrlResponse signedUrl(@PathVariable Long id) {
@@ -46,6 +48,7 @@ public class AttachmentController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('CASHIER', 'ACCOUNTANT', 'FINANCE_MANAGER')")
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "Delete an attachment (409 if frozen)")
     public ResponseEntity<Void> delete(@PathVariable Long id) {

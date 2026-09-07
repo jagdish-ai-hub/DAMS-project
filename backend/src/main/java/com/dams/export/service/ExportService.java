@@ -4,6 +4,7 @@ import com.dams.branch.entity.Branch;
 import com.dams.branch.repository.BranchRepository;
 import com.dams.common.exception.DamsException;
 import com.dams.common.security.BranchScope;
+import com.dams.common.time.OrgTime;
 import com.dams.config.TenantContext;
 import com.dams.customer.entity.Customer;
 import com.dams.customer.repository.CustomerRepository;
@@ -86,8 +87,8 @@ public class ExportService {
     public byte[] exportReceiptsCsv(Long requestedBranchId, LocalDate fromDate, LocalDate toDate) {
         Long orgId = TenantContext.requireOrgId();
         Collection<Long> branches = resolveBranches(orgId, requestedBranchId);
-        LocalDate from = fromDate != null ? fromDate : LocalDate.now().minusDays(90);
-        LocalDate to = toDate != null ? toDate : LocalDate.now();
+        LocalDate from = fromDate != null ? fromDate : OrgTime.today().minusDays(90);
+        LocalDate to = toDate != null ? toDate : OrgTime.today();
 
         List<Object[]> rows = settlementLineRepo.findLinesForExport(orgId, branches, from, to);
 
@@ -144,8 +145,8 @@ public class ExportService {
     public byte[] exportExpensesCsv(Long requestedBranchId, LocalDate fromDate, LocalDate toDate) {
         Long orgId = TenantContext.requireOrgId();
         Collection<Long> branches = resolveBranches(orgId, requestedBranchId);
-        LocalDate from = fromDate != null ? fromDate : LocalDate.now().minusDays(90);
-        LocalDate to = toDate != null ? toDate : LocalDate.now();
+        LocalDate from = fromDate != null ? fromDate : OrgTime.today().minusDays(90);
+        LocalDate to = toDate != null ? toDate : OrgTime.today();
 
         List<Object[]> rows = expenseLineRepo.findLinesForExport(orgId, branches, from, to);
 

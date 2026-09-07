@@ -31,10 +31,16 @@ api.interceptors.response.use(
       }
     }
 
-    // Surface the X-Request-ID so a failure can be traced to the exact server log line (AGENT.md)
+    // Surface the X-Request-ID so a failure can be traced to the exact server log line (AGENT.md).
+    // It is appended to the message here — the single choke point — so every ErrorBanner in the
+    // app shows it without each screen wiring it up separately.
     const requestId = error.response?.headers?.['x-request-id']
     if (requestId && error.response?.data) {
       error.response.data._requestId = requestId
+      if (typeof error.response.data.message === 'string'
+        && !error.response.data.message.includes(requestId)) {
+        error.response.data.message += ` (ref ${requestId})`
+      }
     }
 
     return Promise.reject(error)

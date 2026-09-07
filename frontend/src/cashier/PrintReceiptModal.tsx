@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReceiveDocument } from '../api/receipts'
 import { inr, fmtDate, fmtDateTime, ghostBtn, primaryBtn } from '../shell/ui'
 import { Printer, X } from 'lucide-react'
@@ -10,6 +10,14 @@ interface Props {
 
 export default function PrintReceiptModal({ doc, onClose }: Props) {
   const [printFormat, setPrintFormat] = useState<'thermal' | 'a4'>('thermal')
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   const handlePrint = () => {
     window.print()

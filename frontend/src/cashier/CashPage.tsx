@@ -151,7 +151,7 @@ export default function CashPage() {
       {movementModal && drawer && (
         <MovementModal
           date={date}
-          branches={banks}
+          banks={banks}
           direction={movementModal.direction}
           editDoc={movementModal.editDoc}
           onClose={() => setMovementModal(null)}
@@ -302,7 +302,7 @@ const cell = { padding: '10px 12px', borderTop: '1px solid var(--line)', fontSiz
 
 function MovementModal(props: {
   date: string
-  branches: MasterRow[]
+  banks: MasterRow[]
   direction: CashDirection
   editDoc?: CashDocument
   onClose: () => void
@@ -319,6 +319,9 @@ function MovementModal(props: {
   const [error, setError] = useState('')
 
   const queried = edit?.workflowStatus === 'QUERIED'
+  // Only DRAFT / QUERIED movements are server-editable — anything else opened via My Entries
+  // (?editDoc=) renders read-only instead of offering doomed Save/Submit buttons.
+  const readOnly = edit != null && edit.workflowStatus !== 'DRAFT' && edit.workflowStatus !== 'QUERIED'
 
   function body() {
     return {
@@ -366,18 +369,26 @@ function MovementModal(props: {
       footer={
         <>
           <button type="button" onClick={props.onClose} style={ghostBtn} disabled={busy}>Cancel</button>
-          {queried ? (
+          {!readOnly && (queried ? (
             <button type="button" onClick={() => save(true)} style={primaryBtn(busy)} disabled={busy}>Save & Resubmit</button>
           ) : (
             <>
               <button type="button" onClick={() => save(false)} style={ghostBtn} disabled={busy}>Save Draft</button>
               <button type="button" onClick={() => save(true)} style={primaryBtn(busy)} disabled={busy}>Submit</button>
             </>
-          )}
+          ))}
         </>
       }
     >
       <ErrorBanner message={error} />
+
+      {readOnly && edit && (
+        <div style={{ background: 'var(--gray-bg)', border: '1px solid var(--line)', color: 'var(--muted)', borderRadius: 8, padding: '10px 13px', fontSize: '0.82rem', marginBottom: 12 }}>
+          <strong>This movement is {edit.workflowStatus} — read-only.</strong>
+          {' '}Only draft and queried movements can be changed.
+        </div>
+      )}
+      <fieldset disabled={readOnly} style={{ border: 'none', margin: 0, padding: 0, minWidth: 0 }}>
 
       {queried && queryNote(edit?.history ?? []) && (
         <div style={{ background: 'var(--amber-bg)', border: '1px solid #EAD3AE', color: 'var(--amber)', borderRadius: 8, padding: '10px 13px', fontSize: '0.82rem', marginBottom: 12 }}>
@@ -407,7 +418,7 @@ function MovementModal(props: {
       <label style={fieldLabel}>Bank
         <select value={bankId} onChange={(e) => setBankId(e.target.value === '' ? '' : Number(e.target.value))} style={inputStyle}>
           <option value="">— none —</option>
-          {props.branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          {props.banks.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>
       </label>
       <label style={fieldLabel}>Transaction ID
@@ -416,6 +427,7 @@ function MovementModal(props: {
       <label style={fieldLabel}>Remark
         <input value={remark} onChange={(e) => setRemark(e.target.value)} style={inputStyle} />
       </label>
+      </fieldset>
     </Modal>
   )
 }

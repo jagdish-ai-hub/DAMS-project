@@ -14,7 +14,6 @@ import com.dams.jobcard.repository.JobCardRepository;
 import com.dams.receive.repository.ReceiveDocumentRepository;
 import com.dams.receive.repository.SettlementLineRepository;
 import com.dams.expense.repository.ExpenseDocumentRepository;
-import com.dams.user.entity.AppUser;
 import com.dams.user.repository.AppUserRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -100,7 +99,7 @@ public class OverrideAuditService {
             out.add(new OverrideAuditEntry(
                 e.getCreatedAt(),
                 receipt ? "receipt" : "expense",
-                actorName(e.getActorId(), userNames),
+                actorName(orgId, e.getActorId(), userNames),
                 e.getBranchId(),
                 branchCode(orgId, e.getBranchId(), branchCodes),
                 documentNo,
@@ -134,7 +133,7 @@ public class OverrideAuditService {
             out.add(new OverrideAuditEntry(
                 cc.getClosedAt(),
                 "claim",
-                actorName(cc.getClosedBy(), userNames),
+                actorName(orgId, cc.getClosedBy(), userNames),
                 jc.getBranchId(),
                 code,
                 code + "-JC-" + jc.getId(),
@@ -168,12 +167,12 @@ public class OverrideAuditService {
             id -> branchRepo.findByIdAndOrgId(id, orgId).map(Branch::getCode).orElse("?"));
     }
 
-    private String actorName(Long actorId, Map<Long, String> cache) {
+    private String actorName(Long orgId, Long actorId, Map<Long, String> cache) {
         if (actorId == null) {
             return "System";
         }
         return cache.computeIfAbsent(actorId,
-            id -> userRepo.findById(id).map(AppUser::getName).orElse("User #" + id));
+            id -> userRepo.findNameByIdAndOrganization_Id(id, orgId).orElse("User #" + id));
     }
 
     private static String str(Object v) {

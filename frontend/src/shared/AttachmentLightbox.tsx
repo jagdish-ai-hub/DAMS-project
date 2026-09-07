@@ -29,6 +29,8 @@ export default function AttachmentLightbox({ url, filename, contentType, onClose
     <div
       role="dialog"
       aria-modal="true"
+      data-top-overlay="true"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}
       style={{
         position: 'fixed',
         inset: 0,

@@ -8,15 +8,15 @@ import AiMastersStrip from './AiMastersStrip'
 import ReceiversSection from './ReceiversSection'
 import HelpButton from '../help/HelpButton'
 
-type Extra = 'claim' | 'mode' | 'sub' | undefined
+type Extra = 'claim' | 'mode' | 'sub' | 'trigger' | undefined
 const TABS: { slug: MasterTypeSlug; label: string; extra: Extra }[] = [
   { slug: 'receive-categories', label: 'Receipt categories', extra: 'claim' },
   { slug: 'receive-statuses', label: 'Receipt statuses', extra: undefined },
   { slug: 'settlement-modes', label: 'Settlement modes', extra: 'mode' },
   { slug: 'expense-categories', label: 'Expense departments', extra: undefined },
   { slug: 'expense-sub-categories', label: 'Expense sub-categories', extra: 'sub' },
-  { slug: 'expense-modes', label: 'Expense modes', extra: undefined },
-  { slug: 'expense-statuses', label: 'Expense statuses', extra: undefined },
+  { slug: 'expense-modes', label: 'Expense modes', extra: 'mode' },
+  { slug: 'expense-statuses', label: 'Expense statuses', extra: 'trigger' },
   { slug: 'banks', label: 'Banks', extra: undefined },
 ]
 
@@ -129,6 +129,8 @@ export default function MastersPage() {
                   <th style={th}>Name</th>
                   {tab.extra === 'claim' && <th style={th}>Claim?</th>}
                   {tab.extra === 'mode' && <th style={th}>Requires</th>}
+                  {tab.extra === 'mode' && <th style={th}>Cash?</th>}
+                  {tab.extra === 'trigger' && <th style={th}>Triggers claim?</th>}
                   {tab.extra === 'sub' && <th style={th}>Limit</th>}
                   <th style={th}>Status</th><th style={th}></th>
                 </tr>
@@ -142,6 +144,12 @@ export default function MastersPage() {
                       <td style={td}>
                         {[r.requiresBank && 'bank', r.requiresRef && 'ref'].filter(Boolean).join(' + ') || '—'}
                       </td>
+                    )}
+                    {tab.extra === 'mode' && (
+                      <td style={td}>{r.isCash ? <Badge tone="green">Cash</Badge> : '—'}</td>
+                    )}
+                    {tab.extra === 'trigger' && (
+                      <td style={td}>{r.triggersClaim ? <Badge tone="amber">To claim</Badge> : '—'}</td>
                     )}
                     {tab.extra === 'sub' && <td style={td}>{r.limitAmount != null ? `₹${r.limitAmount}` : '—'}</td>}
                     <td style={td}>{r.active ? <Badge tone="green">Active</Badge> : <Badge>Inactive</Badge>}</td>
@@ -188,6 +196,8 @@ function MasterModal(props: {
   const [isClaim, setIsClaim] = useState(editing?.isClaim ?? false)
   const [requiresBank, setRequiresBank] = useState(editing?.requiresBank ?? false)
   const [requiresRef, setRequiresRef] = useState(editing?.requiresRef ?? false)
+  const [isCash, setIsCash] = useState(editing?.isCash ?? false)
+  const [triggersClaim, setTriggersClaim] = useState(editing?.triggersClaim ?? false)
   const [limitAmount, setLimitAmount] = useState(editing?.limitAmount != null ? String(editing.limitAmount) : '')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -201,7 +211,8 @@ function MasterModal(props: {
       if (sortOrder !== '') body.sortOrder = Number(sortOrder)
       if (editing) body.active = active
       if (tab.extra === 'claim') body.isClaim = isClaim
-      if (tab.extra === 'mode') { body.requiresBank = requiresBank; body.requiresRef = requiresRef }
+      if (tab.extra === 'mode') { body.requiresBank = requiresBank; body.requiresRef = requiresRef; body.isCash = isCash }
+      if (tab.extra === 'trigger') body.triggersClaim = triggersClaim
       if (tab.extra === 'sub') {
         body.expenseCategoryId = editing?.expenseCategoryId ?? props.parentId ?? undefined
         body.limitAmount = limitAmount === '' ? null : Number(limitAmount)
@@ -240,7 +251,17 @@ function MasterModal(props: {
               <input type="checkbox" checked={requiresRef} onChange={(e) => setRequiresRef(e.target.checked)} />
               Requires a transaction reference
             </label>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.85rem' }}>
+              <input type="checkbox" checked={isCash} onChange={(e) => setIsCash(e.target.checked)} />
+              Cash mode — counts toward the cash drawer position
+            </label>
           </div>
+        )}
+        {tab.extra === 'trigger' && (
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.85rem' }}>
+            <input type="checkbox" checked={triggersClaim} onChange={(e) => setTriggersClaim(e.target.checked)} />
+            Transfer-to-claim status — expenses moved to a warranty / AMC / goodwill claim
+          </label>
         )}
         {tab.extra === 'sub' && (
           <Field label="Per-line limit (₹)" hint="Optional — over this, the expense is flagged (not blocked)">

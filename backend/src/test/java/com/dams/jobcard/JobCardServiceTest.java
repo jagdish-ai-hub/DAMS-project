@@ -190,6 +190,8 @@ class JobCardServiceTest {
 
     @Test
     void patch_categoryChange_writesCategoryChangedAudit_withBeforeAndAfter() {
+        when(userRepo.findByIdAndOrganization_Id(CASHIER_ID, ORG))
+            .thenReturn(Optional.of(cashierWithHomeBranch()));
         JobCard existing = new JobCard();
         ReflectionTestUtils.setField(existing, "id", 100L);
         existing.setOrgId(ORG);
@@ -214,6 +216,8 @@ class JobCardServiceTest {
 
     @Test
     void patch_withSameCategory_doesNotAudit() {
+        when(userRepo.findByIdAndOrganization_Id(CASHIER_ID, ORG))
+            .thenReturn(Optional.of(cashierWithHomeBranch()));
         JobCard existing = new JobCard();
         ReflectionTestUtils.setField(existing, "id", 100L);
         existing.setOrgId(ORG);
@@ -234,6 +238,27 @@ class JobCardServiceTest {
     }
 
     // --- fixtures ---
+
+    @Test
+    void patch_asCashier_refusesAnotherBranchJobCard() {
+        when(userRepo.findByIdAndOrganization_Id(CASHIER_ID, ORG))
+            .thenReturn(Optional.of(cashierWithHomeBranch()));
+        JobCard existing = new JobCard();
+        ReflectionTestUtils.setField(existing, "id", 100L);
+        existing.setOrgId(ORG);
+        existing.setBranchId(999L);   // not the cashier's home branch
+        existing.setCustomerId(42L);
+        existing.setCategoryId(3L);
+        existing.setBusinessStatusId(4L);
+        when(jobCardRepo.findByIdAndOrgId(100L, ORG)).thenReturn(Optional.of(existing));
+
+        JobCardPatchRequest patch = new JobCardPatchRequest();
+        patch.setInvoiceNo("INV-9");
+
+        assertThatThrownBy(() -> service.patch(100L, patch))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("another branch");
+    }
 
     private static AppUser cashierWithHomeBranch() {
         AppUser u = new AppUser();

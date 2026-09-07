@@ -108,7 +108,7 @@ export default function AddPaymentModal(props: {
       <ErrorBanner message={error} />
 
       <Field label="Date">
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
+        <input type="date" value={date} max={istToday()} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
       </Field>
       <Field label="Settlement Mode *">
         <select value={modeId} onChange={(e) => setModeId(Number(e.target.value))} style={inputStyle}>

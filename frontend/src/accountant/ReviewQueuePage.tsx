@@ -75,7 +75,8 @@ export default function ReviewQueuePage() {
     try {
       const res = await reviewApi.bulkVerify(type, selectedIds)
       const data = res.data
-      setFlash(`Bulk verified ${data.verifiedCount} ${type}s successfully.${data.skippedCount > 0 ? ` (${data.skippedCount} skipped due to maker-checker or state)` : ''}`)
+      const skipped = data.skippedReasons.length
+      setFlash(`Bulk verified ${data.verifiedCount} ${type}s successfully.${skipped > 0 ? ` (${skipped} skipped: ${data.skippedReasons.slice(0, 3).join('; ')}${skipped > 3 ? '…' : ''})` : ''}`)
       setTimeout(() => setFlash(''), 4000)
       setSelectedIds([])
       reload()

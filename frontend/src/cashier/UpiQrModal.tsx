@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { inr, ghostBtn, primaryBtn } from '../shell/ui'
 import { QrCode, Copy, Check, X, ShieldCheck } from 'lucide-react'
@@ -21,6 +21,14 @@ export default function UpiQrModal({
   onClose,
 }: Props) {
   const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   // Standard NPCI UPI URI string
   const cleanAmount = Number(amount) > 0 ? Number(amount).toFixed(2) : '0.00'

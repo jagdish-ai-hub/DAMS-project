@@ -22,6 +22,7 @@ import com.dams.jobcard.repository.ClaimCloseRepository;
 import com.dams.jobcard.repository.JobCardRepository;
 import com.dams.jobcard.service.JobCardService;
 import com.dams.jobcard.service.PendingAmountCalculator;
+import com.dams.masters.entity.Bank;
 import com.dams.masters.entity.ReceiveBusinessStatus;
 import com.dams.masters.entity.ReceiveCategory;
 import com.dams.masters.entity.SettlementMode;
@@ -315,9 +316,14 @@ public class ReceiveDocumentService {
             .orElseThrow(() -> DamsException.notFound("Settlement line", "lineNo", lineNo));
 
         // Editing a cash-mode line on an already-closed cash day would rewrite its drawer — refuse.
-        SettlementMode existingMode = settlementModeRepo.findByIdAndOrgId(line.getSettlementModeId(), orgId).orElse(null);
-        cashDateLock.requireCashLineDateOpen(orgId, doc.getBranchId(), line.getTransactionDate(),
-            existingMode != null && existingMode.isCash(), "settlement");
+        // Draft lines were never in the drawer (only non-DRAFT lines count), so a draft line can
+        // always be re-dated or removed; the new date is still lock-checked in applyLineInput.
+        // Without this a draft becomes permanently unfixable once a close lands over its date.
+        if (doc.getWorkflowStatus() != WorkflowStatus.DRAFT) {
+            SettlementMode existingMode = settlementModeRepo.findByIdAndOrgId(line.getSettlementModeId(), orgId).orElse(null);
+            cashDateLock.requireCashLineDateOpen(orgId, doc.getBranchId(), line.getTransactionDate(),
+                existingMode != null && existingMode.isCash(), "settlement");
+        }
 
         applyLineInput(orgId, doc.getBranchId(), line, input);
         settlementLineRepo.save(line);
@@ -339,9 +345,12 @@ public class ReceiveDocumentService {
             .findByOrgIdAndReceiveDocumentIdAndLineNo(orgId, documentId, lineNo)
             .orElseThrow(() -> DamsException.notFound("Settlement line", "lineNo", lineNo));
         // Removing a cash-mode line from an already-closed cash day would rewrite its drawer — refuse.
-        SettlementMode existingMode = settlementModeRepo.findByIdAndOrgId(line.getSettlementModeId(), orgId).orElse(null);
-        cashDateLock.requireCashLineDateOpen(orgId, doc.getBranchId(), line.getTransactionDate(),
-            existingMode != null && existingMode.isCash(), "settlement");
+        // Draft lines were never in the drawer, so a draft line can always be removed.
+        if (doc.getWorkflowStatus() != WorkflowStatus.DRAFT) {
+            SettlementMode existingMode = settlementModeRepo.findByIdAndOrgId(line.getSettlementModeId(), orgId).orElse(null);
+            cashDateLock.requireCashLineDateOpen(orgId, doc.getBranchId(), line.getTransactionDate(),
+                existingMode != null && existingMode.isCash(), "settlement");
+        }
         // line_no is not renumbered — the number (and later the line id) is never reused.
         settlementLineRepo.delete(line);
         doc.setLastModifiedBy(me.getId());
@@ -427,9 +436,12 @@ public class ReceiveDocumentService {
         cashDateLock.requireCashLineDateOpen(orgId, branchId, input.getTransactionDate(), mode.isCash(), "settlement");
         Long bankId = null;
         if (input.getBankId() != null) {
-            bankId = bankRepo.findByIdAndOrgId(input.getBankId(), orgId)
-                .orElseThrow(() -> DamsException.notFound("Bank", input.getBankId()))
-                .getId();
+            Bank bank = bankRepo.findByIdAndOrgId(input.getBankId(), orgId)
+                .orElseThrow(() -> DamsException.notFound("Bank", input.getBankId()));
+            if (!bank.isActive()) {
+                throw DamsException.badRequest("Bank '" + bank.getName() + "' is inactive");
+            }
+            bankId = bank.getId();
         }
         line.setTransactionDate(input.getTransactionDate());
         line.setSettlementModeId(mode.getId());

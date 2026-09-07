@@ -196,7 +196,7 @@ public class CashCloseService {
 
     private CashDayCloseResponse toCloseResponse(Long orgId, CashDayClose c) {
         String branchCode = branchRepo.findByIdAndOrgId(c.getBranchId(), orgId).map(Branch::getCode).orElse(null);
-        String closedByName = userRepo.findById(c.getClosedBy()).map(AppUser::getName).orElse(null);
+        String closedByName = userRepo.findNameByIdAndOrganization_Id(c.getClosedBy(), orgId).orElse(null);
         return new CashDayCloseResponse(
             c.getId(), c.getBranchId(), branchCode, c.getCloseDate(),
             c.getOpeningAmount(), c.getComputedClosing(), c.getCountedAmount(),

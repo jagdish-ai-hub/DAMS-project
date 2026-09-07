@@ -131,6 +131,18 @@ class CashDocumentServiceTest {
     }
 
     @Test
+    void submit_refusesAnotherBranchMovement() {
+        CashDocument foreign = doc(CashWorkflowStatus.DRAFT);
+        foreign.setBranchId(999L);
+        when(cashDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(foreign));
+
+        assertThatThrownBy(() -> service.submit(DOC_ID))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("another branch");
+        verify(cashDocumentRepo, never()).save(any());
+    }
+
+    @Test
     void resubmit_movesAQueriedMovementBackToSubmitted_butRejectsOthers() {
         when(cashDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(doc(CashWorkflowStatus.QUERIED)));
         CashDocumentResponse r = service.resubmit(DOC_ID);
