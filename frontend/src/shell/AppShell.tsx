@@ -67,19 +67,11 @@ export default function AppShell() {
   const [askOpen, setAskOpen] = useState(false)
   const location = useLocation()
 
-  if (!user) {
-    return <Navigate to="/login" replace />
-  }
-
-  const isSuperAdmin = user.role === 'SUPER_ADMIN'
-  const isOwner = user.role === 'OWNER'
-  const isCashier = user.role === 'CASHIER'
-  const isAccountant = user.role === 'ACCOUNTANT'
-  const isFinanceManager = user.role === 'FINANCE_MANAGER'
-  const navItems = NAV_BY_ROLE[user.role]
+  // Hooks must run before the early return below (rules-of-hooks) — so the
+  // role gate is computed here from the nullable user, not after the return.
   // Ask DAMS answers from org aggregates the Accountant/Cashier roles must not
   // see — Owner and FM only, enforced again server-side per endpoint.
-  const canAsk = isOwner || isFinanceManager
+  const canAsk = user != null && (user.role === 'OWNER' || user.role === 'FINANCE_MANAGER')
 
   useEffect(() => {
     if (!canAsk) return
@@ -92,6 +84,17 @@ export default function AppShell() {
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [canAsk])
+
+  if (!user) {
+    return <Navigate to="/login" replace />
+  }
+
+  const isSuperAdmin = user.role === 'SUPER_ADMIN'
+  const isOwner = user.role === 'OWNER'
+  const isCashier = user.role === 'CASHIER'
+  const isAccountant = user.role === 'ACCOUNTANT'
+  const isFinanceManager = user.role === 'FINANCE_MANAGER'
+  const navItems = NAV_BY_ROLE[user.role]
 
   const homeElement = isSuperAdmin
     ? <Navigate to="/app/organizations" replace />

@@ -266,7 +266,7 @@ public class AiAssistantService {
         } else if (lower.contains("branch") || lower.contains("compare") || lower.contains("best")) {
             for (BranchComparisonRow row : summary.branchComparison()) {
                 facts.append(row.branchCode()).append(" collections ").append(row.collections())
-                    .append ", net ".append(row.net()).append(". ");
+                    .append(", net ").append(row.net()).append(". ");
             }
         } else {
             appendOutstandingKind(facts, outstanding, null, "Largest outstanding");

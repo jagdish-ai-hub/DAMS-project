@@ -389,16 +389,18 @@ public class AiWatchdogService {
 
     private String classifyNote(String note) {
         String lower = note.toLowerCase();
+        // Specific complaints first: "amount mismatch with bill total" mentions a
+        // bill but is really an amount problem — generic bill keywords go last.
+        if (lower.contains("amount") || lower.contains("mismatch") || lower.contains("total")
+            || lower.contains("difference")) {
+            return "Amount does not match the bill";
+        }
         if (lower.contains("attach") || lower.contains("bill") || lower.contains("photo")
             || lower.contains("receipt") || lower.contains("blur")) {
             return "Missing or unreadable bill attachment";
         }
         if (lower.contains("dbm") || lower.contains("invoice") || lower.contains("job card")) {
             return "Missing DBM ID / invoice reference";
-        }
-        if (lower.contains("amount") || lower.contains("mismatch") || lower.contains("total")
-            || lower.contains("difference")) {
-            return "Amount does not match the bill";
         }
         if (lower.contains("categor") || lower.contains("wrong") || lower.contains("mode")
             || lower.contains("bank") || lower.contains("upi") || lower.contains("ref")) {

@@ -251,7 +251,11 @@ public class ReceiveDocumentService {
             throw DamsException.conflict("Document " + describe(doc) + " was rejected — add the payment to a new receipt");
         }
         if (claimCloseRepo.existsByOrgIdAndJobCardId(orgId, jobCard.getId())) {
-            throw DamsException.conflict("Job card " + jobCard.getJobCardNo()
+            // Canonical job-card ref is {branchCode}-JC-{id} (built at read time —
+            // JobCard carries no display number of its own).
+            String jobCardRef = branchRepo.findByIdAndOrgId(jobCard.getBranchId(), orgId)
+                .map(branch -> branch.getCode()).orElse("?") + "-JC-" + jobCard.getId();
+            throw DamsException.conflict("Job card " + jobCardRef
                 + " already has a closed claim — no new receipts or payments can be recorded against it");
         }
 

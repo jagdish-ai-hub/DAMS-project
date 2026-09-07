@@ -114,6 +114,10 @@ class AiWatchdogServiceTest {
         assertThat(roots.get(0).cause()).isEqualTo("Missing or unreadable bill attachment");
         assertThat(roots.get(0).count()).isEqualTo(2);
         assertThat(roots.get(0).suggestion()).isNotBlank();
+        // "amount mismatch with bill total" mentions a bill but is an amount
+        // problem — specific complaints outrank generic bill keywords.
+        assertThat(roots.get(1).cause()).isEqualTo("Amount does not match the bill");
+        assertThat(roots.get(1).count()).isEqualTo(1);
     }
 
     private ReceiveDocument receipt(Long id, String documentNo) {
