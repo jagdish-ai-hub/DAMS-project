@@ -7,12 +7,14 @@ import com.dams.dashboard.service.DashboardService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -34,10 +36,13 @@ public class DashboardController {
     }
 
     @GetMapping("/summary")
-    @Operation(summary = "KPIs, trend, by-mode / by-category breakdowns, branch comparison")
+    @Operation(summary = "KPIs, trend, by-mode / by-category breakdowns, branch comparison "
+        + "(period=today|mtd, or an explicit from/to yyyy-mm-dd range which overrides period)")
     public DashboardSummary summary(@RequestParam(required = false) Long branchId,
-                                    @RequestParam(required = false, defaultValue = "mtd") String period) {
-        return dashboardService.summary(branchId, period);
+                                    @RequestParam(required = false, defaultValue = "mtd") String period,
+                                    @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+                                    @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return dashboardService.summary(branchId, period, from, to);
     }
 
     @GetMapping("/outstanding")

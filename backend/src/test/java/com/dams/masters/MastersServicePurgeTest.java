@@ -1,5 +1,7 @@
 package com.dams.masters;
 
+import com.dams.expense.repository.ExpenseLineRepository;
+import com.dams.jobcard.repository.JobCardRepository;
 import com.dams.masters.repository.BankRepository;
 import com.dams.masters.repository.ExpenseBusinessStatusRepository;
 import com.dams.masters.repository.ExpenseCategoryRepository;
@@ -9,6 +11,7 @@ import com.dams.masters.repository.ReceiveBusinessStatusRepository;
 import com.dams.masters.repository.ReceiveCategoryRepository;
 import com.dams.masters.repository.SettlementModeRepository;
 import com.dams.masters.service.MastersService;
+import com.dams.receive.repository.SettlementLineRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
@@ -34,11 +37,15 @@ class MastersServicePurgeTest {
     @Mock private ExpenseModeRepository expenseModeRepo;
     @Mock private ExpenseBusinessStatusRepository expenseStatusRepo;
     @Mock private BankRepository bankRepo;
+    @Mock private JobCardRepository jobCardRepo;
+    @Mock private SettlementLineRepository settlementLineRepo;
+    @Mock private ExpenseLineRepository expenseLineRepo;
 
     @Test
     void purgeOrg_deletesSubCategoriesBeforeTheirParentCategory() {
         MastersService service = new MastersService(receiveCategoryRepo, receiveStatusRepo, settlementModeRepo,
-            expenseCategoryRepo, subCategoryRepo, expenseModeRepo, expenseStatusRepo, bankRepo);
+            expenseCategoryRepo, subCategoryRepo, expenseModeRepo, expenseStatusRepo, bankRepo,
+            jobCardRepo, settlementLineRepo, expenseLineRepo);
 
         service.purgeOrg(99L);
 
@@ -50,7 +57,8 @@ class MastersServicePurgeTest {
     @Test
     void purgeOrg_deletesEverySubCategoryRowExactlyOnce() {
         MastersService service = new MastersService(receiveCategoryRepo, receiveStatusRepo, settlementModeRepo,
-            expenseCategoryRepo, subCategoryRepo, expenseModeRepo, expenseStatusRepo, bankRepo);
+            expenseCategoryRepo, subCategoryRepo, expenseModeRepo, expenseStatusRepo, bankRepo,
+            jobCardRepo, settlementLineRepo, expenseLineRepo);
 
         service.purgeOrg(99L);
 

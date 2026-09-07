@@ -5,7 +5,7 @@ import java.util.List;
 /** Everything the dashboard's top half needs, for a branch scope and a period. */
 public record DashboardSummary(
     String scope,                 // branch code, or "ALL"
-    String period,                // "today" | "mtd"
+    String period,                // "today" | "mtd" | "custom" (explicit from/to range)
     DashboardKpis kpis,
     List<TrendPoint> trend,
     List<NamedAmount> byMode,      // collections by settlement mode (donut)

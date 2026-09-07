@@ -205,6 +205,22 @@ function QueuePane(props: {
   bulkBusy: boolean
 }) {
   const { items } = props
+  const [overLimitOnly, setOverLimitOnly] = useState(false)
+  const [overrideOnly, setOverrideOnly] = useState(false)
+  const [noBillOnly, setNoBillOnly] = useState(false)
+  const hasRisk = props.riskMap.size > 0
+
+  const visible = useMemo(() => {
+    return (items ?? []).filter((it) => {
+      if (overLimitOnly && !it.overLimit) return false
+      if (overrideOnly && !it.hasOverride) return false
+      if (noBillOnly) {
+        const r = props.riskMap.get(it.id)
+        if (!r || !r.reasons.some((reason) => reason.toLowerCase().includes('bill'))) return false
+      }
+      return true
+    })
+  }, [items, overLimitOnly, overrideOnly, noBillOnly, props.riskMap])
   return (
     <div style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
       <div style={{ display: 'flex', padding: 12, gap: 4 }}>
@@ -225,6 +241,22 @@ function QueuePane(props: {
         <span style={{ background: 'var(--amber-bg)', color: 'var(--amber)', borderRadius: 999, fontSize: '0.66rem', padding: '1px 7px', marginLeft: 6 }}>
           {items?.length ?? 0}
         </span>
+      </div>
+      <div style={{ display: 'flex', gap: 12, padding: '0 14px 8px', fontSize: '0.76rem', flexWrap: 'wrap' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+          <input type="checkbox" checked={overLimitOnly} onChange={(e) => setOverLimitOnly(e.target.checked)} />
+          Over-limit
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+          <input type="checkbox" checked={overrideOnly} onChange={(e) => setOverrideOnly(e.target.checked)} />
+          Has override
+        </label>
+        {hasRisk && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+            <input type="checkbox" checked={noBillOnly} onChange={(e) => setNoBillOnly(e.target.checked)} />
+            No bill
+          </label>
+        )}
       </div>
 
       {props.type !== 'cash' && items && items.length > 0 && (
@@ -253,8 +285,11 @@ function QueuePane(props: {
       {items != null && items.length === 0 && (
         <p style={{ padding: 14, color: 'var(--faint)', fontSize: '0.82rem' }}>Nothing waiting on you — the queue is clear.</p>
       )}
+      {items != null && items.length > 0 && visible.length === 0 && (
+        <p style={{ padding: 14, color: 'var(--faint)', fontSize: '0.82rem' }}>No items match these filters.</p>
+      )}
 
-      {(items ?? []).map((it) => (
+      {(visible ?? []).map((it) => (
         <QueueRow
           key={it.id}
           it={it}

@@ -2,17 +2,24 @@ package com.dams.masters.service;
 
 import com.dams.common.entity.OrgMaster;
 import com.dams.common.exception.DamsException;
+import com.dams.common.time.OrgTime;
 import com.dams.config.TenantContext;
+import com.dams.expense.repository.ExpenseLineRepository;
+import com.dams.jobcard.repository.JobCardRepository;
 import com.dams.masters.MasterType;
 import com.dams.masters.dto.MasterRequest;
 import com.dams.masters.dto.MasterResponse;
+import com.dams.masters.dto.MasterUsageResponse;
 import com.dams.masters.entity.*;
 import com.dams.masters.repository.*;
+import com.dams.receive.repository.SettlementLineRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +42,9 @@ public class MastersService {
     private final Map<MasterType, Supplier<? extends OrgMaster>> factories = new EnumMap<>(MasterType.class);
     private final ExpenseSubCategoryRepository subCategoryRepo;
     private final ExpenseCategoryRepository expenseCategoryRepo;
+    private final JobCardRepository jobCardRepo;
+    private final SettlementLineRepository settlementLineRepo;
+    private final ExpenseLineRepository expenseLineRepo;
 
     public MastersService(ReceiveCategoryRepository receiveCategoryRepo,
                           ReceiveBusinessStatusRepository receiveStatusRepo,
@@ -43,9 +53,15 @@ public class MastersService {
                           ExpenseSubCategoryRepository subCategoryRepo,
                           ExpenseModeRepository expenseModeRepo,
                           ExpenseBusinessStatusRepository expenseStatusRepo,
-                          BankRepository bankRepo) {
+                          BankRepository bankRepo,
+                          JobCardRepository jobCardRepo,
+                          SettlementLineRepository settlementLineRepo,
+                          ExpenseLineRepository expenseLineRepo) {
         this.subCategoryRepo = subCategoryRepo;
         this.expenseCategoryRepo = expenseCategoryRepo;
+        this.jobCardRepo = jobCardRepo;
+        this.settlementLineRepo = settlementLineRepo;
+        this.expenseLineRepo = expenseLineRepo;
 
         repos.put(MasterType.RECEIVE_CATEGORIES, receiveCategoryRepo);
         repos.put(MasterType.RECEIVE_STATUSES, receiveStatusRepo);
@@ -82,6 +98,43 @@ public class MastersService {
     @Transactional(readOnly = true)
     public MasterResponse get(MasterType type, Long id) {
         return MasterResponse.of(type, load(type, id));
+    }
+
+    /**
+     * Usage per row in the last 90 days — the Owner's deactivation guard ("is it safe to
+     * turn this off?"). Counts follow the real FK references: receive categories via
+     * {@code job_card.category_id}, settlement modes via {@code settlement_line}, expense
+     * sub-categories and modes via {@code expense_line}, banks via both line tables'
+     * {@code bank_id}. Status lists and expense categories have no direct line-level FK to
+     * count, so they report 0 — deactivation there is judged by eye, not blocked by a number.
+     */
+    @Transactional(readOnly = true)
+    public List<MasterUsageResponse> usage(MasterType type) {
+        Long orgId = TenantContext.requireOrgId();
+        LocalDate since = OrgTime.today().minusDays(90);
+        java.time.Instant sinceInstant = since.atStartOfDay(OrgTime.ZONE).toInstant();
+
+        List<? extends OrgMaster> rows = repos.get(type).findByOrgIdOrderBySortOrderAscIdAsc(orgId);
+        List<MasterUsageResponse> out = new ArrayList<>(rows.size());
+        for (OrgMaster row : rows) {
+            long count = switch (type) {
+                case RECEIVE_CATEGORIES ->
+                    jobCardRepo.countByOrgIdAndCategoryIdSince(orgId, row.getId(), sinceInstant);
+                case SETTLEMENT_MODES ->
+                    settlementLineRepo.countByOrgIdAndSettlementModeIdSince(orgId, row.getId(), since);
+                case EXPENSE_SUB_CATEGORIES ->
+                    expenseLineRepo.countByOrgIdAndSubCategoryIdSince(orgId, row.getId(), since);
+                case EXPENSE_MODES ->
+                    expenseLineRepo.countByOrgIdAndExpenseModeIdSince(orgId, row.getId(), since);
+                case BANKS ->
+                    settlementLineRepo.countByOrgIdAndBankIdSince(orgId, row.getId(), since)
+                        + expenseLineRepo.countByOrgIdAndBankIdSince(orgId, row.getId(), since);
+                default -> 0L;
+            };
+            out.add(new MasterUsageResponse(row.getId(), row.getName(), count, count > 0));
+        }
+        log.info("Master usage listed: orgId={} type={} rows={}", orgId, type.slug(), out.size());
+        return out;
     }
 
     @Transactional

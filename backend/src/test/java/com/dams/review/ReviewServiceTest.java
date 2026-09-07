@@ -321,6 +321,50 @@ class ReviewServiceTest {
     }
 
     @Test
+    void bulkApproveReceipts_movesVerifiedToApproved_andSkipsSubmitted() {
+        ReceiveDocument verified = receiveDoc(WorkflowStatus.VERIFIED);
+        ReceiveDocument submitted = receiveDocWithId(501L, "OOR-AUG26-R-006", WorkflowStatus.SUBMITTED);
+        when(receiveDocumentRepo.findByIdAndOrgId(R_ID, ORG)).thenReturn(Optional.of(verified));
+        when(receiveDocumentRepo.findByIdAndOrgId(501L, ORG)).thenReturn(Optional.of(submitted));
+
+        var response = service.bulkApproveReceipts(java.util.List.of(R_ID, 501L));
+
+        assertThat(verified.getWorkflowStatus()).isEqualTo(WorkflowStatus.APPROVED);
+        assertThat(submitted.getWorkflowStatus()).isEqualTo(WorkflowStatus.SUBMITTED);
+        assertThat(response.verifiedIds()).containsExactly(R_ID);
+        assertThat(response.skippedReasons()).hasSize(1);
+        verify(auditService).recordUserEvent(eq("ReceiveDocument"), eq(R_ID), eq(BRANCH),
+            eq(EventType.APPROVED), eq(ACTOR_ID), any());
+    }
+
+    @Test
+    void bulkApproveReceipts_returnsNoSelectionReason_whenIdsEmpty() {
+        var response = service.bulkApproveReceipts(java.util.List.of());
+
+        assertThat(response.verifiedCount()).isZero();
+        assertThat(response.skippedReasons()).containsExactly("No documents selected");
+        verify(receiveDocumentRepo, never()).save(any());
+    }
+
+    @Test
+    void bulkApproveExpenses_movesVerifiedToApproved_andSkipsSubmitted() {
+        ExpenseDocument verified = expenseDoc(ExpenseWorkflowStatus.VERIFIED, false);
+        ExpenseDocument submitted = expenseDocWithId(601L, "OOR-AUG26-E-006",
+            ExpenseWorkflowStatus.SUBMITTED, false);
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(verified));
+        when(expenseDocumentRepo.findByIdAndOrgId(601L, ORG)).thenReturn(Optional.of(submitted));
+
+        var response = service.bulkApproveExpenses(java.util.List.of(E_ID, 601L));
+
+        assertThat(verified.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.APPROVED);
+        assertThat(submitted.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.SUBMITTED);
+        assertThat(response.verifiedIds()).containsExactly(E_ID);
+        assertThat(response.skippedReasons()).hasSize(1);
+        verify(auditService).recordUserEvent(eq("ExpenseDocument"), eq(E_ID), eq(BRANCH),
+            eq(EventType.APPROVED), eq(ACTOR_ID), any());
+    }
+
+    @Test
     void queryReceipt_asFinanceManager_movesVerifiedBackToQueried() {
         when(branchScope.currentRole()).thenReturn(Role.FINANCE_MANAGER);
         ReceiveDocument doc = receiveDoc(WorkflowStatus.VERIFIED);
@@ -426,12 +470,16 @@ class ReviewServiceTest {
     }
 
     private static ReceiveDocument receiveDoc(WorkflowStatus status) {
+        return receiveDocWithId(R_ID, "OOR-AUG26-R-005", status);
+    }
+
+    private static ReceiveDocument receiveDocWithId(Long id, String documentNo, WorkflowStatus status) {
         ReceiveDocument d = new ReceiveDocument();
-        ReflectionTestUtils.setField(d, "id", R_ID);
+        ReflectionTestUtils.setField(d, "id", id);
         d.setOrgId(ORG);
         d.setBranchId(BRANCH);
         d.setJobCardId(11L);
-        d.setDocumentNo("OOR-AUG26-R-005");
+        d.setDocumentNo(documentNo);
         d.setWorkflowStatus(status);
         d.setCreatedBy(7L);
         d.setLastModifiedBy(7L);
@@ -454,14 +502,19 @@ class ReviewServiceTest {
     }
 
     private static ExpenseDocument expenseDoc(ExpenseWorkflowStatus status, boolean overLimit) {
+        return expenseDocWithId(E_ID, "OOR-AUG26-E-005", status, overLimit);
+    }
+
+    private static ExpenseDocument expenseDocWithId(Long id, String documentNo,
+                                                    ExpenseWorkflowStatus status, boolean overLimit) {
         ExpenseDocument d = new ExpenseDocument();
-        ReflectionTestUtils.setField(d, "id", E_ID);
+        ReflectionTestUtils.setField(d, "id", id);
         d.setOrgId(ORG);
         d.setBranchId(BRANCH);
         d.setReceiverId(21L);
         d.setExpenseCategoryId(31L);
         d.setBusinessStatusId(41L);
-        d.setDocumentNo("OOR-AUG26-E-005");
+        d.setDocumentNo(documentNo);
         d.setWorkflowStatus(status);
         d.setOverLimit(overLimit);
         d.setCreatedBy(7L);

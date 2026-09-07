@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { mastersApi, type MasterRow } from '../api/masters'
 import {
   cashApi,
+  reopenApi,
   type CashDirection,
   type CashDocument,
   type CashDrawer,
@@ -223,6 +224,64 @@ function ClosedBanner({ drawer }: { drawer: CashDrawer }) {
       <div style={{ fontSize: '0.74rem', color: 'var(--faint)', marginTop: 3 }}>
         This date is locked — no new cash movements or backdated cash payments.
       </div>
+      <ReopenRequestBox closeDate={drawer.date} />
+    </div>
+  )
+}
+
+// ───────────────────────────── Reopen request (cashier side) ─────────────────────────────
+// A closed day cannot be silently reopened (AGENT.md). The cashier files a request with a
+// mandatory reason; a Finance Manager approves/rejects it and every step is audited.
+
+function ReopenRequestBox({ closeDate }: { closeDate: string }) {
+  const [open, setOpen] = useState(false)
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [err, setErr] = useState('')
+
+  async function submit() {
+    if (!reason.trim()) { setErr('Tell the Finance Manager what was miscounted.'); return }
+    setBusy(true)
+    setErr('')
+    setMsg('')
+    try {
+      await reopenApi.request(closeDate, reason.trim())
+      setMsg('Reopen requested — the Finance Manager will approve or reject it.')
+      setReason('')
+      setOpen(false)
+    } catch (e) {
+      setErr(apiError(e, 'Could not send the reopen request.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      {!open ? (
+        <button type="button" onClick={() => setOpen(true)} style={{ ...ghostBtn, minHeight: 32, fontSize: '0.76rem' }}>
+          Mistake in this close? Request reopen
+        </button>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+          <label style={{ fontSize: '0.76rem', fontWeight: 600 }}>What was miscounted?
+            <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={500}
+              placeholder="e.g. counted 56,700 but typed 57,600 — recount attached"
+              style={{ ...inputStyle, width: '100%', marginTop: 4 }} />
+          </label>
+          {err && <span style={{ fontSize: '0.76rem', color: 'var(--red)' }}>{err}</span>}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={() => void submit()} disabled={busy} style={{ ...primaryBtn(), minHeight: 32, fontSize: '0.78rem' }}>
+              {busy ? 'Sending…' : 'Send request'}
+            </button>
+            <button type="button" onClick={() => { setOpen(false); setErr(''); }} style={{ ...ghostBtn, minHeight: 32, fontSize: '0.78rem' }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {msg && <div style={{ fontSize: '0.76rem', color: 'var(--green)', marginTop: 6 }}>{msg}</div>}
     </div>
   )
 }
@@ -440,9 +499,32 @@ function CloseDayModal(props: { drawer: CashDrawer; onClose: () => void; onDone:
   const [remark, setRemark] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [counts, setCounts] = useState<Record<number, string>>({})
 
   const variance = useMemo(() => (counted === '' ? 0 : Number(counted) - computed), [counted, computed])
   const needRemark = variance !== 0
+
+  // Denomination helper: counting physical notes/coins is less error-prone than
+  // typing one big total. Editing any count re-sums and prefills counted above.
+  const calcTotal = useMemo(() => {
+    let sum = 0
+    for (const d of DENOMS) {
+      const c = Number(counts[d] || 0)
+      if (c > 0) sum += d * c
+    }
+    return sum
+  }, [counts])
+
+  function setCount(denom: number, raw: string) {
+    const next = { ...counts, [denom]: raw }
+    setCounts(next)
+    let sum = 0
+    for (const d of DENOMS) {
+      const c = Number(next[d] || 0)
+      if (c > 0) sum += d * c
+    }
+    if (sum > 0) setCounted(String(sum))
+  }
 
   async function confirm() {
     if (!props.drawer.openingSet) { setError('Cannot close the day: the branch opening balance must be set by an Accountant first'); return }
@@ -480,6 +562,31 @@ function CloseDayModal(props: { drawer: CashDrawer; onClose: () => void; onDone:
       <label style={fieldLabel}>Physically counted cash
         <input type="number" value={counted} onChange={(e) => setCounted(e.target.value)} placeholder="0" style={{ ...inputStyle, textAlign: 'right' }} />
       </label>
+      <div style={{ border: '1px solid var(--line)', borderRadius: 8, padding: 10, background: 'var(--bg)' }}>
+        <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--muted)', marginBottom: 8 }}>
+          Denomination calculator — enter note / coin counts
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 8 }}>
+          {DENOMS.map((d) => (
+            <label key={d} style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.74rem', fontWeight: 700, color: 'var(--muted)' }}>
+              ₹{d}
+              <input
+                type="number"
+                min={0}
+                inputMode="numeric"
+                value={counts[d] ?? ''}
+                onChange={(e) => setCount(d, e.target.value)}
+                placeholder="0"
+                style={{ ...inputStyle, padding: '6px 8px', textAlign: 'right' }}
+              />
+            </label>
+          ))}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', paddingTop: 8 }}>
+          <span style={{ color: 'var(--muted)' }}>Calculator total</span>
+          <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{inr(calcTotal)}</span>
+        </div>
+      </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem', padding: '4px 0' }}>
         <span style={{ color: 'var(--muted)' }}>Variance (counted − computed)</span>
         <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: variance === 0 ? 'var(--green)' : 'var(--amber)' }}>
@@ -499,3 +606,6 @@ function CloseDayModal(props: { drawer: CashDrawer; onClose: () => void; onDone:
 }
 
 const fieldLabel = { display: 'flex', flexDirection: 'column' as const, gap: 5, fontSize: '0.78rem', fontWeight: 600, color: 'var(--muted)' }
+
+/** Indian currency denominations for the close-day count helper. */
+const DENOMS = [500, 200, 100, 50, 20, 10, 5, 2, 1]

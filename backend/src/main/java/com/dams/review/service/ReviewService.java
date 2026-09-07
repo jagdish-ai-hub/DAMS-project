@@ -385,6 +385,42 @@ public class ReviewService {
     }
 
     @Transactional
+    public BulkVerifyResponse bulkApproveReceipts(List<Long> ids) {
+        Long orgId = TenantContext.requireOrgId();
+        AppUser me = guard.requireFinanceManager();
+        List<Long> approvedIds = new ArrayList<>();
+        List<String> skippedReasons = new ArrayList<>();
+
+        if (ids == null || ids.isEmpty()) {
+            return new BulkVerifyResponse(0, List.of(), List.of("No documents selected"));
+        }
+
+        for (Long id : ids) {
+            try {
+                ReceiveDocument doc = loadReceipt(orgId, id);
+                String label = describe(doc);
+                guard.requireCanReview(me, doc.getBranchId(), doc.getCreatedBy(), doc.getLastModifiedBy(), label);
+                if (doc.getWorkflowStatus() != WorkflowStatus.VERIFIED) {
+                    skippedReasons.add(label + " is " + doc.getWorkflowStatus() + " (needs VERIFIED)");
+                    continue;
+                }
+                doc.setWorkflowStatus(WorkflowStatus.APPROVED);
+                receiveDocumentRepo.save(doc);
+                List<Long> lineIds = settlementLineRepo.findByOrgIdAndReceiveDocumentIdOrderByLineNoAsc(orgId, doc.getId())
+                    .stream().map(SettlementLine::getId).toList();
+                attachmentService.freezeReceiveDocument(orgId, doc.getId(), lineIds);
+                auditService.recordUserEvent(RECEIVE, doc.getId(), doc.getBranchId(), EventType.APPROVED, me.getId(),
+                    detail("documentNo", doc.getDocumentNo(), "bulk", true));
+                approvedIds.add(doc.getId());
+                log.info("Bulk approved receipt: orgId={} docId={} by={}", orgId, doc.getId(), me.getId());
+            } catch (Exception e) {
+                skippedReasons.add("#" + id + ": " + e.getMessage());
+            }
+        }
+        return new BulkVerifyResponse(approvedIds.size(), approvedIds, skippedReasons);
+    }
+
+    @Transactional
     public ReceiveDocumentResponse overrideReceiptLine(Long id, Integer lineNo, BigDecimal newAmount, String reason) {
         Long orgId = TenantContext.requireOrgId();
         AppUser me = guard.requireAccountant();
@@ -485,6 +521,42 @@ public class ReviewService {
     public ExpenseDocumentResponse approveExpense(Long id) {
         return transitionExpense(id, guard.requireFinanceManager(),
             ExpenseWorkflowStatus.VERIFIED, ExpenseWorkflowStatus.APPROVED, EventType.APPROVED, null, null);
+    }
+
+    @Transactional
+    public BulkVerifyResponse bulkApproveExpenses(List<Long> ids) {
+        Long orgId = TenantContext.requireOrgId();
+        AppUser me = guard.requireFinanceManager();
+        List<Long> approvedIds = new ArrayList<>();
+        List<String> skippedReasons = new ArrayList<>();
+
+        if (ids == null || ids.isEmpty()) {
+            return new BulkVerifyResponse(0, List.of(), List.of("No documents selected"));
+        }
+
+        for (Long id : ids) {
+            try {
+                ExpenseDocument doc = loadExpense(orgId, id);
+                String label = describe(doc);
+                guard.requireCanReview(me, doc.getBranchId(), doc.getCreatedBy(), doc.getLastModifiedBy(), label);
+                if (doc.getWorkflowStatus() != ExpenseWorkflowStatus.VERIFIED) {
+                    skippedReasons.add(label + " is " + doc.getWorkflowStatus() + " (needs VERIFIED)");
+                    continue;
+                }
+                doc.setWorkflowStatus(ExpenseWorkflowStatus.APPROVED);
+                expenseDocumentRepo.save(doc);
+                List<Long> lineIds = expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(orgId, doc.getId())
+                    .stream().map(ExpenseLine::getId).toList();
+                attachmentService.freezeExpenseDocument(orgId, doc.getId(), lineIds);
+                auditService.recordUserEvent(EXPENSE, doc.getId(), doc.getBranchId(), EventType.APPROVED, me.getId(),
+                    detail("documentNo", doc.getDocumentNo(), "bulk", true));
+                approvedIds.add(doc.getId());
+                log.info("Bulk approved expense: orgId={} docId={} by={}", orgId, doc.getId(), me.getId());
+            } catch (Exception e) {
+                skippedReasons.add("#" + id + ": " + e.getMessage());
+            }
+        }
+        return new BulkVerifyResponse(approvedIds.size(), approvedIds, skippedReasons);
     }
 
     @Transactional

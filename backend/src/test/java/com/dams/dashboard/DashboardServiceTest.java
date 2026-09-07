@@ -37,6 +37,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -148,6 +149,40 @@ class DashboardServiceTest {
 
         assertThat(s.trend()).hasSize(14);
         assertThat(s.trend().get(13).date()).isEqualTo(s.trend().get(0).date().plusDays(13));
+    }
+
+    @Test
+    void summary_customRange_usesExplicitFromTo_insteadOfThePeriodWindow() {
+        when(settlementLineRepo.dashboardCollections(eq(ORG), any(), any(), isNull())).thenReturn(BigDecimal.ZERO);
+        when(expenseLineRepo.dashboardExpenses(eq(ORG), any(), any(), isNull())).thenReturn(BigDecimal.ZERO);
+        LocalDate from = LocalDate.of(2026, 7, 1);
+        LocalDate to = LocalDate.of(2026, 7, 31);
+
+        DashboardSummary s = service.summary(null, "mtd", from, to);
+
+        assertThat(s.period()).isEqualTo("custom");
+        ArgumentCaptor<LocalDate> fromArg = ArgumentCaptor.forClass(LocalDate.class);
+        ArgumentCaptor<LocalDate> toArg = ArgumentCaptor.forClass(LocalDate.class);
+        verify(settlementLineRepo).dashboardCollections(eq(ORG), fromArg.capture(), toArg.capture(), isNull());
+        assertThat(fromArg.getValue()).isEqualTo(from);
+        assertThat(toArg.getValue()).isEqualTo(to);
+    }
+
+    @Test
+    void summary_customRange_refusesAToBeforeFrom() {
+        LocalDate from = LocalDate.of(2026, 7, 31);
+        LocalDate to = LocalDate.of(2026, 7, 1);
+
+        assertThatThrownBy(() -> service.summary(null, "mtd", from, to))
+            .isInstanceOf(com.dams.common.exception.DamsException.class)
+            .hasMessageContaining("'to'");
+    }
+
+    @Test
+    void summary_customRange_refusesAHalfOpenRange() {
+        assertThatThrownBy(() -> service.summary(null, "mtd", LocalDate.of(2026, 7, 1), null))
+            .isInstanceOf(com.dams.common.exception.DamsException.class)
+            .hasMessageContaining("Both 'from' and 'to'");
     }
 
     private static Branch branch(long id, String code) {

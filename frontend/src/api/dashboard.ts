@@ -1,6 +1,6 @@
 import api from './axios'
 
-export type DashboardPeriod = 'today' | 'mtd'
+export type DashboardPeriod = 'today' | 'mtd' | 'custom'
 
 export interface DashboardKpis {
   collections: number
@@ -64,8 +64,10 @@ export interface ActivityItem {
 }
 
 export const dashboardApi = {
-  summary(period: DashboardPeriod, branchId?: number) {
-    return api.get<DashboardSummary>('/api/v1/dashboard/summary', { params: { period, branchId } })
+  summary(period: DashboardPeriod, branchId?: number, from?: string, to?: string) {
+    // from/to only apply when period is 'custom' — the backend ignores them
+    // otherwise, so older callers passing two args keep working unchanged.
+    return api.get<DashboardSummary>('/api/v1/dashboard/summary', { params: { period, branchId, from, to } })
   },
   outstanding(branchId?: number) {
     return api.get<OutstandingItem[]>('/api/v1/dashboard/outstanding', { params: { branchId } })

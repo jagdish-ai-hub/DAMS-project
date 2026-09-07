@@ -99,6 +99,35 @@ export interface CashOpeningRequest {
   amount: number
 }
 
+export interface ReopenRequest {
+  id: number
+  branchId: number
+  branchCode: string | null
+  closeDate: string
+  reason: string
+  status: 'PENDING' | 'APPROVED' | 'REJECTED'
+  requestedBy: number
+  decidedBy: number | null
+  decisionNote: string | null
+  decidedAt: string | null
+  createdAt: string
+}
+
+export const reopenApi = {
+  request(closeDate: string, reason: string) {
+    return api.post<ReopenRequest>('/api/v1/cash/reopen-requests', { closeDate, reason })
+  },
+  list(status?: string) {
+    return api.get<ReopenRequest[]>('/api/v1/cash/reopen-requests', { params: status ? { status } : undefined })
+  },
+  approve(id: number) {
+    return api.post<ReopenRequest>(`/api/v1/cash/reopen-requests/${id}/approve`)
+  },
+  reject(id: number, reason: string) {
+    return api.post<ReopenRequest>(`/api/v1/cash/reopen-requests/${id}/reject`, { reason })
+  },
+}
+
 export const cashApi = {
   drawer(date: string, branchId?: number) {
     return api.get<CashDrawer>('/api/v1/cash/drawer', { params: { date, branchId } })

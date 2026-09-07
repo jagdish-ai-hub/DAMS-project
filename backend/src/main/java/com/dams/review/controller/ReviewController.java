@@ -128,6 +128,13 @@ public class ReviewController {
         return reviewService.approveReceipt(id);
     }
 
+    @PostMapping("/receipts/bulk-approve")
+    @Operation(summary = "Finance Manager: bulk-approve verified receipts — skips anything not VERIFIED")
+    @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
+    public BulkVerifyResponse bulkApproveReceipts(@Valid @RequestBody BulkVerifyRequest request) {
+        return reviewService.bulkApproveReceipts(request.ids());
+    }
+
     // ---- expense actions ----
 
     @PostMapping("/expenses/{id}/verify")
@@ -178,6 +185,13 @@ public class ReviewController {
     @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
     public ExpenseDocumentResponse approveExpense(@PathVariable Long id) {
         return reviewService.approveExpense(id);
+    }
+
+    @PostMapping("/expenses/bulk-approve")
+    @Operation(summary = "Finance Manager: bulk-approve verified expenses — skips anything not VERIFIED")
+    @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
+    public BulkVerifyResponse bulkApproveExpenses(@Valid @RequestBody BulkVerifyRequest request) {
+        return reviewService.bulkApproveExpenses(request.ids());
     }
 
     // ---- cash actions ----

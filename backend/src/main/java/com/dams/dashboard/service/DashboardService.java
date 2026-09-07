@@ -131,11 +131,37 @@ public class DashboardService {
 
     @Transactional(readOnly = true)
     public DashboardSummary summary(Long branchId, String period) {
+        return summary(branchId, period, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public DashboardSummary summary(Long branchId, String period, java.time.LocalDate fromParam,
+                                     java.time.LocalDate toParam) {
         Long orgId = TenantContext.requireOrgId();
         Branch scoped = resolveBranch(orgId, branchId);
         LocalDate today = OrgTime.today();
-        LocalDate from = "today".equals(period) ? today : today.withDayOfMonth(1);
-        LocalDate trendFrom = today.minusDays(TREND_DAYS - 1L);
+        // An explicit from/to range overrides the today/mtd window — the Owner picks exact
+        // dates for audits and month-close reviews instead of being limited to presets.
+        // A half-open range is refused so "from without to" can't silently mean "to today".
+        LocalDate from;
+        LocalDate to;
+        String periodLabel;
+        if (fromParam != null || toParam != null) {
+            if (fromParam == null || toParam == null) {
+                throw DamsException.badRequest("Both 'from' and 'to' (yyyy-mm-dd) are required for a custom range");
+            }
+            if (toParam.isBefore(fromParam)) {
+                throw DamsException.badRequest("'to' (" + toParam + ") is before 'from' (" + fromParam + ")");
+            }
+            from = fromParam;
+            to = toParam;
+            periodLabel = "custom";
+        } else {
+            from = "today".equals(period) ? today : today.withDayOfMonth(1);
+            to = today;
+            periodLabel = "today".equals(period) ? "today" : "mtd";
+        }
+        LocalDate trendFrom = to.minusDays(TREND_DAYS - 1L);
 
         // Shared batch loads — computed once here, threaded through the per-branch table below,
         // so the dashboard is a fixed handful of queries rather than ~8 per branch.
@@ -148,8 +174,8 @@ public class DashboardService {
             cashDocumentRepo.countPendingReviewByBranch(orgId));
         Map<Long, ClaimAndVariance> lastCloseByBranch = latestCloseByBranch(orgId);
 
-        BigDecimal collections = nz(settlementLineRepo.dashboardCollections(orgId, from, today, branchId));
-        BigDecimal expenses = nz(expenseLineRepo.dashboardExpenses(orgId, from, today, branchId));
+        BigDecimal collections = nz(settlementLineRepo.dashboardCollections(orgId, from, to, branchId));
+        BigDecimal expenses = nz(expenseLineRepo.dashboardExpenses(orgId, from, to, branchId));
         BigDecimal cashInHand = scoped != null
             ? positions.getOrDefault(scoped.getId(), BigDecimal.ZERO)
             : positions.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -162,12 +188,12 @@ public class DashboardService {
 
         return new DashboardSummary(
             scoped != null ? scoped.getCode() : "ALL",
-            "today".equals(period) ? "today" : "mtd",
+            periodLabel,
             kpis,
-            trend(orgId, branchId, trendFrom, today),
-            named(settlementLineRepo.dashboardCollectionsByMode(orgId, from, today, branchId), settlementModeNames(orgId)),
-            named(expenseLineRepo.dashboardExpensesByCategory(orgId, from, today, branchId), expenseCategoryNames(orgId)),
-            branchComparison(orgId, from, today, branchId, branches, positions, pendingByBranch, lastCloseByBranch));
+            trend(orgId, branchId, trendFrom, to),
+            named(settlementLineRepo.dashboardCollectionsByMode(orgId, from, to, branchId), settlementModeNames(orgId)),
+            named(expenseLineRepo.dashboardExpensesByCategory(orgId, from, to, branchId), expenseCategoryNames(orgId)),
+            branchComparison(orgId, from, to, branchId, branches, positions, pendingByBranch, lastCloseByBranch));
     }
 
     private List<TrendPoint> trend(Long orgId, Long branchId, LocalDate from, LocalDate to) {

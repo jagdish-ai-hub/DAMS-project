@@ -7,6 +7,26 @@
 
 ## Revision log
 
+- **rev 29 (2026-09-07)** — Usability + real-task batch (high→low, all roles).
+  Backend: FM `bulk-approve` receipts/expenses (VERIFIED→APPROVED, maker-checker
+  skips, `BulkVerifyResponse` reuse); dashboard `summary` accepts explicit
+  `from/to` (overrides today/mtd, 400 on half-open/inverted); `GET
+  /masters/{type}/usage` 90-day counts (deactivation guard); `expense_budget`
+  table (V23) + `BudgetController` (`GET ?month=`, OWNER `PUT` upsert, caps
+  inform never block); cash-day reopen by request only (V24
+  `cash_close_reopen_request`, cashier POST w/ reason → FM approve removes the
+  close / reject keeps lock, dual audit, no silent reopen — AGENT.md #6 updated);
+  search also matches UTR/transaction-ref (min 4 chars, branch-scoped).
+  Frontend: cash close denomination grid; nav count badges (queried/pending,
+  5-min poll, fail-silent); query-reason templates; Over-limit/Has-override/
+  No-bill queue filters; FM bulk-approve bar + claim copy/open-all-bills;
+  print amount-in-words (Indian) + WhatsApp share; camera capture + compress;
+  dashboard custom dates + clickable branch drill-down + evening brief +
+  getting-started checklist + staff scorecard + 14-day register + budget bars;
+  collapsible AI hub; masters usage guard + per-category budget inputs; FM
+  reopen approve/reject card. Verified: backend 192 green, `tsc`/`eslint`/
+  `vitest`/vite-build clean.
+
 - **rev 28 (2026-09-07)** — Full rulebook audit batch (AGENT.md/plan.md compliance).
   Backend: submit/resubmit re-checks the cash-day lock per line before numbering
   (V21 narrows the one-open index past REJECTED; V22 adds a monotonic `line_no_seq`

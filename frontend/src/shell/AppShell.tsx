@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Routes, Route, Navigate, NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import type { Role } from '../auth/AuthContext'
+import { myEntriesApi } from '../api/myEntries'
+import { reviewApi } from '../api/review'
 import AccountMenu from './AccountMenu'
 import HelpDrawer from '../help/HelpDrawer'
 import { ROLE_TO_HELP } from '../help/manifest'
@@ -66,6 +68,48 @@ export default function AppShell() {
   const [navOpen, setNavOpen] = useState(false)
   const [askOpen, setAskOpen] = useState(false)
   const location = useLocation()
+
+  // Nav count pills — polled every 5 min + on route change, fail silently.
+  const [badges, setBadges] = useState<Record<string, number>>({})
+  useEffect(() => {
+    if (!user) return
+    const role = user.role
+    let live = true
+    async function load() {
+      try {
+        if (role === 'CASHIER') {
+          const { data } = await myEntriesApi.list()
+          let queried = 0
+          for (const e of data) {
+            if (e.queried) queried++
+          }
+          if (live) setBadges(queried > 0 ? { '/app/my-entries': queried } : {})
+        } else if (role === 'ACCOUNTANT') {
+          const [r, e, c] = await Promise.all([
+            reviewApi.receiptQueue(),
+            reviewApi.expenseQueue(),
+            reviewApi.cashQueue(),
+          ])
+          const total = r.data.length + e.data.length + c.data.length
+          if (live) setBadges(total > 0 ? { '/app': total } : {})
+        } else if (role === 'FINANCE_MANAGER') {
+          const [r, e, c] = await Promise.all([
+            reviewApi.fmQueue('receipt'),
+            reviewApi.fmQueue('expense'),
+            reviewApi.fmQueue('cash'),
+          ])
+          const total = r.data.awaitingApproval.length + e.data.awaitingApproval.length + c.data.awaitingApproval.length
+          if (live) setBadges(total > 0 ? { '/app': total } : {})
+        }
+      } catch {
+        // Badges are hints only — never surface an error banner for them.
+      }
+    }
+    load()
+    const timer = setInterval(load, 5 * 60 * 1000)
+    return () => { live = false; clearInterval(timer) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.role, location.pathname])
 
   // Hooks must run before the early return below (rules-of-hooks) — so the
   // role gate is computed here from the nullable user, not after the return.
@@ -168,6 +212,14 @@ export default function AppShell() {
               })}
             >
               {item.label}
+              {badges[item.to] != null && (
+                <span style={{
+                  marginLeft: 6, fontSize: '0.66rem', fontWeight: 800, background: 'var(--amber)',
+                  color: '#fff', borderRadius: 999, padding: '1px 7px',
+                }}>
+                  {badges[item.to]}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -238,6 +290,14 @@ export default function AppShell() {
                 })}
               >
                 {item.label}
+                {badges[item.to] != null && (
+                  <span style={{
+                    marginLeft: 8, fontSize: '0.68rem', fontWeight: 800, background: 'var(--amber)',
+                    color: '#fff', borderRadius: 999, padding: '1px 8px',
+                  }}>
+                    {badges[item.to]}
+                  </span>
+                )}
               </NavLink>
             ))}
           </div>

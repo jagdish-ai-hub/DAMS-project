@@ -4,8 +4,9 @@ import { aiApi,
   type ClaimInsight, type CloseChecklistRow, type QueryRoot, type ReceiverDuplicate,
   type RiskScore,
 } from '../api/ai'
+import type { DashboardPeriod } from '../api/dashboard'
 import { useCopy } from '../shared/useCopy'
-import { Badge, ErrorBanner, Skeleton, card, cardTitle, inr } from '../shell/ui'
+import { Badge, ErrorBanner, Skeleton, card, cardTitle, ghostBtn, inr } from '../shell/ui'
 
 function apiError(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback
@@ -25,10 +26,11 @@ const SEV_TONE: Record<string, 'green' | 'amber' | 'red' | 'blue' | 'gray'> = {
  */
 export default function AiInsightsSection({ branchId, period, scopeLabel }: {
   branchId: number | ''
-  period: 'today' | 'mtd'
+  period: DashboardPeriod
   scopeLabel: string
 }) {
   const b = branchId === '' ? undefined : branchId
+  // The AI brief only knows today/mtd — a custom dashboard range falls back to mtd.
   const [brief, setBrief] = useState<AiBrief | null>(null)
   const [anomalies, setAnomalies] = useState<AnomalyItem[]>([])
   const [benchmark, setBenchmark] = useState<BenchmarkNarrative | null>(null)
@@ -43,14 +45,16 @@ export default function AiInsightsSection({ branchId, period, scopeLabel }: {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [asOf, setAsOf] = useState<Date | null>(null)
+  const [expanded, setExpanded] = useState(false)
   const { copiedKey, copyError, copy } = useCopy()
 
   useEffect(() => {
     let live = true
     setLoading(true)
     setError('')
+    const briefPeriod = period === 'custom' ? 'mtd' : period
     Promise.allSettled([
-      aiApi.brief(period, b),
+      aiApi.brief(briefPeriod, b),
       aiApi.anomalies(b),
       aiApi.benchmark(),
       aiApi.cashAdvice(b),
@@ -91,6 +95,19 @@ export default function AiInsightsSection({ branchId, period, scopeLabel }: {
     )
   }
 
+  // Cards beyond the morning brief + watchdog hide behind an expander when the
+  // grid would otherwise dominate the page (more than 3 cards total).
+  const extraCount =
+    (claims.length > 0 ? 1 : 0) +
+    (riskLoaded ? 1 : 0) +
+    (cash.length > 0 ? 1 : 0) +
+    (benchmark && benchmark.lines.length > 0 ? 1 : 0) +
+    (roots.length > 0 ? 1 : 0) +
+    (close.length > 0 ? 1 : 0) +
+    (dupes.length > 0 ? 1 : 0)
+  const gridTotal = (anomalies.length > 0 ? 1 : 0) + extraCount
+  const collapsed = !expanded && gridTotal > 3
+
   return (
     <section aria-label="AI insights" style={{ marginBottom: 18 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
@@ -124,6 +141,23 @@ export default function AiInsightsSection({ branchId, period, scopeLabel }: {
             </div>
           </div>
         )}
+      </div>
+
+      {gridTotal > 3 && (
+        <div style={{ margin: '12px 0' }}>
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={!collapsed}
+            style={{ ...ghostBtn, minHeight: 36, fontWeight: 700 }}
+          >
+            {collapsed ? `Show all ${extraCount} insights` : 'Show fewer'}
+          </button>
+        </div>
+      )}
+
+      {extraCount > 0 && !collapsed && (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 14 }}>
 
         {claims.length > 0 && (
           <div style={card}>
@@ -262,6 +296,7 @@ export default function AiInsightsSection({ branchId, period, scopeLabel }: {
           </div>
         )}
       </div>
+      )}
     </section>
   )
 }

@@ -268,8 +268,13 @@ flag the conflict and ask rather than silently working around it.
    value, reason, document/line ID — filterable by user, branch, and date.
 5. **No Tally export or ledger report in v1.** Tally references elsewhere
    in this file are historical context only.
-6. **Post-approval reversal/correction: deferred beyond v1.** V1 relies on
-   the maker-checker flow catching errors before approval.
+6. **Post-approval reversal/correction: cash-day reopen by request only.** No
+   silent reversal anywhere — documents still rely on the maker-checker flow
+   catching errors before approval. The one exception is a miscounted cash-day
+   close: the cashier files a reopen request with a mandatory reason
+   (`POST /cash/reopen-requests`), a Finance Manager approves (the close row is
+   removed so the day can be re-closed) or rejects with a reason, and every
+   step is audited. There is deliberately no direct reopen endpoint.
 7. **Universal search for every role**, results always scoped by that
    user's branch access (and the cashier toggle in #2).
 8. **Queried-entry fix-and-resubmit loop (required v1)** — the cashier
@@ -386,7 +391,8 @@ auth, like an S3 presigned URL), `/swagger-ui.html`, `/swagger-ui/**`,
 | Branches | `branch/controller/BranchController` | `GET /branches`, `GET /branches/{id}`, `POST /branches`, `PATCH /branches/{id}` |
 | Users | `user/controller/UserController` | `GET /users`, `GET /users/{id}`, `POST /users`, `PATCH /users/{id}` |
 | Org settings | `organization/controller/OrgSettingsController` | `GET /organization`, `PATCH /organization` |
-| Masters | `masters/controller/MastersController` | `GET /masters/{type}`, `GET /masters/{type}/{id}`, `POST /masters/{type}` (Owner), `PATCH /masters/{type}/{id}` (Owner) |
+| Masters | `masters/controller/MastersController` | `GET /masters/{type}`, `GET /masters/{type}/{id}`, `GET /masters/{type}/usage` (90-day use counts, deactivation guard), `POST /masters/{type}` (Owner), `PATCH /masters/{type}/{id}` (Owner) |
+| Budgets | `budget/controller/BudgetController` | `GET /budgets?month=YYYYMM`, `PUT /budgets` (Owner upsert `{categoryId, monthKey, capAmount}`; caps inform, never block) |
 | Receivers | `receiver/controller/ReceiverController` | `GET /receivers`, `GET /receivers/{id}`, `POST /receivers`, `PATCH /receivers/{id}` |
 | Customers | `customer/controller/CustomerController` | `GET /customers`, `GET /customers/{id}`, `GET /customers/{id}/history`, `POST /customers`, `PATCH /customers/{id}` |
 | Vehicles | `vehicle/controller/VehicleController` | `GET /vehicles`, `POST /vehicles` (lookup + deduped create; number normalised) |
@@ -395,11 +401,12 @@ auth, like an S3 presigned URL), `/swagger-ui.html`, `/swagger-ui/**`,
 | Expenses | `expense/controller/ExpenseDocumentController` | `POST /expenses`, `GET /expenses/{id}`, `PATCH /expenses/{id}`, `POST /expenses/{id}/submit`, `POST /expenses/{id}/resubmit`, `POST /expenses/{id}/transfer-to-claim`, `POST /expenses/{id}/lines`, `PATCH /expenses/{id}/lines/{lineNo}`, `DELETE /expenses/{id}/lines/{lineNo}`, `POST|GET /expenses/{id}/attachments`, `POST|GET /expenses/{id}/lines/{lineNo}/attachments` |
 | Cash docs | `cash/controller/CashDocumentController` | `POST /cash-documents`, `GET /cash-documents`, `GET /cash-documents/{id}`, `PATCH /cash-documents/{id}`, `POST /cash-documents/{id}/submit`, `POST /cash-documents/{id}/resubmit`, `DELETE /cash-documents/{id}` |
 | Cash day | `cash/controller/CashController` | `GET /cash/drawer`, `POST /cash/opening`, `POST|GET /cash/close-day` |
-| Review | `review/controller/ReviewController` | `GET /review/receipts|expenses|cash`, `GET /review/fm/receipts|expenses|cash`, `POST /receipts/{id}/verify|query|reject`, `POST /receipts/{id}/lines/{lineNo}/override`, `POST /receipts/{id}/approve`, `POST /expenses/{id}/verify|query|reject`, `POST /expenses/{id}/lines/{lineNo}/override`, `POST /expenses/{id}/close`, `POST /expenses/{id}/approve`, `POST /cash-documents/{id}/verify|approve|query|reject` |
-| Search | `search/controller/SearchController` | `GET /search?q=` |
+| Cash reopen | `cash/controller/CashReopenController` | `POST /cash/reopen-requests` (Cashier, reason required), `GET /cash/reopen-requests` (Acct/FM/Owner), `POST /cash/reopen-requests/{id}/approve|reject` (FM) |
+| Review | `review/controller/ReviewController` | `GET /review/receipts|expenses|cash`, `GET /review/fm/receipts|expenses|cash`, `POST /receipts/{id}/verify|query|reject`, `POST /receipts/bulk-verify`, `POST /receipts/bulk-approve` (FM), `POST /receipts/{id}/lines/{lineNo}/override`, `POST /receipts/{id}/approve`, `POST /expenses/{id}/verify|bulk-verify|query|reject`, `POST /expenses/bulk-approve` (FM), `POST /expenses/{id}/lines/{lineNo}/override`, `POST /expenses/{id}/close`, `POST /expenses/{id}/approve`, `POST /cash-documents/{id}/verify|approve|query|reject` |
+| Search | `search/controller/SearchController` | `GET /search?q=` (also matches UTR/transaction-ref last-4, doc numbers, vehicle/customer/job-card) |
 | AI assistant | `ai/controller/AiController` | `POST /ai/ask`, `GET /ai/brief`, `GET /ai/benchmark`, `GET /ai/anomalies`, `GET /ai/risk`, `GET /ai/queries/roots`, `GET /ai/claims/insights`, `GET /ai/cash/advice`, `GET /ai/close/checklist`, `GET /ai/receivers/duplicates`, `GET /ai/masters/health`, `GET /ai/limits/advice`, `GET /ai/search` (all read-only; only write is `ai_query_log` trace row) |
 | My Entries | `myentries/controller/MyEntriesController` | `GET /my-entries` |
-| Dashboard | `dashboard/controller/DashboardController` | `GET /dashboard/summary`, `GET /dashboard/outstanding`, `GET /dashboard/activity` |
+| Dashboard | `dashboard/controller/DashboardController` | `GET /dashboard/summary` (`period=today|mtd|custom`, `?from=&to=` custom range), `GET /dashboard/outstanding`, `GET /dashboard/activity` |
 | Override audit | `audit/controller/OverrideAuditController` | `GET /override-audit` (Owner+FM, filterable user/branch/date) |
 | Attachments | `attachment/controller/AttachmentController` | `GET /attachments/{id}`, `DELETE /attachments/{id}`, `GET /attachments/raw` (public w/ signature) |
 

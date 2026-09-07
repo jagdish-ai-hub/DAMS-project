@@ -25,6 +25,13 @@ export default function PrintReceiptModal({ doc, onClose }: Props) {
 
   const docNo = doc.documentNo || `Draft #${doc.id}`
   const branchTitle = doc.branchName ? `${doc.branchName} (${doc.branchCode || ''})` : (doc.branchCode || 'Dealership Branch')
+  const words = amountInWordsIndian(doc.totalReceived)
+  const slipDate = doc.submittedAt ? fmtDateTime(doc.submittedAt) : fmtDate(doc.createdAt)
+
+  function shareWhatsApp() {
+    const slip = `${branchTitle}\nReceipt ${docNo}\nAmount ${inr(doc.totalReceived)} (${words})\nJob Card ${doc.jobCardReference}\nDate ${slipDate}`
+    window.open(`https://wa.me/?text=${encodeURIComponent(slip)}`, '_blank', 'noopener')
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
@@ -209,6 +216,9 @@ export default function PrintReceiptModal({ doc, onClose }: Props) {
                 <span>Total Received:</span>
                 <span className="tabular-nums">{inr(doc.totalReceived)}</span>
               </div>
+              <div className="text-[10px] text-neutral-600 italic pt-1">
+                In words: Rupees {words} Only
+              </div>
               <div className="flex justify-between text-neutral-700 pt-0.5">
                 <span>Remaining Pending:</span>
                 <span className={`font-bold tabular-nums ${doc.pendingAmount > 0 ? 'text-amber-800' : 'text-green-800'}`}>
@@ -249,6 +259,13 @@ export default function PrintReceiptModal({ doc, onClose }: Props) {
           </button>
           <button
             type="button"
+            onClick={shareWhatsApp}
+            style={{ ...ghostBtn, minHeight: 38, color: 'var(--green)', borderColor: '#BBF7D0', fontWeight: 700 }}
+          >
+            Share on WhatsApp
+          </button>
+          <button
+            type="button"
             onClick={handlePrint}
             style={{ ...primaryBtn(false), minHeight: 38 }}
             className="flex items-center gap-2"
@@ -260,4 +277,40 @@ export default function PrintReceiptModal({ doc, onClose }: Props) {
       </div>
     </div>
   )
+}
+
+// Amount in words using the Indian grouping (Thousand / Lakh / Crore) so the
+// printed slip reads naturally to branch staff and customers.
+export function amountInWordsIndian(n: number): string {
+  const num = Math.round(Math.abs(n || 0))
+  if (num === 0) return 'Zero'
+  const ONES = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+    'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen']
+  const TENS = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety']
+  function twoDigits(v: number): string {
+    if (v < 20) return ONES[v]
+    const t = Math.floor(v / 10)
+    const o = v % 10
+    return o === 0 ? TENS[t] : `${TENS[t]} ${ONES[o]}`
+  }
+  function threeDigits(v: number): string {
+    const h = Math.floor(v / 100)
+    const rest = v % 100
+    const head = h > 0 ? `${ONES[h]} Hundred` : ''
+    if (rest === 0) return head
+    return head ? `${head} ${twoDigits(rest)}` : twoDigits(rest)
+  }
+  let rest = num
+  const parts: string[] = []
+  const crore = Math.floor(rest / 10000000)
+  rest %= 10000000
+  const lakh = Math.floor(rest / 100000)
+  rest %= 100000
+  const thousand = Math.floor(rest / 1000)
+  rest %= 1000
+  if (crore > 0) parts.push(`${threeDigits(crore)} Crore`)
+  if (lakh > 0) parts.push(`${twoDigits(lakh)} Lakh`)
+  if (thousand > 0) parts.push(`${twoDigits(thousand)} Thousand`)
+  if (rest > 0) parts.push(threeDigits(rest))
+  return parts.join(' ')
 }

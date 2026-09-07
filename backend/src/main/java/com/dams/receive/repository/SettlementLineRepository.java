@@ -172,4 +172,29 @@ public interface SettlementLineRepository extends JpaRepository<SettlementLine, 
 
     /** Super Admin org-purge only. */
     long deleteByOrgId(Long orgId);
+
+    /** Masters usage — settlement lines on a mode (or bank) with a recent transaction date. */
+    @Query("""
+        select count(l) from SettlementLine l
+        where l.orgId = :orgId
+          and l.settlementModeId = :modeId
+          and l.transactionDate >= :since
+        """)
+    long countByOrgIdAndSettlementModeIdSince(@Param("orgId") Long orgId,
+                                              @Param("modeId") Long modeId,
+                                              @Param("since") java.time.LocalDate since);
+
+    @Query("""
+        select count(l) from SettlementLine l
+        where l.orgId = :orgId
+          and l.bankId = :bankId
+          and l.transactionDate >= :since
+        """)
+    long countByOrgIdAndBankIdSince(@Param("orgId") Long orgId,
+                                    @Param("bankId") Long bankId,
+                                    @Param("since") java.time.LocalDate since);
+
+    /** Universal search — UTR / transaction-ref fragment (case-insensitive). */
+    List<SettlementLine> findByOrgIdAndTransactionRefContainingIgnoreCase(
+        Long orgId, String fragment, org.springframework.data.domain.Limit limit);
 }

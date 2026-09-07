@@ -1,7 +1,10 @@
 import { useState, type ReactNode } from 'react'
 import type { ReceiveDocument, SettlementLine } from '../api/receipts'
+import { receiptsApi } from '../api/receipts'
 import type { ExpenseDocument, ExpenseLine } from '../api/expenses'
+import { expensesApi } from '../api/expenses'
 import type { CashDocument } from '../api/cash'
+import { useCopy } from '../shared/useCopy'
 import { card, Badge, ghostBtn, primaryBtn, inputStyle, inr, fmtDate, fmtDateTime } from '../shell/ui'
 
 /** Shared pieces for the Accountant review queue and the Finance Manager queue. */
@@ -95,6 +98,9 @@ export function RecordCard(props: {
           <div style={{ fontSize: '0.76rem', color: 'var(--amber)', marginTop: 10 }}>
             ⚠ Over the category limit — needs Finance Manager approval before it can be closed.
           </div>
+        )}
+        {!expense && (doc as ReceiveDocument).isClaim && (
+          <ClaimPackButtons doc={doc} />
         )}
       </div>
 
@@ -245,11 +251,30 @@ export function QueryRejectBox(props: {
   onCancel: () => void
   onSubmit: () => void
 }) {
+  // Canned reasons standardize query text so the AI root-cause analytics
+  // (/ai/queries/roots) can group repeats instead of reading free prose.
+  const current = QUERY_TEMPLATES.includes(props.text) ? props.text : (props.text === '' ? '' : 'custom')
+  function pickTemplate(v: string) {
+    if (v === '' || v === 'custom') return
+    props.onText(v)
+  }
   return (
     <div style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 9, padding: 12, marginBottom: 10 }}>
       <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>
         {props.kind === 'query' ? 'Question for the cashier' : 'Reason for rejection'} <span style={{ color: 'var(--red)' }}>*</span>
       </div>
+      <select
+        value={current}
+        onChange={(e) => pickTemplate(e.target.value)}
+        style={{ ...inputStyle, marginBottom: 8 }}
+        aria-label="Reason template"
+      >
+        <option value="">Pick a standard reason…</option>
+        {QUERY_TEMPLATES.map((t) => (
+          <option key={t} value={t}>{t}</option>
+        ))}
+        <option value="custom">Custom — write below</option>
+      </select>
       <textarea value={props.text} onChange={(e) => props.onText(e.target.value)} rows={2}
         placeholder={props.kind === 'query' ? "e.g. Amount doesn't match the invoice…" : ''}
         style={{ ...inputStyle, resize: 'vertical' }} />
@@ -260,6 +285,79 @@ export function QueryRejectBox(props: {
           {props.kind === 'query' ? 'Send query' : 'Reject'}
         </button>
       </div>
+    </div>
+  )
+}
+
+/** Standard query / reject reasons — picking one fills the note (still editable). */
+export const QUERY_TEMPLATES = [
+  'Missing / blurry bill photo — re-upload clear copy',
+  'Wrong category selected',
+  'DBM / job-card ref missing',
+  'Amount mismatch vs bill',
+  'Bank ref / UTR missing',
+]
+
+/**
+ * Claim pack — copyable summary + open-all-bills for warranty/AMC/CG claims.
+ * No new backend: reuses the ViewReceiptsModal attachment data path
+ * (document + per-line list, then signed URLs opened in new tabs).
+ */
+export function ClaimPackButtons({ doc }: { doc: AnyDoc }) {
+  const { copiedKey, copyError, copy } = useCopy()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const expense = isExpense(doc)
+  const docNo = doc.documentNo ?? 'draft'
+  const key = `claim-${doc.id}`
+
+  function summary(): string {
+    const party = expense ? doc.receiverName : doc.customerName
+    const total = expense ? doc.totalAmount : doc.totalReceived
+    const age = doc.submittedAt
+      ? Math.max(0, Math.floor((Date.now() - new Date(doc.submittedAt).getTime()) / 86400000))
+      : 0
+    return `Claim ${docNo} · ${party ?? '—'} · ${doc.jobCardReference ?? '—'} · Total ${inr(total)} · Age ${age}d · Submitted ${fmtDate(doc.submittedAt)}`
+  }
+
+  async function openAllBills() {
+    setBusy(true)
+    setError('')
+    try {
+      const api = expense ? expensesApi : receiptsApi
+      const all = []
+      const top = await api.documentAttachments(doc.id)
+      for (const a of top.data) all.push(a)
+      for (const l of doc.lines) {
+        const r = await api.lineAttachments(doc.id, l.lineNo)
+        for (const a of r.data) all.push(a)
+      }
+      if (all.length === 0) {
+        setError('No bills attached to this claim yet.')
+        return
+      }
+      for (const a of all) {
+        const { data } = await api.signedUrl(a.id)
+        window.open(data.url, '_blank', 'noopener')
+      }
+    } catch {
+      setError('Could not open all bills.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 8 }}>
+      <button type="button" onClick={() => void copy(key, summary())} style={{ ...ghostBtn, minHeight: 32 }}>
+        {copiedKey === key ? 'Copied ✓' : 'Copy claim summary'}
+      </button>
+      <button type="button" onClick={() => void openAllBills()} disabled={busy} style={{ ...ghostBtn, minHeight: 32 }}>
+        {busy ? 'Opening…' : 'Open all bills'}
+      </button>
+      {(error || copyError) && (
+        <span style={{ fontSize: '0.74rem', color: 'var(--red)' }}>{error || copyError}</span>
+      )}
     </div>
   )
 }

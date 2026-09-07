@@ -148,4 +148,39 @@ public interface ExpenseLineRepository extends JpaRepository<ExpenseLine, Long> 
 
     /** Super Admin org-purge only. */
     long deleteByOrgId(Long orgId);
+
+    /** Masters usage — expense lines on a sub-category / mode / bank with a recent transaction date. */
+    @Query("""
+        select count(l) from ExpenseLine l
+        where l.orgId = :orgId
+          and l.subCategoryId = :subCategoryId
+          and l.transactionDate >= :since
+        """)
+    long countByOrgIdAndSubCategoryIdSince(@Param("orgId") Long orgId,
+                                           @Param("subCategoryId") Long subCategoryId,
+                                           @Param("since") LocalDate since);
+
+    @Query("""
+        select count(l) from ExpenseLine l
+        where l.orgId = :orgId
+          and l.expenseModeId = :modeId
+          and l.transactionDate >= :since
+        """)
+    long countByOrgIdAndExpenseModeIdSince(@Param("orgId") Long orgId,
+                                           @Param("modeId") Long modeId,
+                                           @Param("since") LocalDate since);
+
+    @Query("""
+        select count(l) from ExpenseLine l
+        where l.orgId = :orgId
+          and l.bankId = :bankId
+          and l.transactionDate >= :since
+        """)
+    long countByOrgIdAndBankIdSince(@Param("orgId") Long orgId,
+                                    @Param("bankId") Long bankId,
+                                    @Param("since") LocalDate since);
+
+    /** Universal search — UTR / transaction-ref fragment (case-insensitive). */
+    List<ExpenseLine> findByOrgIdAndTransactionRefContainingIgnoreCase(
+        Long orgId, String fragment, org.springframework.data.domain.Limit limit);
 }

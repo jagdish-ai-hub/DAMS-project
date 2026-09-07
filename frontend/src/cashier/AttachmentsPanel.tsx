@@ -46,6 +46,7 @@ export default function AttachmentsPanel(props: {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+  const cameraRef = useRef<HTMLInputElement>(null)
 
   const lineKey = lineTargets.map((t) => t.lineNo).join(',')
 
@@ -81,15 +82,19 @@ export default function AttachmentsPanel(props: {
   function addFiles(files: File[]) {
     if (files.length === 0) return
     setError('')
-    setStaged((prev) => [
-      ...prev,
-      ...files.map((file) => ({
-        id: `${file.name}-${file.size}-${Date.now()}-${Math.random()}`,
-        file,
-        target: 'doc' as 'doc' | number,
-        tooBig: file.size > MAX_MB * 1024 * 1024,
-      })),
-    ])
+    // Compress asynchronously so phone photos shrink before staging; stage
+    // immediately with originals only if compression fails (it resolves back).
+    void Promise.all(files.map((f) => compressImage(f))).then((out) => {
+      setStaged((prev) => [
+        ...prev,
+        ...out.map((file) => ({
+          id: `${file.name}-${file.size}-${Date.now()}-${Math.random()}`,
+          file,
+          target: 'doc' as 'doc' | number,
+          tooBig: file.size > MAX_MB * 1024 * 1024,
+        })),
+      ])
+    })
   }
 
   function onPick(e: ChangeEvent<HTMLInputElement>) {
@@ -181,6 +186,14 @@ export default function AttachmentsPanel(props: {
             onChange={onPick}
             style={{ display: 'none' }}
           />
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={onPick}
+            style={{ display: 'none' }}
+          />
 
           <div
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
@@ -216,6 +229,13 @@ export default function AttachmentsPanel(props: {
               PDF or images up to {MAX_MB} MB each
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => cameraRef.current?.click()}
+            style={{ ...ghostBtn, minHeight: 38, marginTop: 8 }}
+          >
+            📷 Take photo
+          </button>
 
           {staged.length > 0 && (
             <div style={{
@@ -338,6 +358,60 @@ function fmtSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+// Counter phones shoot multi-MB photos that stall on slow uploads — shrink
+// images to max 1600px JPEG 0.8 client-side. PDFs pass through untouched.
+function compressImage(file: File): Promise<File> {
+  if (!file.type.startsWith('image/')) return Promise.resolve(file)
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      try {
+        const max = 1600
+        const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight))
+        const w = Math.max(1, Math.round(img.naturalWidth * scale))
+        const h = Math.max(1, Math.round(img.naturalHeight * scale))
+        if (scale >= 1) {
+          URL.revokeObjectURL(url)
+          resolve(file)
+          return
+        }
+        const canvasEl = document.createElement('canvas')
+        canvasEl.width = w
+        canvasEl.height = h
+        const ctx = canvasEl.getContext('2d')
+        if (!ctx) {
+          URL.revokeObjectURL(url)
+          resolve(file)
+          return
+        }
+        ctx.drawImage(img, 0, 0, w, h)
+        canvasEl.toBlob(
+          (blob) => {
+            URL.revokeObjectURL(url)
+            if (!blob) {
+              resolve(file)
+              return
+            }
+            const name = file.name.replace(/\.\w+$/, '') + '.jpg'
+            resolve(new File([blob], name, { type: 'image/jpeg' }))
+          },
+          'image/jpeg',
+          0.8,
+        )
+      } catch {
+        URL.revokeObjectURL(url)
+        resolve(file)
+      }
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      resolve(file)
+    }
+    img.src = url
+  })
 }
 
 function errMsg(e: unknown): string {

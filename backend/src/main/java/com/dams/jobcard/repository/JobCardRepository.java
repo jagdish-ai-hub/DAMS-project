@@ -27,6 +27,19 @@ public interface JobCardRepository extends JpaRepository<JobCard, Long> {
 
     long countByOrgIdAndCustomerId(Long orgId, Long customerId);
 
+    long countByOrgIdAndCategoryId(Long orgId, Long categoryId);
+
+    /** Masters usage — job cards on a receive category created in the last 90 days. */
+    @Query("""
+        select count(j) from JobCard j
+        where j.orgId = :orgId
+          and j.categoryId = :categoryId
+          and j.createdAt >= :since
+        """)
+    long countByOrgIdAndCategoryIdSince(@Param("orgId") Long orgId,
+                                        @Param("categoryId") Long categoryId,
+                                        @Param("since") java.time.Instant since);
+
     /** Universal search — match on the internal id (typed as a number), invoice_no or dbm_id. */
     @Query("""
         select j from JobCard j
