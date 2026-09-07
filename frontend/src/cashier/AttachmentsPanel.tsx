@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { UploadCloud } from 'lucide-react'
 import type { Attachment } from '../api/receipts'
 import { ErrorBanner, ghostBtn, primaryBtn, Spinner } from '../shell/ui'
+import AttachmentLightbox from '../shared/AttachmentLightbox'
 
 /** The six attachment calls — identical shape on `receiptsApi` and `expensesApi`. */
 export type AttachmentApi = {
@@ -73,9 +75,10 @@ export default function AttachmentsPanel(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docId, lineKey])
 
-  function onPick(e: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? [])
-    e.target.value = ''
+  const [isDragging, setIsDragging] = useState(false)
+  const [lightbox, setLightbox] = useState<{ url: string; filename: string; contentType?: string } | null>(null)
+
+  function addFiles(files: File[]) {
     if (files.length === 0) return
     setError('')
     setStaged((prev) => [
@@ -87,6 +90,12 @@ export default function AttachmentsPanel(props: {
         tooBig: file.size > MAX_MB * 1024 * 1024,
       })),
     ])
+  }
+
+  function onPick(e: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? [])
+    e.target.value = ''
+    addFiles(files)
   }
 
   function setTarget(id: string, target: 'doc' | number) {
@@ -124,10 +133,10 @@ export default function AttachmentsPanel(props: {
     }
   }
 
-  async function view(attId: number) {
+  async function view(att: Loaded) {
     try {
-      const { data } = await api.signedUrl(attId)
-      window.open(data.url, '_blank', 'noopener')
+      const { data } = await api.signedUrl(att.id)
+      setLightbox({ url: data.url, filename: att.filename, contentType: att.contentType })
     } catch {
       setError('Could not open that document.')
     }
@@ -172,9 +181,41 @@ export default function AttachmentsPanel(props: {
             onChange={onPick}
             style={{ display: 'none' }}
           />
-          <button type="button" onClick={() => fileRef.current?.click()} style={{ ...ghostBtn, minHeight: 36 }} disabled={busy}>
-            📎 Add documents
-          </button>
+
+          <div
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault()
+              setIsDragging(false)
+              if (e.dataTransfer.files?.length) {
+                addFiles(Array.from(e.dataTransfer.files))
+              }
+            }}
+            onClick={() => fileRef.current?.click()}
+            style={{
+              border: isDragging ? '2px dashed var(--navy)' : '1.5px dashed var(--line)',
+              background: isDragging ? 'var(--navy3)' : 'var(--bg)',
+              borderRadius: 8,
+              padding: '16px 14px',
+              textAlign: 'center',
+              cursor: busy ? 'wait' : 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 4,
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <UploadCloud size={22} style={{ color: isDragging ? 'var(--navy)' : 'var(--muted)' }} />
+            <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--navy)' }}>
+              Drag &amp; drop receipts here, or <span style={{ textDecoration: 'underline' }}>browse</span>
+            </div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>
+              PDF or images up to {MAX_MB} MB each
+            </div>
+          </div>
 
           {staged.length > 0 && (
             <div style={{
@@ -264,7 +305,7 @@ export default function AttachmentsPanel(props: {
             </span>
             <span style={{ fontSize: '0.72rem', color: 'var(--faint)', whiteSpace: 'nowrap' }}>{fmtSize(a.sizeBytes)}</span>
             <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-              <button type="button" onClick={() => view(a.id)} style={{ ...ghostBtn, minHeight: 36 }} aria-label={`View attachment ${a.filename}`}>View</button>
+              <button type="button" onClick={() => view(a)} style={{ ...ghostBtn, minHeight: 36 }} aria-label={`View attachment ${a.filename}`}>View</button>
               {!frozen && !a.frozen && (
                 <button
                   type="button"
@@ -280,6 +321,15 @@ export default function AttachmentsPanel(props: {
           </div>
         ))}
       </div>
+
+      {lightbox && (
+        <AttachmentLightbox
+          url={lightbox.url}
+          filename={lightbox.filename}
+          contentType={lightbox.contentType}
+          onClose={() => setLightbox(null)}
+        />
+      )}
     </section>
   )
 }

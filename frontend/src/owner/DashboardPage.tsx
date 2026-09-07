@@ -8,10 +8,12 @@ import {
   dashboardApi,
   type DashboardPeriod, type DashboardSummary, type OutstandingItem, type ActivityItem,
 } from '../api/dashboard'
-import { card, ErrorBanner, Skeleton, inr, fmtDate, fmtDateTime, primaryBtn } from '../shell/ui'
+import { card, ErrorBanner, Skeleton, inr, fmtDate, fmtDateTime, primaryBtn, ghostBtn } from '../shell/ui'
 import GlobalSearch from '../shared/GlobalSearch'
 import AskDamsPanel from './AskDamsPanel'
 import AiInsightsSection from './AiInsightsSection'
+import { Download, AlertTriangle } from 'lucide-react'
+import ExportModal from '../shared/ExportModal'
 
 /**
  * Owner dashboard (intial ui prototypes/owner-dashboard.html, dashboard tab). Read-only
@@ -34,6 +36,7 @@ export default function DashboardPage() {
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [error, setError] = useState('')
   const [askOpen, setAskOpen] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
 
   useEffect(() => {
     branchesApi.list().then(({ data }) => setBranches(data.filter((b) => b.active))).catch(() => {})
@@ -63,6 +66,38 @@ export default function DashboardPage() {
   const maxCat = Math.max(1, ...(summary?.byCategory ?? []).map((c) => c.amount))
   const scopeLabel = branchId === '' ? 'All branches' : (branches.find((x) => x.id === branchId)?.code ?? 'Branch')
 
+  const cashAlerts = useMemo(() => {
+    if (!summary) return []
+    const todayStr = new Date().toISOString().slice(0, 10)
+    const list: { branchCode: string; message: string; severity: 'warning' | 'critical' }[] = []
+    for (const b of summary.branchComparison) {
+      if (!b.lastClosed) {
+        list.push({
+          branchCode: b.branchCode,
+          message: 'Cash drawer has never been closed',
+          severity: 'warning',
+        })
+      } else if (b.lastClosed < todayStr) {
+        const days = Math.max(1, Math.floor((new Date(todayStr).getTime() - new Date(b.lastClosed).getTime()) / (1000 * 60 * 60 * 24)))
+        if (days >= 1) {
+          list.push({
+            branchCode: b.branchCode,
+            message: `Cash unclosed for ${days} day${days > 1 ? 's' : ''} (last closed ${fmtDate(b.lastClosed)})`,
+            severity: days > 1 ? 'critical' : 'warning',
+          })
+        }
+      }
+      if (b.variance != null && Math.abs(Number(b.variance)) > 0.01) {
+        list.push({
+          branchCode: b.branchCode,
+          message: `Discrepancy of ${inr(b.variance)} on last close`,
+          severity: 'critical',
+        })
+      }
+    }
+    return list
+  }, [summary])
+
   return (
     <div style={{ maxWidth: 1180, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 4 }}>
@@ -72,7 +107,24 @@ export default function DashboardPage() {
             Verified numbers · cash In/Out excluded from collections &amp; expenses
           </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => setShowExportModal(true)}
+            style={{
+              ...ghostBtn,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              minHeight: 36,
+              padding: '6px 12px',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+            }}
+          >
+            <Download size={15} />
+            <span>Export Tally / CSV</span>
+          </button>
           <GlobalSearch />
           <button type="button" onClick={() => setAskOpen(true)} style={{ ...primaryBtn(), minHeight: 36, whiteSpace: 'nowrap' }}>
             Ask DAMS
@@ -94,6 +146,46 @@ export default function DashboardPage() {
       </div>
 
       <ErrorBanner message={error} />
+
+      {cashAlerts.length > 0 && (
+        <div style={{
+          background: 'var(--amber-bg, #FEF3C7)',
+          border: '1px solid #F59E0B',
+          borderRadius: 8,
+          padding: '10px 14px',
+          marginBottom: 14,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: '0.82rem', color: '#92400E' }}>
+            <AlertTriangle size={16} color="#B45309" />
+            <span>Cash Drawer Early-Warning Alerts ({cashAlerts.length})</span>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {cashAlerts.map((a, i) => (
+              <span
+                key={i}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  padding: '3px 8px',
+                  borderRadius: 5,
+                  background: a.severity === 'critical' ? '#FEE2E2' : '#FFFBEB',
+                  color: a.severity === 'critical' ? '#991B1B' : '#92400E',
+                  border: `1px solid ${a.severity === 'critical' ? '#FCA5A5' : '#FDE68A'}`,
+                }}
+              >
+                <strong>{a.branchCode}:</strong> {a.message}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       <AiInsightsSection branchId={branchId} period={period} scopeLabel={scopeLabel} />
       {askOpen && (
         <AskDamsPanel
@@ -266,6 +358,7 @@ export default function DashboardPage() {
           </div>
         </>
       )}
+      {showExportModal && <ExportModal onClose={() => setShowExportModal(false)} />}
     </div>
   )
 }

@@ -10,6 +10,7 @@ import {
 } from '../api/expenses'
 import { card, ErrorBanner, inr, primaryBtn, ghostBtn, inputStyle, Spinner, istToday } from '../shell/ui'
 import AttachmentsPanel, { type LineTarget } from './AttachmentsPanel'
+import { useDraftRecovery } from '../shared/useDraftRecovery'
 
 /** The most recent accountant question / rejection reason, for the fix-and-resubmit banner. */
 function queryNote(history: DocumentHistoryEntry[]): string | null {
@@ -80,6 +81,22 @@ export default function NewExpensePage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+
+  const draftData = useMemo(() => ({
+    receiverName,
+    jobCardId,
+    expenseCategoryId,
+    businessStatusId,
+    lines,
+  }), [receiverName, jobCardId, expenseCategoryId, businessStatusId, lines])
+
+  const {
+    hasDraft,
+    draftTimestamp,
+    restoreDraft,
+    discardDraft,
+    clearDraft,
+  } = useDraftRecovery<typeof draftData>('dams_expense_draft', draftData, !editDocId && !loadedDoc)
 
   // masters
   useEffect(() => {
@@ -505,6 +522,7 @@ export default function NewExpensePage() {
   }
 
   function finish(submitted: boolean, doc: ExpenseDocument) {
+    clearDraft()
     const ref = doc.documentNo ?? `draft #${doc.id}`
     navigate(`/app?flash=${encodeURIComponent(submitted ? `${ref} submitted for checking` : `${ref} saved as draft`)}`)
   }
@@ -542,6 +560,43 @@ export default function NewExpensePage() {
       {loadedDoc?.workflowStatus === 'QUERIED' && queryNote(loadedDoc.history) && (
         <div style={{ background: 'var(--amber-bg)', border: '1px solid #EAD3AE', color: 'var(--amber)', borderRadius: 8, padding: '10px 13px', fontSize: '0.82rem', marginBottom: 12 }}>
           <strong>Query from the accountant:</strong> {queryNote(loadedDoc.history)}
+        </div>
+      )}
+
+      {hasDraft && (
+        <div style={{
+          background: 'var(--amber-bg)', border: '1px solid #EAD3AE', color: 'var(--amber)',
+          borderRadius: 8, padding: '10px 14px', marginBottom: 12,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap',
+        }}>
+          <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>
+            📋 Unsaved expense draft found from {draftTimestamp?.toLocaleTimeString()} ({draftTimestamp?.toLocaleDateString()}). Would you like to restore it?
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => {
+                const restored = restoreDraft()
+                if (restored) {
+                  if (restored.receiverName) setReceiverName(restored.receiverName)
+                  if (restored.jobCardId !== undefined) setJobCardId(restored.jobCardId)
+                  if (restored.expenseCategoryId) setExpenseCategoryId(restored.expenseCategoryId)
+                  if (restored.businessStatusId) setBusinessStatusId(restored.businessStatusId)
+                  if (restored.lines && restored.lines.length > 0) setLines(restored.lines)
+                }
+              }}
+              style={{ ...primaryBtn(false), padding: '4px 12px', minHeight: 30, fontSize: '0.78rem' }}
+            >
+              Restore Draft
+            </button>
+            <button
+              type="button"
+              onClick={discardDraft}
+              style={{ ...ghostBtn, padding: '4px 12px', minHeight: 30, fontSize: '0.78rem' }}
+            >
+              Discard
+            </button>
+          </div>
         </div>
       )}
 

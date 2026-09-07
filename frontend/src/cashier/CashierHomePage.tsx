@@ -2,9 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { searchApi, type SearchHit } from '../api/search'
 import { customersApi, type CustomerHistory } from '../api/customers'
+import { receiptsApi, type ReceiveDocument } from '../api/receipts'
 import { card, ErrorBanner, Skeleton, SkeletonRows, inr, initials, fmtDateShort } from '../shell/ui'
 import AddPaymentModal from './AddPaymentModal'
 import ViewReceiptsModal from './ViewReceiptsModal'
+import PrintReceiptModal from './PrintReceiptModal'
+import { Printer } from 'lucide-react'
 
 /**
  * Cashier home (intial ui prototypes/cashier-home.html): universal search, results, a
@@ -339,6 +342,7 @@ function CustomerHistoryView(props: {
   const [error, setError] = useState('')
   const [payTarget, setPayTarget] = useState<PaymentTarget | null>(null)
   const [receiptsTarget, setReceiptsTarget] = useState<ReceiptsTarget | null>(null)
+  const [printDoc, setPrintDoc] = useState<ReceiveDocument | null>(null)
   const [reloadTick, setReloadTick] = useState(0)
   const { onLoaded } = props
 
@@ -500,6 +504,23 @@ function CustomerHistoryView(props: {
                       View Receipts
                     </button>
                   )}
+                  {j.receiveDocumentId != null && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const res = await receiptsApi.get(j.receiveDocumentId!)
+                          setPrintDoc(res.data)
+                        } catch {
+                          /* ignore */
+                        }
+                      }}
+                      style={{ border: 'none', background: 'none', color: 'var(--navy2)', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 3 }}
+                    >
+                      <Printer size={12} />
+                      <span>Print</span>
+                    </button>
+                  )}
                   {j.canRecordPayment && j.receiveDocumentId != null ? (
                     <button
                       type="button"
@@ -574,6 +595,12 @@ function CustomerHistoryView(props: {
           frozen={receiptsTarget.frozen}
           onClose={() => setReceiptsTarget(null)}
           onChanged={() => setReloadTick((n) => n + 1)}
+        />
+      )}
+      {printDoc && (
+        <PrintReceiptModal
+          doc={printDoc}
+          onClose={() => setPrintDoc(null)}
         />
       )}
     </div>

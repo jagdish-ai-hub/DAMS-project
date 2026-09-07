@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { receiptsApi, type ReceiveDocument } from '../api/receipts'
 import { expensesApi } from '../api/expenses'
 import { cashApi, type CashDocument } from '../api/cash'
@@ -20,6 +20,43 @@ const EMPTY: FmQueue = { awaitingApproval: [], openClaims: [], recentlyClosed: [
 
 type DetailDoc = AnyDoc | CashDocument
 
+export type AgingBucket = 'all' | '0-30' | '31-60' | '61-90' | '90+'
+
+export function claimAgeDays(submittedAt: string | null): number {
+  if (!submittedAt) return 0
+  const ms = Date.now() - new Date(submittedAt).getTime()
+  return Math.max(0, Math.floor(ms / (1000 * 60 * 60 * 24)))
+}
+
+export function getAgingBucket(days: number): '0-30' | '31-60' | '61-90' | '90+' {
+  if (days <= 30) return '0-30'
+  if (days <= 60) return '31-60'
+  if (days <= 90) return '61-90'
+  return '90+'
+}
+
+export function AgingBadge({ days }: { days: number }) {
+  const bucket = getAgingBucket(days)
+  const bg = bucket === '0-30' ? 'var(--green-bg, #DCFCE7)' : bucket === '31-60' ? 'var(--amber-bg, #FEF3C7)' : bucket === '61-90' ? '#FFEDD5' : '#FEE2E2'
+  const color = bucket === '0-30' ? 'var(--green, #166534)' : bucket === '31-60' ? 'var(--amber, #B45309)' : bucket === '61-90' ? '#C2410C' : '#991B1B'
+
+  return (
+    <span style={{
+      fontSize: '0.66rem',
+      fontWeight: 800,
+      padding: '2px 7px',
+      borderRadius: 4,
+      background: bg,
+      color: color,
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 3,
+    }}>
+      ⏱️ {days}d{bucket === '90+' ? ' · Critical' : ''}
+    </span>
+  )
+}
+
 export default function FmQueuePage() {
   const [type, setType] = useState<ReviewType>('receipt')
   const [queue, setQueue] = useState<FmQueue>(EMPTY)
@@ -28,9 +65,15 @@ export default function FmQueuePage() {
   const [error, setError] = useState('')
   const [flash, setFlash] = useState('')
   const [tick, setTick] = useState(0)
+  const [claimBucket, setClaimBucket] = useState<AgingBucket>('all')
 
   const reload = useCallback(() => setTick((n) => n + 1), [])
   const riskMap = useRiskMap(type)
+
+  const filteredOpenClaims = useMemo(() => {
+    if (claimBucket === 'all') return queue.openClaims
+    return queue.openClaims.filter((c) => getAgingBucket(claimAgeDays(c.submittedAt)) === claimBucket)
+  }, [queue.openClaims, claimBucket])
 
   useEffect(() => {
     let live = true
@@ -162,7 +205,16 @@ export default function FmQueuePage() {
           <Section title="Awaiting final approval" items={queue.awaitingApproval} selectedId={selectedId} onSelect={setSelectedId} riskMap={riskMap} />
           {type === 'receipt' && (
             <>
-              <Section title="Open warranty / AMC / CG claims" items={queue.openClaims} selectedId={selectedId} onSelect={setSelectedId} />
+              <Section
+                title="Open warranty / AMC / CG claims"
+                items={filteredOpenClaims}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                showAging
+                claimFilter={claimBucket}
+                onClaimFilterChange={setClaimBucket}
+                totalCount={queue.openClaims.length}
+              />
               <Section title="Recently closed" items={queue.recentlyClosed} selectedId={selectedId} onSelect={setSelectedId} plain />
             </>
           )}
@@ -170,7 +222,7 @@ export default function FmQueuePage() {
 
         <div className={selectedId == null ? 'hidden lg:block border-t lg:border-t-0 lg:border-l border-[var(--line)] p-4 sm:p-6 overflow-y-auto' : 'block border-t lg:border-t-0 lg:border-l border-[var(--line)] p-4 sm:p-6 overflow-y-auto'}>
           {selectedId == null
-            ? <Overview count={queue.awaitingApproval.length} total={total} openClaims={queue.openClaims.length} type={type} />
+            ? <Overview count={queue.awaitingApproval.length} total={total} openClaimsList={queue.openClaims} type={type} />
             : doc == null
               ? <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <div className="lg:hidden mb-2">
@@ -195,15 +247,44 @@ function Section(props: {
   onSelect: (id: number) => void
   plain?: boolean
   riskMap?: Map<number, import('../api/ai').RiskScore>
+  showAging?: boolean
+  claimFilter?: AgingBucket
+  onClaimFilterChange?: (bucket: AgingBucket) => void
+  totalCount?: number
 }) {
   return (
     <>
       <div style={{ padding: '10px 14px 6px', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--faint)', fontWeight: 700 }}>
         {props.title}
         <span style={{ background: 'var(--gray-bg)', color: 'var(--gray)', borderRadius: 999, fontSize: '0.66rem', padding: '1px 7px', marginLeft: 6 }}>
-          {props.items.length}
+          {props.totalCount ?? props.items.length}
         </span>
       </div>
+
+      {props.showAging && props.onClaimFilterChange && (
+        <div style={{ display: 'flex', gap: 4, padding: '2px 14px 8px', flexWrap: 'wrap' }}>
+          {(['all', '0-30', '31-60', '61-90', '90+'] as const).map((b) => (
+            <button
+              key={b}
+              type="button"
+              onClick={() => props.onClaimFilterChange!(b)}
+              style={{
+                border: '1px solid var(--line)',
+                borderRadius: 4,
+                padding: '2px 6px',
+                fontSize: '0.68rem',
+                fontWeight: props.claimFilter === b ? 700 : 500,
+                background: props.claimFilter === b ? 'var(--navy)' : 'transparent',
+                color: props.claimFilter === b ? '#fff' : 'var(--muted)',
+                cursor: 'pointer',
+              }}
+            >
+              {b === 'all' ? 'All' : `${b}d`}
+            </button>
+          ))}
+        </div>
+      )}
+
       {props.items.map((it) => {
         const sel = props.selectedId === it.id
         return (
@@ -224,10 +305,13 @@ function Section(props: {
             <div style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>
               {it.categoryName} · <strong style={{ fontVariantNumeric: 'tabular-nums' }}>{inr(it.amount)}</strong>
             </div>
-            {it.hasOverride && <div style={{ marginTop: 2 }}><Tag>Overridden</Tag></div>}
-            {props.riskMap?.get(it.id) != null && props.riskMap.get(it.id)!.score > 0 && (
-              <div style={{ marginTop: 2 }}><RiskDot risk={props.riskMap.get(it.id)} /></div>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+              {it.hasOverride && <Tag>Overridden</Tag>}
+              {props.showAging && <AgingBadge days={claimAgeDays(it.submittedAt)} />}
+              {props.riskMap?.get(it.id) != null && props.riskMap.get(it.id)!.score > 0 && (
+                <RiskDot risk={props.riskMap.get(it.id)} />
+              )}
+            </div>
           </button>
         )
       })}
@@ -235,7 +319,32 @@ function Section(props: {
   )
 }
 
-function Overview({ count, total, openClaims, type }: { count: number; total: number; openClaims: number; type: ReviewType }) {
+function Overview({
+  count,
+  total,
+  openClaimsList,
+  type,
+}: {
+  count: number
+  total: number
+  openClaimsList: ReviewQueueItem[]
+  type: ReviewType
+}) {
+  const agingCounts = useMemo(() => {
+    let b0_30 = 0
+    let b31_60 = 0
+    let b61_90 = 0
+    let b90_plus = 0
+    for (const c of openClaimsList) {
+      const days = claimAgeDays(c.submittedAt)
+      if (days <= 30) b0_30++
+      else if (days <= 60) b31_60++
+      else if (days <= 90) b61_90++
+      else b90_plus++
+    }
+    return { b0_30, b31_60, b61_90, b90_plus }
+  }, [openClaimsList])
+
   return (
     <div>
       <h2 style={{ fontSize: '1.1rem', color: 'var(--navy)' }}>Finance Manager overview</h2>
@@ -251,11 +360,42 @@ function Overview({ count, total, openClaims, type }: { count: number; total: nu
         {type === 'receipt' && (
           <div style={{ ...card, borderTop: '3px solid var(--purple, #6B3FA0)' }}>
             <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>Open claims</div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 800, marginTop: 4 }}>{openClaims}</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 800, marginTop: 4 }}>{openClaimsList.length}</div>
             <div style={{ fontSize: '0.76rem', color: 'var(--faint)' }}>awaiting your close</div>
           </div>
         )}
       </div>
+
+      {type === 'receipt' && openClaimsList.length > 0 && (
+        <div style={{ ...card, marginTop: 16 }}>
+          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--navy)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span>⏱️</span> OEM Claim Aging Buckets
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 8 }}>
+            <div style={{ padding: '8px 10px', background: 'var(--green-bg, #DCFCE7)', borderRadius: 6, border: '1px solid #BBF7D0' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 600, color: '#166534' }}>0–30 Days</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#166534', marginTop: 2 }}>{agingCounts.b0_30}</div>
+              <div style={{ fontSize: '0.62rem', color: '#15803D' }}>Normal</div>
+            </div>
+            <div style={{ padding: '8px 10px', background: 'var(--amber-bg, #FEF3C7)', borderRadius: 6, border: '1px solid #FDE68A' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 600, color: '#B45309' }}>31–60 Days</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#B45309', marginTop: 2 }}>{agingCounts.b31_60}</div>
+              <div style={{ fontSize: '0.62rem', color: '#B45309' }}>Follow-up</div>
+            </div>
+            <div style={{ padding: '8px 10px', background: '#FFEDD5', borderRadius: 6, border: '1px solid #FED7AA' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 600, color: '#C2410C' }}>61–90 Days</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#C2410C', marginTop: 2 }}>{agingCounts.b61_90}</div>
+              <div style={{ fontSize: '0.62rem', color: '#C2410C' }}>Escalate</div>
+            </div>
+            <div style={{ padding: '8px 10px', background: '#FEE2E2', borderRadius: 6, border: '1px solid #FECACA' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 600, color: '#991B1B' }}>90+ Days</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#991B1B', marginTop: 2 }}>{agingCounts.b90_plus}</div>
+              <div style={{ fontSize: '0.62rem', color: '#B91C1C' }}>Critical</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ textAlign: 'center', fontSize: '0.82rem', color: 'var(--faint)', marginTop: 22, paddingTop: 16, borderTop: '1px dashed var(--line)' }}>
         Select an item from the list to review it.
       </div>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { receiptsApi, type Attachment } from '../api/receipts'
 import { Modal, ErrorBanner, ghostBtn, dangerBtn, SkeletonRows, Spinner } from '../shell/ui'
+import AttachmentLightbox from '../shared/AttachmentLightbox'
 
 /**
  * "View Receipts" (AGENT.md: a button that opens on click — not inline thumbnails).
@@ -19,6 +20,7 @@ export default function ViewReceiptsModal(props: {
   const [items, setItems] = useState<Attachment[] | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [lightbox, setLightbox] = useState<{ url: string; filename: string; contentType?: string } | null>(null)
 
   const load = useCallback(() => {
     const req = lineNo == null
@@ -29,10 +31,10 @@ export default function ViewReceiptsModal(props: {
 
   useEffect(load, [load])
 
-  async function open(id: number) {
+  async function open(att: Attachment) {
     try {
-      const { data } = await receiptsApi.signedUrl(id)
-      window.open(data.url, '_blank', 'noopener')
+      const { data } = await receiptsApi.signedUrl(att.id)
+      setLightbox({ url: data.url, filename: att.filename, contentType: att.contentType })
     } catch (e) {
       setError(apiError(e, 'Could not open the receipt.'))
     }
@@ -101,7 +103,7 @@ export default function ViewReceiptsModal(props: {
                 <span style={{ color: 'var(--faint)', marginLeft: 6 }}>{Math.round(a.sizeBytes / 1024) || 1} KB</span>
               </span>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 'auto' }}>
-                <button type="button" onClick={() => open(a.id)} style={{ ...ghostBtn, minHeight: 36 }} aria-label={`View attachment ${a.filename}`}>View</button>
+                <button type="button" onClick={() => open(a)} style={{ ...ghostBtn, minHeight: 36 }} aria-label={`View attachment ${a.filename}`}>View</button>
                 {!a.frozen && !props.frozen && (
                   <button type="button" onClick={() => remove(a.id)} style={{ ...dangerBtn, minHeight: 36 }} disabled={busy} aria-label={`Delete attachment ${a.filename}`}>
                     {busy ? '…' : 'Delete'}
@@ -136,6 +138,15 @@ export default function ViewReceiptsModal(props: {
             style={{ display: 'none' }}
           />
         </label>
+      )}
+
+      {lightbox && (
+        <AttachmentLightbox
+          url={lightbox.url}
+          filename={lightbox.filename}
+          contentType={lightbox.contentType}
+          onClose={() => setLightbox(null)}
+        />
       )}
     </Modal>
   )

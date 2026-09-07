@@ -38,6 +38,13 @@ const SEGMENT: Record<ReviewType, string> = {
 const base = (t: ReviewType) => `/api/v1/${SEGMENT[t]}`
 const fmSegment = (t: ReviewType) => (t === 'expense' ? 'expenses' : t === 'cash' ? 'cash' : 'receipts')
 
+export interface BulkVerifyResponse {
+  verifiedCount: number
+  skippedCount: number
+  verifiedIds: number[]
+  skippedIds: number[]
+}
+
 export const reviewApi = {
   receiptQueue() {
     return api.get<ReviewQueueItem[]>('/api/v1/review/receipts')
@@ -57,6 +64,9 @@ export const reviewApi = {
 
   verify(t: ReviewType, id: number) {
     return api.post<AnyReviewDoc>(`${base(t)}/${id}/verify`)
+  },
+  bulkVerify(t: 'receipt' | 'expense', ids: number[]) {
+    return api.post<BulkVerifyResponse>(`${base(t)}/bulk-verify`, { documentIds: ids })
   },
   approve(t: ReviewType, id: number) {
     return api.post<AnyReviewDoc>(`${base(t)}/${id}/approve`)
