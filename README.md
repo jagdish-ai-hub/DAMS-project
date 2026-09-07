@@ -50,6 +50,7 @@ window into branch operations.
 30. [Reverification smoke checklist (per role)](#30-reverification-smoke-checklist-per-role)
 31. [Troubleshooting](#31-troubleshooting)
 32. [Repo layout](#32-repo-layout)
+33. [Glossary](#33-glossary)
 
 ---
 
@@ -227,7 +228,19 @@ Masters catalogue (every dropdown comes from these, never hard-coded):
 receive categories (11, incl. claim flags), receive business statuses, settlement modes
 (`is_cash`, `requires_bank/ref`), expense categories + sub-categories
 (`limit_amount`), expense modes (`is_cash`, `requires_bank/ref`), expense business
-statuses (`triggers_claim`), banks.
+statuses (`triggers_claim`), banks. Seeded values for a new/demo org (V5 —
+`MasterProvisioningService` copies the same set for every onboarded org):
+
+| Master type | Seeded values |
+|---|---|
+| Receive categories (11) | Workshop, Breakdown, Advance, Spare / Counter, AdBlue Bucket, AdBlue Barrel, **AMC · Warranty · Goodwill** (`is_claim = true` → FM claim-close), B2B Credit, Scrap / Used Lubes / Other |
+| Receive business statuses (7) | Hold, AMC, CG, WIP, Warranty, Credit, Close |
+| Settlement modes (7) | Cash, QR / UPI, Bank, Card, Adv-QR, Adv-Cash, Credit (Due). Cash-mode (`is_cash`, drives drawer math): **Cash, Adv-Cash**. Reference required (`requires_ref`): QR / UPI, Bank, Adv-QR. Bank required (`requires_bank`): Bank |
+| Expense categories (4) | Service, Sales, Showroom, Finance |
+| Expense sub-categories (13, with per-line limits) | Service: Food (BD) ₹500, Spare Transport ₹1,000, Taxi (JC) ₹2,000, Fuel (JC) ₹1,000, Local Purchase (JC) ₹2,000, Courier ₹500 · Showroom: Stationary ₹1,500, Misc. Office ₹2,000, Site Repair ₹5,000, Daily Wages ₹5,000 · Sales: Sales Promotion ₹5,000, RTO ₹3,000, Misc. Sales ₹2,000 |
+| Expense modes (3) | Cash (`is_cash`), QR / UPI, Bank |
+| Expense business statuses (6) | Open, In Progress, Awaiting Receipt, Received Receipt, Closed, **Transfer to Claim** (`triggers_claim`) |
+| Banks (6) | State Bank of India, HDFC Bank, ICICI Bank, Axis Bank, Bank of Baroda, Punjab National Bank |
 
 ---
 
@@ -266,6 +279,19 @@ Pending Amount (the one implementation: `PendingAmountCalculator`) =
 0 when no invoice yet, 0 once a `ClaimClose` exists (shortfall must never resurface
 as a phantom balance).
 
+Worked example: job card `OOR-JC-5`, invoice ₹12,000. Cashier submits `OOR-JUL26-R-021`
+with lines ₹5,000 + ₹4,000 → pending = 12,000 − 9,000 = **₹3,000**, receipt stays open.
+Driver pays ₹3,000 via Add Payment (appended as `-L3` on the same doc) → pending **₹0**
+→ receipt auto-settles (SYSTEM `SETTLED` audit, receipts freeze). If instead the FM
+closes it as a warranty claim at final ₹10,000 with a reason, pending reads **₹0** via
+the claim close and the record shows **Overridden · Final** — the ₹2,000 shortfall
+never reappears as a balance.
+
+Document-number sequence example (branch `OOR`, July 2026): first receipt submitted →
+`OOR-JUL26-R-001`, next → `-R-002`, first expense → `OOR-JUL26-E-001`, first cash
+movement → `OOR-JUL26-C-001`. August restarts at `-001` (`OOR-AUG26-R-001`). Drafts
+hold no number, so cancelled drafts leave no gaps.
+
 **Add Payment always appends a line to the existing open Receive Document** for that
 job card — it never creates a second document (a real prototype bug, now guarded by
 a one-open-doc index that excludes REJECTED, V21).
@@ -297,7 +323,7 @@ stateDiagram-v2
 
 ```mermaid
 stateDiagram-v2
-    [*] --> DRAFT: POST /expenses\n(receiverId OR inline receiverName\n+ optional jobCardId + lines[])
+    [*] --> DRAFT: POST /expenses\n(receiverId or inline name\n+ optional jobCardId + lines[])
     DRAFT --> SUBMITTED: POST /expenses/{id}/submit\n(assigns DAMS-Expenses-ID)
     SUBMITTED --> VERIFIED: Accountant verify
     VERIFIED --> APPROVED: FM approve
@@ -307,9 +333,8 @@ stateDiagram-v2
     VERIFIED --> QUERIED: query + note
     QUERIED --> SUBMITTED: fix + resubmit
     SUBMITTED --> REJECTED: reject + reason
-    state TRANSFERRED_TO_CLAIM as TRANSFERRED_TO_CLAIM
-    SUBMITTED --> TRANSFERRED_TO_CLAIM: transfer-to-claim\n(only on claim-category job card)
-    VERIFIED --> TRANSFERRED_TO_CLAIM: transfer-to-claim
+    SUBMITTED --> ToClaim: transfer-to-claim\n(only on claim-category job card)
+    VERIFIED --> ToClaim: transfer-to-claim
 ```
 
 - `over_limit` recomputed on every line change (`amount > sub_category.limit_amount`) —
@@ -373,6 +398,12 @@ drawer = Opening + cash-mode receipts + Cash IN − cash-mode expenses − Cash 
 - Counts every non-DRAFT, non-REJECTED contributor (cash is physically in the drawer
   regardless of review state).
 
+Worked example (branch `OOR`, today): opening ₹20,000 (yesterday's close) + cash-mode
+receipt lines ₹35,000 + Cash IN from bank ₹50,000 − cash-mode expense lines ₹8,000 −
+Cash OUT to bank ₹40,000 = **₹57,000** computed. Cashier counts ₹56,700 → variance
+**−₹300** → remark mandatory ("short: auto fare, bill attached") → Close locks the date.
+UPI/Bank-mode lines never enter this math, wherever they appear.
+
 ```mermaid
 stateDiagram-v2
     [*] --> DRAFT: POST /cash-documents\n(IN/OUT, amount, bank?, ref?, remark)
@@ -416,6 +447,24 @@ Cash In/Out sub-categories under expenses are removed — fully replaced by this
 **Maker-checker:** a user never verifies/approves an entry they created or last
 modified. Review actions don't touch `last_modified_by` (it tracks the maker's last
 edit), so one accountant can override a line and still verify the same document.
+
+Who may do what (enforced by `@PreAuthorize` + `ReviewGuard`, not by the UI):
+
+| Action | Cashier | Accountant | FM | Owner |
+|---|---|---|---|---|
+| Create / edit (own home branch) | ✅ | ❌ | ❌ | ❌ (read-only) |
+| Verify (SUBMITTED → VERIFIED) | ❌ | ✅ own-branch only | ❌ | ❌ |
+| Approve (VERIFIED → APPROVED) | ❌ | ❌ | ✅ | ❌ |
+| Query / Reject (with note/reason) | ❌ | ✅ from SUBMITTED | ✅ from VERIFIED | ❌ |
+| Line override (amount + reason) | ❌ | ✅ provisional | ✅ | ❌ |
+| Close Expense explicitly | ❌ | ✅ (over-limit needs APPROVED first) | ❌ | ❌ |
+| Close claim (final override) | ❌ | ❌ | ✅ | ❌ |
+| Set first-ever branch opening | ❌ | ✅ | ❌ | ❌ |
+| Masters / users / branches / org settings writes | ❌ | ❌ | ❌ | ✅ |
+| Onboard orgs | ❌ | ❌ | ❌ | ❌ (Super Admin only) |
+
+Every row above is additionally gated by maker-checker (actor ≠ `created_by` and ≠
+`last_modified_by`) and by branch scope (§3).
 
 **Override Audit** (`GET /override-audit`, Owner + FM, filterable by user/branch/date):
 one feed merging Accountant line overrides (`OVERRIDE` audit rows: who/when/
@@ -961,3 +1010,22 @@ compose.prod.yml        prod: GHCR images, localhost-only ports, healthchecks
 dams.bat                Windows one-click dev launcher
 AGENT.md / plan.md      spec rulebook / chronological build log
 ```
+
+---
+
+## 33. Glossary
+
+| Term | Meaning |
+|---|---|
+| DBM ID | Eicher's external job-card reference, entered manually, nullable — never an internal key |
+| JC / `OOR-JC-5` | DAMS's own job card, the true anchor for a vehicle/customer's history |
+| FM | Finance Manager (final approver + claim closer) |
+| OOJ / OOB / OOR | Demo branches: Jeypore / Berhampur / Rayagada |
+| R / E / C | Document series: Receive / Expense / Cash (`OOR-JUL26-R-021`) |
+| B2B / GST | Business-customer flag + GST number on the job card (`gst_no` mandatory when `is_b2b`) |
+| AMC / CG / WIP | Annual Maintenance Contract / Company Goodwill / Work In Progress (claim-flavoured categories/statuses) |
+| Pending Amount | Job-card-wide `invoice − Σ received lines` (0 with no invoice or a closed claim) |
+| Drawer | Branch cash in hand: `Opening + cash receipts + Cash IN − cash expenses − Cash Out` |
+| QUERIED / REJECTED | Returned for fix-and-resubmit / terminal refusal (both carry a note/reason) |
+| Overridden · Final | FM's permanent claim-close override mark, shown everywhere the record appears |
+| `over_limit` | Expense flag when a line exceeds its sub-category `limit_amount` — flags, never blocks |
