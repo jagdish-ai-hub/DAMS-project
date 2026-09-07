@@ -8,7 +8,7 @@ Every receive document on the job card has to be **approved** first. If one is s
 
 ## Close a claim
 
-1. On **Approvals & Claims** (Receipts tab), open an entry under **Open warranty / AMC / CG claims** — these are approved claim receipts waiting to be finalised.
+1. On **Approvals & Claims** (Receipts tab), open an entry under **Open warranty / AMC / CG claims** — these are approved claim receipts waiting to be finalised. Each row has **Copy claim summary** and **Open all bills** for the manufacturer portal upload.
 2. Press **Close claim**.
 3. The box shows **received so far** — the total of the settlement lines.
 4. Enter the **final amount**:

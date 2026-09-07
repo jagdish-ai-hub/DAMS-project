@@ -404,6 +404,14 @@ Cash OUT to bank ₹40,000 = **₹57,000** computed. Cashier counts ₹56,700 �
 **−₹300** → remark mandatory ("short: auto fare, bill attached") → Close locks the date.
 UPI/Bank-mode lines never enter this math, wherever they appear.
 
+The Close Day box includes a **denomination grid** (₹500 down to ₹1): type how many
+notes/coins of each you counted and it totals the counted amount for you.
+
+A closed day is locked, but a miscount can still be fixed: the cashier files a
+**reopen request** with a mandatory reason (`POST /cash/reopen-requests`); a Finance
+Manager approves (the close row is removed so the day can be re-closed) or rejects
+with a reason. Every step is audited — there is deliberately no silent reopen.
+
 ```mermaid
 stateDiagram-v2
     [*] --> DRAFT: POST /cash-documents\n(IN/OUT, amount, bank?, ref?, remark)
@@ -443,6 +451,12 @@ Cash In/Out sub-categories under expenses are removed — fully replaced by this
 | `POST …/lines/{lineNo}/override` | Accountant (provisional) / FM | `{amount, reason}` → stamps `original_amount`, `overridden_by/at`, writes `OVERRIDE` audit row, recomputes `over_limit` / re-runs auto-settle |
 | `POST /expenses/{id}/close` | Accountant | Explicit expense close |
 | `POST /receipts|expenses/bulk-verify` | Accountant | Multi-select bulk verify (skips maker-checker violations) |
+| `POST /receipts|expenses/bulk-approve` | FM | Multi-select bulk approve of VERIFIED docs (same skips) |
+
+Querying uses **reason templates** (missing/blurry bill, wrong category, missing DBM
+ref, amount mismatch, missing UTR) plus free text, so query reasons stay consistent
+enough to analyse. Both queues have **Over-limit / Has-override / No-bill filters**
+(No-bill uses the document risk reasons) to triage faster.
 
 **Maker-checker:** a user never verifies/approves an entry they created or last
 modified. Review actions don't touch `last_modified_by` (it tracks the maker's last
@@ -500,9 +514,14 @@ OEM aging buckets (FM queue + Owner outstanding): `0–30d` Normal, `31–60d` F
 ## 11. Masters, receivers, org settings
 
 - `GET /masters/{type}`, `GET /masters/{type}/{id}` — any signed-in org user.
+- `GET /masters/{type}/usage` — 90-day use count per row (the deactivation guard:
+  the UI shows "used Nx in 90 days" and asks for explicit confirmation).
 - `POST /masters/{type}`, `PATCH /masters/{type}/{id}` — Owner only.
 - Deactivate, never delete (`active` flag). New orgs are auto-provisioned with the
   full catalogue (57 rows) so dropdowns work on day one.
+- Monthly **expense budgets** (`GET|PUT /budgets?month=YYYYMM`, Owner upsert of
+  `{categoryId, monthKey, capAmount}`): caps per expense category per month. They
+  inform only — amber at ≥80% of cap, red when over — and never block a submission.
 - `expense_sub_category.limit_amount` drives the `over_limit` flag; `settlement_mode`
   / `expense_mode` flags (`is_cash`, `requires_bank/ref`) drive drawer math and form
   validation — the app asks the mode, never matches its name.
@@ -516,11 +535,13 @@ OEM aging buckets (FM queue + Owner outstanding): `0–30d` Normal, `31–60d` F
 ## 12. Universal search, My Entries & fix-and-resubmit
 
 **Universal search** (`GET /search?q=`, every role): name / phone / vehicle / job card /
-invoice / DBM / document_no (receive + expense). Always scoped by the caller's branch
-access (+ cashier toggle). Name/phone/vehicle matches are org-wide (those masters
-aren't branch-scoped); job-card/invoice/doc dimensions are branch-filtered. Frontend:
-cashier home search + a fixed-width box on reviewer/owner title rows opening a
-read-only customer drawer (totals, job cards, payment timeline, View documents).
+invoice / DBM / document_no (receive + expense) / UTR or transaction-ref
+(last-4 match, min 4 characters, resolved to the job card's customer). Always scoped
+by the caller's branch access (+ cashier toggle). Name/phone/vehicle matches are
+org-wide (those masters aren't branch-scoped); job-card/invoice/doc/UTR dimensions
+are branch-filtered. Frontend: cashier home search + a fixed-width box on
+reviewer/owner title rows opening a read-only customer drawer (totals, job cards,
+payment timeline, View documents).
 
 **My Entries** (`GET /my-entries`): the cashier's own entries, today + recent, merged
 across receipts + expenses + cash (`kind` = RECEIPT/EXPENSE/CASH). Queried items are
@@ -532,10 +553,13 @@ Accountant closes.
 
 ## 13. Owner dashboard (what counts, what doesn't)
 
-`GET /dashboard/summary|outstanding|activity` (Owner + FM).
+`GET /dashboard/summary|outstanding|activity` (Owner + FM). `summary` takes
+`period=today|mtd|custom` plus `?from=&to=` (yyyy-mm-dd) for an explicit custom range,
+and an optional `branchId`.
 
 - `summary`: KPI cards (collections / expenses / net / cash-in-hand / pending-review),
-  14-day trend, collections-by-mode, expenses-by-category, per-branch comparison.
+  14-day trend, collections-by-mode, expenses-by-category (with budget bars when the
+  Owner set monthly caps), per-branch comparison (click a row to filter to that branch).
 - **Money counts APPROVED docs only. Cash In/Out never counts as collections or
   expenses** — drawer only.
 - `outstanding`: open job-card attention items + CLAIM items (open claims deduped per
@@ -545,9 +569,11 @@ Accountant closes.
   pending-review / settlement-sum queries) — the dashboard went ~95 → ~25 DB
   round-trips (8.0s → 2.0s on Neon `ap-southeast-1`).
 
-Frontend: `owner/DashboardPage.tsx` — branch + period (Today/MTD) filters, recharts
-area + donut, outstanding list, activity feed, cash-variance / unclosed-day banners,
-Ask DAMS panel, AI insights hub.
+Frontend: `owner/DashboardPage.tsx` — branch + period (Today / MTD / Custom range)
+filters, evening-brief one-liner, getting-started checklist, recharts area + donut,
+outstanding list, activity feed (scorecard + 14-day register derived from it),
+cash-variance / unclosed-day banners, branch drill-down (click a comparison row),
+Ask DAMS panel, AI insights hub (brief + watchdog always visible, rest collapsible).
 
 ---
 
@@ -626,7 +652,8 @@ check Swagger UI when in doubt.
 | Branches | `branch/controller/BranchController` | `GET /branches`, `GET /branches/{id}`, `POST /branches`, `PATCH /branches/{id}` |
 | Users | `user/controller/UserController` | `GET /users`, `GET /users/{id}`, `POST /users`, `PATCH /users/{id}` |
 | Org settings | `organization/controller/OrgSettingsController` | `GET /organization`, `PATCH /organization` |
-| Masters | `masters/controller/MastersController` | `GET /masters/{type}`, `GET /masters/{type}/{id}`, `POST /masters/{type}` (Owner), `PATCH /masters/{type}/{id}` (Owner) |
+| Masters | `masters/controller/MastersController` | `GET /masters/{type}`, `GET /masters/{type}/{id}`, `GET /masters/{type}/usage` (90-day use counts, deactivation guard), `POST /masters/{type}` (Owner), `PATCH /masters/{type}/{id}` (Owner) |
+| Budgets | `budget/controller/BudgetController` | `GET /budgets?month=YYYYMM`, `PUT /budgets` (Owner upsert `{categoryId, monthKey, capAmount}`; caps inform, never block) |
 | Receivers | `receiver/controller/ReceiverController` | `GET /receivers`, `GET /receivers/{id}`, `POST /receivers`, `PATCH /receivers/{id}` |
 | Customers | `customer/controller/CustomerController` | `GET /customers`, `GET /customers/{id}`, `GET /customers/{id}/history`, `POST /customers`, `PATCH /customers/{id}` |
 | Vehicles | `vehicle/controller/VehicleController` | `GET /vehicles`, `POST /vehicles` (lookup + deduped create; number normalised) |
@@ -635,11 +662,12 @@ check Swagger UI when in doubt.
 | Expenses | `expense/controller/ExpenseDocumentController` | `POST /expenses`, `GET /expenses/{id}`, `PATCH /expenses/{id}`, `POST /expenses/{id}/submit`, `POST /expenses/{id}/resubmit`, `POST /expenses/{id}/transfer-to-claim`, `POST /expenses/{id}/lines`, `PATCH /expenses/{id}/lines/{lineNo}`, `DELETE /expenses/{id}/lines/{lineNo}`, `POST\|GET /expenses/{id}/attachments`, `POST\|GET /expenses/{id}/lines/{lineNo}/attachments` |
 | Cash docs | `cash/controller/CashDocumentController` | `POST /cash-documents`, `GET /cash-documents`, `GET /cash-documents/{id}`, `PATCH /cash-documents/{id}`, `POST /cash-documents/{id}/submit`, `POST /cash-documents/{id}/resubmit`, `DELETE /cash-documents/{id}` |
 | Cash day | `cash/controller/CashController` | `GET /cash/drawer`, `POST /cash/opening`, `POST\|GET /cash/close-day` |
-| Review | `review/controller/ReviewController` | `GET /review/receipts\|expenses\|cash`, `GET /review/fm/receipts\|expenses\|cash`, `POST /receipts/{id}/verify\|query\|reject`, `POST /receipts/bulk-verify`, `POST /receipts/{id}/lines/{lineNo}/override`, `POST /receipts/{id}/approve`, `POST /expenses/{id}/verify\|bulk-verify\|query\|reject`, `POST /expenses/{id}/lines/{lineNo}/override`, `POST /expenses/{id}/close`, `POST /expenses/{id}/approve`, `POST /cash-documents/{id}/verify\|approve\|query\|reject` |
-| Search | `search/controller/SearchController` | `GET /search?q=` |
+| Cash reopen | `cash/controller/CashReopenController` | `POST /cash/reopen-requests` (Cashier, reason required), `GET /cash/reopen-requests` (Acct/FM/Owner), `POST /cash/reopen-requests/{id}/approve\|reject` (FM) |
+| Review | `review/controller/ReviewController` | `GET /review/receipts\|expenses\|cash`, `GET /review/fm/receipts\|expenses\|cash`, `POST /receipts/{id}/verify\|query\|reject`, `POST /receipts/bulk-verify`, `POST /receipts/bulk-approve` (FM), `POST /receipts/{id}/lines/{lineNo}/override`, `POST /receipts/{id}/approve`, `POST /expenses/{id}/verify\|bulk-verify\|query\|reject`, `POST /expenses/bulk-approve` (FM), `POST /expenses/{id}/lines/{lineNo}/override`, `POST /expenses/{id}/close`, `POST /expenses/{id}/approve`, `POST /cash-documents/{id}/verify\|approve\|query\|reject` |
+| Search | `search/controller/SearchController` | `GET /search?q=` (also matches UTR/transaction-ref last-4, doc numbers, vehicle/customer/job-card) |
 | AI assistant | `ai/controller/AiController` | `POST /ai/ask`, `GET /ai/brief`, `GET /ai/benchmark`, `GET /ai/anomalies`, `GET /ai/risk`, `GET /ai/queries/roots`, `GET /ai/claims/insights`, `GET /ai/cash/advice`, `GET /ai/close/checklist`, `GET /ai/receivers/duplicates`, `GET /ai/masters/health`, `GET /ai/limits/advice`, `GET /ai/search` (all read-only; only write is `ai_query_log` trace row) |
 | My Entries | `myentries/controller/MyEntriesController` | `GET /my-entries` |
-| Dashboard | `dashboard/controller/DashboardController` | `GET /dashboard/summary`, `GET /dashboard/outstanding`, `GET /dashboard/activity` |
+| Dashboard | `dashboard/controller/DashboardController` | `GET /dashboard/summary` (`period=today\|mtd\|custom`, `?from=&to=` custom range), `GET /dashboard/outstanding`, `GET /dashboard/activity` |
 | Override audit | `audit/controller/OverrideAuditController` | `GET /override-audit` (Owner+FM, filterable user/branch/date) |
 | Attachments | `attachment/controller/AttachmentController` | `GET /attachments/{id}`, `DELETE /attachments/{id}`, `GET /attachments/raw` (public w/ signature) |
 | Export | `export/controller/ExportController` | `GET /export/receipts`, `GET /export/expenses` |
@@ -660,22 +688,27 @@ Top routes (`src/App.tsx`): `/login`, `/accept-invite`, `/app/*` (guarded →
 | `/` (index) | Cashier home / Review Queue / Approvals & Claims / Dashboard (by JWT role; Super Admin → orgs) | all |
 | `organizations` | Super Admin panel (org table, onboard + copyable invite link, activate/deactivate, type-name-to-confirm delete) | SUPER_ADMIN |
 | `team`, `masters` | Team & Branches (add branch/user, role-conditional assignment, cashier toggle) · Masters CRUD + receivers + AI strips | OWNER |
-| `new-receipt`, `new-expense` | New Receipt / New Expense (draft auto-recovery, limit warnings, attachments panel, print + UPI QR) + `?customerId= / ?jobCardId= / ?editDoc=` | CASHIER |
-| `cash` | Cash page (drawer card, movements, Cash In/Out + Close Day modals, `?editDoc=`) | CASHIER |
+| `new-receipt`, `new-expense` | New Receipt / New Expense (draft auto-recovery, limit warnings, attachments panel with camera capture + compress, print with amount-in-words + WhatsApp share + UPI QR) + `?customerId= / ?jobCardId= / ?editDoc=` | CASHIER |
+| `cash` | Cash page (drawer card, movements, Cash In/Out + Close Day modals with denomination grid, reopen-request box on locked days, `?editDoc=`) | CASHIER |
 | `my-entries` | My Entries (today+recent, queried highlighted, resubmit) | CASHIER |
 | `override-audit` | Override Audit (filter by date/branch/user, merged accountant+FM overrides) | OWNER, FM |
 | `settings` | Account summary + change password (+ org settings for Owner) | all |
 
 Key components: `cashier/AddPaymentModal` (appends a line, never a second doc),
-`ViewReceiptsModal` + `AttachmentLightbox`, `AttachmentsPanel` (drag-and-drop),
-`PrintReceiptModal` (80mm/A4), `UpiQrModal`, `shared/GlobalSearch`,
+`ViewReceiptsModal` + `AttachmentLightbox`, `AttachmentsPanel` (drag-and-drop,
+camera capture, client compress), `PrintReceiptModal` (80mm/A4, amount-in-words,
+WhatsApp share), `UpiQrModal`, `shared/GlobalSearch`,
 `shared/useDraftRecovery` (48h localStorage), `review/reviewShared` (shared record
-view), `owner/AskDamsPanel` + `AiInsightsSection`, `help/HelpDrawer` + `HelpButton`.
+view, query-reason templates, claim-pack buttons), `owner/AskDamsPanel` +
+`AiInsightsSection` (collapsible), `owner/MastersPage` (usage guard, budgets),
+`finance/FmQueuePage` (bulk approve, reopen requests), `help/HelpDrawer` + `HelpButton`.
 
 API clients (`src/api/`): `axios` (base + Bearer + 401 + request-ID), `auth`,
-`admin`, `branches`, `users`, `orgSettings`, `masters`, `receivers`, `customers`,
-`vehicles`, `jobCards`, `receipts`, `expenses`, `cash`, `review`, `search`,
-`myEntries`, `dashboard`, `overrideAudit`, `ai`, `export`.
+`admin`, `branches`, `users`, `orgSettings`, `masters`, `budgets`, `receivers`,
+`customers`, `vehicles`, `jobCards`, `receipts`, `expenses`, `cash` (+ reopen),
+`review` (+ bulk approve), `search`, `myEntries`, `dashboard` (custom range),
+`overrideAudit`, `ai`, `export`. Nav badges in `shell/AppShell` (queried/pending
+counts, 5-min poll).
 
 ---
 
@@ -688,13 +721,14 @@ backend/src/main/java/com/dams/
   branch/       branches + DocumentSequence (gap-free numbering)
   user/         users + branch access
   organization/ org settings (incl. cashier toggle)
-  masters/      8 configurable lists + provisioning + purge order
+  masters/      8 configurable lists + provisioning + purge order + usage counts
+  budget/       monthly expense caps (inform-only)
   receiver/     vendor/payee master
   customer/ vehicle/ jobcard/   customer history, vehicle normalisation, job cards + ClaimCloseService
-  receive/ expense/ cash/       documents + lines + posting guards + drawer/close-day
-  review/       ReviewGuard + ReviewService (verify/query/reject/override/approve/close/bulk)
-  search/       universal search      myentries/  own entries feed
-  dashboard/    summary/outstanding/activity (batched aggregates)
+  receive/ expense/ cash/       documents + lines + posting guards + drawer/close-day + reopen requests
+  review/       ReviewGuard + ReviewService (verify/query/reject/override/approve/close/bulk-verify/bulk-approve)
+  search/       universal search (incl. UTR/transaction-ref)      myentries/  own entries feed
+  dashboard/    summary (today/mtd/custom range)/outstanding/activity (batched aggregates)
   audit/        override-audit feed   attachment/ StorageService (local/R2) + signed URLs
   ai/           read-only assistant (ask/brief/benchmark/anomalies/risk/claims/cash/close/...)
   export/       CSV streams           common/     TenantFilter, BranchScope, audit, filters
@@ -718,6 +752,8 @@ Flyway (`backend/src/main/resources/db/migration`) — never edit an applied mig
 | V20 | `ai_query_log` (ask trace rows only) |
 | V21 | one-open-doc index excludes REJECTED (new doc after rejection) |
 | V22 | monotonic `line_no_seq` (voided line IDs never reused) |
+| V23 | `expense_budget` (org, category, monthKey YYYYMM, cap; caps inform, never block) |
+| V24 | `cash_close_reopen_request` (branch, date, reason, PENDING/APPROVED/REJECTED; one pending per branch/date) |
 
 Hibernate `ddl-auto: validate` — schema changes only via Flyway. HikariCP is tuned
 for Neon (fixed pool 8/8, keepalive 60s, max-lifetime 25min) plus Hibernate batching

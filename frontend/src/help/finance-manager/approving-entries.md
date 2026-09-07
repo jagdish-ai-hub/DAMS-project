@@ -4,12 +4,20 @@ Your home screen is **Approvals & Claims**. It lists every entry the accountant 
 
 ## Work an entry
 
-1. Use the toggle to switch between **Receipts** and **Expenses**.
+1. Use the toggle to switch between **Receipts**, **Expenses** and **Cash**.
 2. Under **Awaiting final approval**, click an entry. The right pane shows its header, every line (with any accountant override struck through), and the full history.
 3. Decide:
    - **Approve** — the entry is final. It now shows in the owner's dashboard. For an over-limit expense, your approval is also what lets the accountant close it.
    - **Query** — send it back with a question. It returns to the cashier, then through the accountant, then back to you.
    - **Reject** — the entry shouldn't stand. Give a reason; a rejected entry is closed.
+
+## Approving many at once
+
+Tick the boxes on clean entries and press **Approve selected** in the dark bar at the bottom. Anything you created or last changed yourself, or that isn't verified, is skipped and listed — approve those individually if needed.
+
+## Reopen requests
+
+When a cashier miscounts a closed day, they send a **reopen request** with a reason. On the **Cash** tab you'll see a pending card: **Approve & reopen day** removes the close so the day can be re-closed; **Reject** keeps the lock (a reason is required). Both are recorded.
 
 ## Good to know
 

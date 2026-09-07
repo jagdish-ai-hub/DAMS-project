@@ -32,6 +32,19 @@
 | **FEAT-19** | **Expense Limit Advisor** | Owner | Suggests limit revisions from actual breach frequency; Owner approves. | `backend/.../ai/AiMastersService.java` (limitAdvice), `frontend/src/owner/AiMastersStrip.tsx` | 🚀 In Progress |
 | **FEAT-20** | **Semantic Universal Search++** | All Roles (scoped) | Typo/fuzzy + intent search ("Innova unpaid last month"); respects branch scope + cashier toggle. | `backend/.../ai/AiSearchService.java`, `frontend/src/shared/GlobalSearch.tsx` (fallback) | 🚀 In Progress |
 | **FEAT-21** | **Month-End Close Copilot** | Owner, FM, Accountant | Close checklist (cash days closed? expenses closed? claims transferred?) + sign-off pack. | `backend/.../ai/AiOpsService.java` (closeChecklist), `frontend/src/owner/AiInsightsSection.tsx` | 🚀 In Progress |
+| **FEAT-22** | **Cash Close Denomination Grid** | Cashier | Type note/coin counts, auto-total the counted cash; kills count-to-typing arithmetic errors. | `frontend/src/cashier/CashPage.tsx` | ✅ Done |
+| **FEAT-23** | **Nav Count Badges (Queried / Pending)** | Cashier, Accountant, FM | Queried entries and grown queues surface on the nav (5-min poll, fail-silent) instead of needing a manual check. | `frontend/src/shell/AppShell.tsx` | ✅ Done |
+| **FEAT-24** | **Query Reason Templates + Queue Filters** | Accountant, FM | 5 canned query reasons keep notes consistent for root-cause analysis; Over-limit / Has-override / No-bill toggles triage faster. | `frontend/src/review/reviewShared.tsx`, `ReviewQueuePage.tsx`, `FmQueuePage.tsx` | ✅ Done |
+| **FEAT-25** | **FM Bulk Approve** | Finance Manager | Approve many VERIFIED docs in one click with maker-checker skips (mirrors accountant bulk verify). | `backend/.../review/ReviewService.java`, `ReviewController.java`, `frontend/src/api/review.ts`, `FmQueuePage.tsx` | ✅ Done |
+| **FEAT-26** | **Claim Pack (Copy + Open All Bills)** | FM | One-click claim summary copy + open every bill for the Eicher portal upload. | `frontend/src/review/reviewShared.tsx`, `FmQueuePage.tsx` | ✅ Done |
+| **FEAT-27** | **Amount-in-Words + WhatsApp Slip Share** | Cashier, Customer / Driver | Indian-system words line on the slip + `wa.me` share text so drivers can send the receipt to fleet owners instantly. | `frontend/src/cashier/PrintReceiptModal.tsx` | ✅ Done |
+| **FEAT-28** | **Camera Capture + Client Compress** | Cashier | Phone camera capture for bills + canvas compress (1600px, JPEG 0.8) before upload; PDFs pass through. | `frontend/src/cashier/AttachmentsPanel.tsx` | ✅ Done |
+| **FEAT-29** | **Dashboard Custom Range + Branch Drill-Down** | Owner, FM | Explicit `from/to` range (`period=custom`) + click a branch row to filter; answers "what happened 12–18 Aug in OOB?". | `backend/.../dashboard/`, `frontend/src/api/dashboard.ts`, `owner/DashboardPage.tsx` | ✅ Done |
+| **FEAT-30** | **Expense Budgets vs Actual** | Owner | Monthly caps per expense category (`expense_budget`, V23); amber ≥80%, red over; inform-only, never block. | `backend/.../budget/`, `V23__expense_budget.sql`, `frontend/src/api/budgets.ts`, `owner/DashboardPage.tsx`, `owner/MastersPage.tsx` | ✅ Done |
+| **FEAT-31** | **Masters Usage Guard** | Owner | 90-day use count per master row; explicit confirmation to deactivate in-use rows. | `backend/.../masters/`, `frontend/src/api/masters.ts`, `owner/MastersPage.tsx` | ✅ Done |
+| **FEAT-32** | **Cash-Day Reopen by Request** | Cashier, FM | Locked-day miscounts fixed via request (reason mandatory) → FM approve removes the close / reject keeps it; fully audited, no silent reopen. | `backend/.../cash/`, `V24__cash_close_reopen_request.sql`, `frontend/src/api/cash.ts`, `cashier/CashPage.tsx`, `finance/FmQueuePage.tsx` | ✅ Done |
+| **FEAT-33** | **Owner Dashboard Helper Layer** | Owner | Evening-brief one-liner, getting-started checklist, staff scorecard + 14-day register (from existing aggregates), collapsible AI hub. | `frontend/src/owner/DashboardPage.tsx`, `AiInsightsSection.tsx` | ✅ Done |
+| **FEAT-34** | **UTR / Transaction-Ref Search** | All Roles (scoped) | `GET /search` also matches settlement/expense transaction refs (min 4 chars), resolved to the job card's customer. | `backend/.../search/SearchService.java` | ✅ Done |
 
 ---
 
@@ -222,3 +235,63 @@
 - **Where (proposed):**
   - Backend: `com.dams.ai.service.CloseChecklistService` — aggregates cash-close, expense status, claim status, review queues per branch/month.
   - Frontend: close card on `owner/DashboardPage.tsx` with per-branch ticks + exportable sign-off summary (KPIs + outstanding + audit rows + requestIds).
+
+---
+
+## 4. Usability & Real-Task Batch (FEAT-22 → FEAT-34) — ✅ Done (rev 29)
+
+> All frontend unless noted. No applied migration edited (V23/V24 are new);
+> AGENT.md §6 + API map updated alongside. Verified: backend 192 green,
+> `tsc`/`eslint`/`vitest`/vite-build clean.
+
+### FEAT-22: Cash Close Denomination Grid
+- **Dealership Context:** Cashiers count notes then do mental arithmetic to type the counted total — a daily source of variance typos.
+- **Files:** `frontend/src/cashier/CashPage.tsx` (Close Day modal grid ₹500→₹1, auto-sum prefills counted, live variance, remark rule unchanged).
+
+### FEAT-23: Nav Count Badges
+- **Dealership Context:** Cashiers never notice a query; accountants never notice a grown queue until they open the page.
+- **Files:** `frontend/src/shell/AppShell.tsx` (queried count for cashiers via `myEntries`, queue totals for accountant/FM via `reviewApi`; 5-min poll + route change, fail-silent, role-gated).
+
+### FEAT-24: Query Reason Templates + Queue Filters
+- **Dealership Context:** Free-text query reasons ("bill not clear" vs "blurry photo" vs "no bill") can't be clustered; long queues can't be triaged.
+- **Files:** `frontend/src/review/reviewShared.tsx` (`QueryRejectBox` template dropdown, editable after fill), `accountant/ReviewQueuePage.tsx` + `finance/FmQueuePage.tsx` (Over-limit / Has-override / No-bill-via-risk toggles).
+
+### FEAT-25: FM Bulk Approve
+- **Dealership Context:** FMs clicked 40 clean VERIFIED docs one by one; accountants already had bulk verify (FEAT-05).
+- **Files:** `backend/.../review/service/ReviewService.java` (`bulkApproveReceipts/Expenses`, FM guard, VERIFIED→APPROVED, `APPROVED` audit with `bulk=true`), `review/controller/ReviewController.java` (`POST /receipts|expenses/bulk-approve`), `frontend/src/api/review.ts` (server call with one-by-one 404 fallback), `finance/FmQueuePage.tsx` (sticky approve bar with skip reasons). Tests: `ReviewServiceTest` bulk-approve cases.
+
+### FEAT-26: Claim Pack (Copy + Open All Bills)
+- **Dealership Context:** FMs downloaded bills one by one for the Eicher portal.
+- **Files:** `frontend/src/review/reviewShared.tsx` (`ClaimPackButtons`), `finance/FmQueuePage.tsx` (`ClaimRowPack`) — copy claim summary via `useCopy`, open every doc+line bill via signed URLs. No backend change.
+
+### FEAT-27: Amount-in-Words + WhatsApp Slip Share
+- **Dealership Context:** Drivers need a receipt their fleet owner trusts, sent before they leave the counter.
+- **Files:** `frontend/src/cashier/PrintReceiptModal.tsx` (`amountInWordsIndian` — Thousand/Lakh/Crore, printed under the total; `wa.me/?text=` share with branch/docNo/amount+words/job-card/date). Print CSS untouched.
+
+### FEAT-28: Camera Capture + Client Compress
+- **Dealership Context:** Counter phones on slow networks fail 10MB bill photos.
+- **Files:** `frontend/src/cashier/AttachmentsPanel.tsx` (`capture="environment"` camera button, canvas compress to max 1600px JPEG 0.8, PDF passthrough, 10MB guard kept).
+
+### FEAT-29: Dashboard Custom Range + Branch Drill-Down
+- **Dealership Context:** Today/MTD can't answer "what happened 12–18 Aug in OOB?"; the branch table was dead text.
+- **Files:** `backend/.../dashboard/` (`summary` takes `from/to`, explicit range overrides period, 400 on half-open/inverted), `frontend/src/api/dashboard.ts` (`DashboardPeriod` gains `custom`), `owner/DashboardPage.tsx` (Today/MTD/Custom seg, date inputs, clickable comparison rows). Tests: `DashboardServiceTest` custom-range cases.
+
+### FEAT-30: Expense Budgets vs Actual
+- **Dealership Context:** Static sub-category limits flag single lines, but nothing shows monthly department spend vs plan.
+- **Files:** `V23__expense_budget.sql` + `budget/` package (`BudgetController`: `GET ?month=`, OWNER `PUT` upsert `{categoryId, monthKey, capAmount}`), `frontend/src/api/budgets.ts`, dashboard category budget bars (amber ≥80%, red over), Masters expense-categories budget inputs. Caps inform, never block. Tests: `BudgetServiceTest`.
+
+### FEAT-31: Masters Usage Guard
+- **Dealership Context:** Owners fear deactivating a row that history depends on.
+- **Files:** `GET /masters/{type}/usage` → `[{id, name, useCount, usedLast90d}]` (`MastersService` counting job cards/lines, statuses/categories report 0 with a why-comment), `frontend/src/api/masters.ts`, `owner/MastersPage.tsx` ("used Nx in 90 days", explicit confirm for in-use rows). Deactivate-never-delete unchanged.
+
+### FEAT-32: Cash-Day Reopen by Request
+- **Dealership Context:** A typed-but-miscounted close had no correction path (AGENT.md #6 updated: request-only exception, no silent reopen).
+- **Files:** `V24__cash_close_reopen_request.sql` (one PENDING per branch/date) + `cash/` package (`CashReopenService`, `CashReopenController`: cashier POST w/ reason, Acct/FM/Owner GET, FM approve removes the close + dual audit / reject keeps lock), `frontend/src/api/cash.ts` (`reopenApi`), `cashier/CashPage.tsx` (request box on locked days), `finance/FmQueuePage.tsx` (pending card with approve/reject). Tests: `CashReopenServiceTest`.
+
+### FEAT-33: Owner Dashboard Helper Layer
+- **Dealership Context:** Owners skim: one-line brief, setup checklist, who generates rework, Excel-like register, less AI clutter.
+- **Files:** `owner/DashboardPage.tsx` (evening-brief line from KPIs/alerts/outstanding; `localStorage` getting-started checklist; staff scorecard + 14-day register from the activity feed/trend with a comment on derivation limits), `owner/AiInsightsSection.tsx` (brief + watchdog always visible, rest behind "Show all N insights").
+
+### FEAT-34: UTR / Transaction-Ref Search
+- **Dealership Context:** "Money left, which entry was it?" — accountants search by the UTR fragment on the bank SMS.
+- **Files:** `backend/.../search/SearchService.java` (settlement/expense `transaction_ref` contains-match, min 4 chars, org + branch scoped, resolved to the job card's customer as match field `"UTR"`). Tests: `SearchBranchScopeTest` UTR cases.

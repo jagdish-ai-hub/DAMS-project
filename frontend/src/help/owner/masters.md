@@ -19,4 +19,8 @@ A new organization starts with a sensible default set. Adjust from there.
 
 ## Removing a row
 
-You can't delete a master row — set it to **Inactive** instead. It stops appearing in new dropdowns but stays valid on every record that already uses it, so history never breaks.
+You can't delete a master row — set it to **Inactive** instead. It stops appearing in new dropdowns but stays valid on every record that already uses it, so history never breaks. Each row shows **used Nx in 90 days**; deactivating a row that's still in use asks for an extra confirmation.
+
+## Monthly expense budgets
+
+On the **Expense departments** list you can set a **budget** per department for the current month. Budgets never block anyone — they just colour the dashboard's *Expenses by category* bars (amber past 80%, red when over) so overspend catches your eye.
