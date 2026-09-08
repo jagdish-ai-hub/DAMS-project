@@ -47,6 +47,9 @@ export interface CashDayClose {
   closedBy: number
   closedByName: string | null
   closedAt: string
+  countersignStatus: 'NOT_REQUIRED' | 'PENDING' | 'COUNTERSIGNED'
+  countersignedBy: number | null
+  countersignedAt: string | null
 }
 
 export interface CashDrawer {
@@ -152,6 +155,9 @@ export const cashApi = {
   },
   closeDay(data: CloseDayRequest) {
     return api.post<CashDayClose>('/api/v1/cash/close-day', data)
+  },
+  countersign(closeId: number) {
+    return api.post<CashDayClose>(`/api/v1/cash/close-day/${closeId}/countersign`)
   },
   setOpening(data: CashOpeningRequest) {
     return api.post<CashDrawer>('/api/v1/cash/opening', data)

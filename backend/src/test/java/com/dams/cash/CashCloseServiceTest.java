@@ -63,13 +63,14 @@ class CashCloseServiceTest {
     @Mock private AppUserRepository userRepo;
     @Mock private CashPostingGuard guard;
     @Mock private AuditService auditService;
+    @Mock private com.dams.organization.repository.OrganizationRepository orgRepo;
 
     private CashCloseService service;
 
     @BeforeEach
     void setUp() {
         service = new CashCloseService(cashDayCloseRepo, branchCashOpeningRepo, cashDocumentRepo,
-            drawerService, cashDocumentService, branchRepo, userRepo, guard, auditService);
+            drawerService, cashDocumentService, branchRepo, userRepo, guard, auditService, orgRepo);
         TenantContext.setOrgId(ORG);
 
         lenient().when(guard.requireCashier(ORG)).thenReturn(cashier());

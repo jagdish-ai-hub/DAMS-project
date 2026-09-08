@@ -11,6 +11,7 @@ public interface CashDayCloseRepository extends JpaRepository<CashDayClose, Long
 
     Optional<CashDayClose> findByOrgIdAndBranchIdAndCloseDate(Long orgId, Long branchId, LocalDate closeDate);
 
+    Optional<CashDayClose> findByIdAndOrgId(Long id, Long orgId);
     boolean existsByOrgIdAndBranchIdAndCloseDate(Long orgId, Long branchId, LocalDate closeDate);
 
     boolean existsByOrgIdAndBranchId(Long orgId, Long branchId);

@@ -120,6 +120,7 @@ public class JobCardService {
         requireGstWhenB2b(b2b, jc.getGstNo());
         jc.setCategoryId(category.getId());
         jc.setBusinessStatusId(status.getId());
+        jc.setServiceDueDate(request.getServiceDueDate());
         jc = jobCardRepo.save(jc);
 
         auditService.recordUserEvent(ENTITY, jc.getId(), jc.getBranchId(), EventType.CREATED, branchScope.currentUserId(),
@@ -172,6 +173,16 @@ public class JobCardService {
         }
         // Validate against the effective (post-patch) values.
         requireGstWhenB2b(jc.isB2b(), jc.getGstNo());
+
+        // FEAT-39/50 follow-up fields ride the same PATCH — no new endpoint.
+        if (Boolean.TRUE.equals(request.getClearServiceDueDate())) {
+            jc.setServiceDueDate(null);
+        } else if (request.getServiceDueDate() != null) {
+            jc.setServiceDueDate(request.getServiceDueDate());
+        }
+        if (request.getStuckReason() != null) {
+            jc.setStuckReason(blankToNull(request.getStuckReason()));
+        }
 
         boolean wantsCategoryChange = request.getCategoryId() != null
             && !request.getCategoryId().equals(jc.getCategoryId());
@@ -381,7 +392,9 @@ public class JobCardService {
             claimClosedByName,
             claimClose != null ? claimClose.getClosedAt() : null,
             paymentGuard.canRecordPayment(orgId, jc, pending, claimClosed),
-            jc.getCreatedAt());
+            jc.getCreatedAt(),
+            jc.getServiceDueDate(),
+            jc.getStuckReason());
     }
 
     private static Map<String, Object> orderedDetail(String k1, Object v1, String k2, Object v2) {

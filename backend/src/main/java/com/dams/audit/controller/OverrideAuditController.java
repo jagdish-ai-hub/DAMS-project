@@ -29,7 +29,7 @@ import java.util.List;
 @RequestMapping("/api/v1/override-audit")
 @Tag(name = "Override Audit", description = "Every amount override across the organisation")
 @SecurityRequirement(name = "bearerAuth")
-@PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER')")
+@PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','AUDITOR')")
 public class OverrideAuditController {
 
     private final OverrideAuditService overrideAuditService;

@@ -26,7 +26,7 @@ import java.util.List;
 @RequestMapping("/api/v1/dashboard")
 @Tag(name = "Dashboard", description = "Owner dashboard aggregates")
 @SecurityRequirement(name = "bearerAuth")
-@PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER')")
+@PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','AUDITOR')")
 public class DashboardController {
 
     private final DashboardService dashboardService;

@@ -22,6 +22,12 @@ public interface AttachmentRepository extends JpaRepository<Attachment, Long> {
 
     long countByOrgIdAndParentTypeAndParentId(Long orgId, ParentType parentType, Long parentId);
 
+    /**
+     * Exact-duplicate lookup (FEAT-37): every other attachment in the org with
+     * the same content hash. Same bytes twice = the same bill twice.
+     */
+    List<Attachment> findByOrgIdAndSha256AndIdNot(Long orgId, String sha256, Long excludeId);
+
     /** One grouped count for many parents — {parentId, count} rows. Avoids an N+1 in DTO mapping. */
     @Query("""
         select a.parentId, count(a.id) from Attachment a

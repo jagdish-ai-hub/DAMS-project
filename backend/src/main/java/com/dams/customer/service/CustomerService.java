@@ -5,6 +5,7 @@ import com.dams.branch.repository.BranchRepository;
 import com.dams.common.exception.DamsException;
 import com.dams.common.security.BranchScope;
 import com.dams.config.TenantContext;
+import com.dams.customer.dto.CreditStatusResponse;
 import com.dams.customer.dto.CustomerHistoryResponse;
 import com.dams.customer.dto.CustomerRequest;
 import com.dams.customer.dto.CustomerResponse;
@@ -135,14 +136,38 @@ public class CustomerService {
         Customer c = load(id);
         c.setName(request.getName().trim());
         c.setPhone(blankToNull(request.getPhone()));
+        if (request.getCreditLimit() != null) {
+            if (request.getCreditLimit().signum() <= 0) {
+                throw DamsException.badRequest("creditLimit must be greater than zero (or omitted for no limit)");
+            }
+            c.setCreditLimit(request.getCreditLimit());
+        }
         c = customerRepo.save(c);
         return CustomerResponse.of(c, vehiclesFor(c.getOrgId(), List.of(c.getId()))
             .getOrDefault(c.getId(), List.of()));
     }
 
+    /**
+     * B2B exposure vs limit (FEAT-46). Exposure = Σ pending across the
+     * customer's job cards. Warn-first in v1: breached only ranks the
+     * customer in the defaulter view and banners the counter — posting is
+     * never blocked. A hard block needs an Owner override path (v2).
+     */
     @Transactional(readOnly = true)
-    public CustomerHistoryResponse history(Long id) {
+    public CreditStatusResponse creditStatus(Long id) {
         Long orgId = TenantContext.requireOrgId();
+        Customer c = load(id);
+        var jobCards = jobCardRepo.findByOrgIdAndCustomerIdOrderByCreatedAtDesc(orgId, id);
+        java.math.BigDecimal exposure = pendingAmountCalculator.forJobCards(orgId, jobCards).values().stream()
+            .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+        boolean breached = c.getCreditLimit() != null && exposure.compareTo(c.getCreditLimit()) > 0;
+        java.math.BigDecimal headroom = c.getCreditLimit() == null
+            ? null : c.getCreditLimit().subtract(exposure);
+        return new CreditStatusResponse(c.getId(), c.getName(), c.getCreditLimit(), exposure, breached, headroom);
+    }
+
+    @Transactional(readOnly = true)
+    public CustomerHistoryResponse history(Long id) {        Long orgId = TenantContext.requireOrgId();
         Customer c = load(id);
 
         List<Vehicle> vehicles = vehicleRepo.findByOrgIdAndCustomerIdOrderByVehicleNoAsc(orgId, id);
@@ -214,6 +239,8 @@ public class CustomerService {
                 primaryDoc != null && primaryDoc.isSettled(),
                 close != null && close.isOverridden(),
                 close != null ? close.getFinalAmount() : null,
+                j.getServiceDueDate(),
+                j.getStuckReason(),
                 j.getCreatedAt());
         }).toList();
 

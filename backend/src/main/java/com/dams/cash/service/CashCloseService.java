@@ -50,6 +50,7 @@ public class CashCloseService {
     private final AppUserRepository userRepo;
     private final CashPostingGuard guard;
     private final AuditService auditService;
+    private final com.dams.organization.repository.OrganizationRepository orgRepo;
 
     public CashCloseService(CashDayCloseRepository cashDayCloseRepo,
                             BranchCashOpeningRepository branchCashOpeningRepo,
@@ -59,7 +60,8 @@ public class CashCloseService {
                             BranchRepository branchRepo,
                             AppUserRepository userRepo,
                             CashPostingGuard guard,
-                            AuditService auditService) {
+                            AuditService auditService,
+                            com.dams.organization.repository.OrganizationRepository orgRepo) {
         this.cashDayCloseRepo = cashDayCloseRepo;
         this.branchCashOpeningRepo = branchCashOpeningRepo;
         this.cashDocumentRepo = cashDocumentRepo;
@@ -69,6 +71,7 @@ public class CashCloseService {
         this.userRepo = userRepo;
         this.guard = guard;
         this.auditService = auditService;
+        this.orgRepo = orgRepo;
     }
 
     // ------------------------------------------------------------------ drawer
@@ -174,12 +177,50 @@ public class CashCloseService {
         close.setVariance(variance);
         close.setVarianceRemark(variance.signum() != 0 ? request.getVarianceRemark().trim() : null);
         close.setClosedBy(me.getId());
+        // FEAT-41: a breach of the org threshold parks the close for a second
+        // pair of eyes instead of locking clean. Below threshold (or feature
+        // off) nothing changes — no new friction on honest days.
+        BigDecimal threshold = orgRepo.findById(orgId)
+            .map(com.dams.organization.entity.Organization::getCashVarianceCountersignThreshold)
+            .orElse(null);
+        if (threshold != null && variance.abs().compareTo(threshold) > 0) {
+            close.setCountersignStatus("PENDING");
+        }
         close = cashDayCloseRepo.save(close);
 
         auditService.recordUserEvent("CashDayClose", close.getId(), EventType.CLOSED, me.getId(),
             orderedDetail("closeDate", closeDate.toString(), "variance", variance));
-        log.info("Cash day closed: orgId={} branchId={} date={} computed={} counted={} variance={}",
-            orgId, branchId, closeDate, computed, counted, variance);
+        log.info("Cash day closed: orgId={} branchId={} date={} computed={} counted={} variance={} countersign={}",
+            orgId, branchId, closeDate, computed, counted, variance, close.getCountersignStatus());
+        return toCloseResponse(orgId, close);
+    }
+
+    /**
+     * Accountant countersign for a threshold-breaching close (FEAT-41).
+     * Confirming keeps the lock with a witness; the query path stays in the
+     * review flow (query the cash documents, then the cashier re-closes via
+     * the reopen-request flow). Maker-checker: the cashier cannot countersign
+     * their own close.
+     */
+    @Transactional
+    public CashDayCloseResponse countersign(Long closeId) {
+        Long orgId = TenantContext.requireOrgId();
+        CashDayClose close = cashDayCloseRepo.findByIdAndOrgId(closeId, orgId)
+            .orElseThrow(() -> DamsException.notFound("Cash day close", closeId));
+        AppUser me = guard.requireAccountantForBranch(orgId, close.getBranchId());
+        if (!"PENDING".equals(close.getCountersignStatus())) {
+            throw DamsException.conflict("Close for " + close.getCloseDate() + " needs no countersign");
+        }
+        if (me.getId().equals(close.getClosedBy())) {
+            throw DamsException.conflict("You closed this day — a different person must countersign it");
+        }
+        close.setCountersignStatus("COUNTERSIGNED");
+        close.setCountersignedBy(me.getId());
+        close.setCountersignedAt(java.time.Instant.now());
+        close = cashDayCloseRepo.save(close);
+        auditService.recordUserEvent("CashDayClose", close.getId(), EventType.VERIFIED, me.getId(),
+            orderedDetail("closeDate", close.getCloseDate().toString(), "variance", close.getVariance()));
+        log.info("Cash close countersigned: orgId={} closeId={} by={}", orgId, closeId, me.getId());
         return toCloseResponse(orgId, close);
     }
 
@@ -200,7 +241,8 @@ public class CashCloseService {
         return new CashDayCloseResponse(
             c.getId(), c.getBranchId(), branchCode, c.getCloseDate(),
             c.getOpeningAmount(), c.getComputedClosing(), c.getCountedAmount(),
-            c.getVariance(), c.getVarianceRemark(), c.getClosedBy(), closedByName, c.getClosedAt());
+            c.getVariance(), c.getVarianceRemark(), c.getClosedBy(), closedByName, c.getClosedAt(),
+            c.getCountersignStatus(), c.getCountersignedBy(), c.getCountersignedAt());
     }
 
     private static Map<String, Object> orderedDetail(String k1, Object v1, String k2, Object v2) {

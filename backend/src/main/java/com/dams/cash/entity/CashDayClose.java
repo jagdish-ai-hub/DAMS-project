@@ -61,4 +61,18 @@ public class CashDayClose {
 
     @Column(name = "closed_at", nullable = false, updatable = false)
     private Instant closedAt = Instant.now();
+
+    /**
+     * Second pair of eyes (FEAT-41). A close whose |variance| exceeds the org
+     * threshold lands PENDING instead of locking clean; an accountant confirms
+     * or queries it. NOT_REQUIRED = below threshold or feature off.
+     */
+    @Column(name = "countersign_status", nullable = false, length = 20)
+    private String countersignStatus = "NOT_REQUIRED";
+
+    @Column(name = "countersigned_by")
+    private Long countersignedBy;
+
+    @Column(name = "countersigned_at")
+    private Instant countersignedAt;
 }

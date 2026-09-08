@@ -10,6 +10,8 @@ import { Printer, QrCode } from 'lucide-react'
 import PrintReceiptModal from './PrintReceiptModal'
 import UpiQrModal from './UpiQrModal'
 import { useDraftRecovery } from '../shared/useDraftRecovery'
+import { isOfflineError, outboxEnqueue } from '../shared/outbox'
+import OfflineBanner from '../shared/OfflineBanner'
 import { useAuth } from '../auth/useAuth'
 
 /** The most recent accountant question / rejection reason, for the fix-and-resubmit banner. */
@@ -292,7 +294,13 @@ export default function NewReceiptPage() {
         navigate(`/app/new-receipt?editDoc=${data.id}`, { replace: true })
       }
     } catch (e) {
-      setError(apiError(e, 'Could not save the receipt.'))
+      if (isOfflineError(e)) {
+        // FEAT-49: the network dropped — queue as a draft, sync from the banner later.
+        outboxEnqueue('receipt', `Receipt (${lines.length} line${lines.length === 1 ? '' : 's'})`, buildBody(false))
+        setNotice('Offline — queued on this device. It becomes a draft when you sync.')
+      } else {
+        setError(apiError(e, 'Could not save the receipt.'))
+      }
     } finally {
       setBusy(false)
     }
@@ -512,6 +520,7 @@ export default function NewReceiptPage() {
           {notice}
         </div>
       )}
+      <OfflineBanner />
       <ErrorBanner message={error} />
 
       {readOnly && loadedDoc && (

@@ -29,6 +29,20 @@ public class Organization {
     @Column(name = "multi_branch_cashier_access", nullable = false)
     private boolean multiBranchCashierAccess = false;
 
+    /**
+     * |Variance| above this closes PENDING countersign instead of locking
+     * clean (FEAT-41). NULL = feature off (existing behaviour, zero friction).
+     */
+    @Column(name = "cash_variance_countersign_threshold", precision = 14, scale = 2)
+    private java.math.BigDecimal cashVarianceCountersignThreshold;
+
+    /**
+     * Nightly owner digest via message (FEAT-42). Explicit opt-in — pushing
+     * WhatsApp to an owner who never asked is spam, not a feature.
+     */
+    @Column(name = "digest_enabled", nullable = false)
+    private boolean digestEnabled = false;
+
     @Column(nullable = false)
     private boolean active = true;
 

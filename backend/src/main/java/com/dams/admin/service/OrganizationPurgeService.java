@@ -10,12 +10,22 @@ import com.dams.cash.repository.CashDocumentRepository;
 import com.dams.customer.repository.CustomerRepository;
 import com.dams.expense.repository.ExpenseDocumentRepository;
 import com.dams.expense.repository.ExpenseLineRepository;
+import com.dams.followup.repository.CreditFollowupRepository;
+import com.dams.jobcard.repository.ClaimActionRepository;
 import com.dams.jobcard.repository.ClaimCloseRepository;
 import com.dams.jobcard.repository.JobCardRepository;
 import com.dams.masters.service.MastersService;
+import com.dams.messaging.repository.MessageLogRepository;
+import com.dams.messaging.repository.MessageTemplateRepository;
 import com.dams.receive.repository.ReceiveDocumentRepository;
 import com.dams.receive.repository.SettlementLineRepository;
 import com.dams.receiver.repository.ReceiverRepository;
+import com.dams.recon.repository.ReconBatchRepository;
+import com.dams.recon.repository.ReconLineRepository;
+import com.dams.staff.repository.StaffAdvanceEntryRepository;
+import com.dams.staff.repository.StaffMemberRepository;
+import com.dams.estimate.repository.EstimateLineRepository;
+import com.dams.estimate.repository.EstimateRepository;
 import com.dams.user.repository.AppUserRepository;
 import com.dams.vehicle.repository.VehicleRepository;
 import org.slf4j.Logger;
@@ -56,6 +66,16 @@ public class OrganizationPurgeService {
     private final CashDocumentRepository cashDocumentRepo;
     private final CashDayCloseRepository cashDayCloseRepo;
     private final BranchCashOpeningRepository branchCashOpeningRepo;
+    private final CreditFollowupRepository followupRepo;
+    private final ReconLineRepository reconLineRepo;
+    private final ReconBatchRepository reconBatchRepo;
+    private final ClaimActionRepository claimActionRepo;
+    private final EstimateLineRepository estimateLineRepo;
+    private final EstimateRepository estimateRepo;
+    private final StaffAdvanceEntryRepository staffEntryRepo;
+    private final StaffMemberRepository staffMemberRepo;
+    private final MessageLogRepository messageLogRepo;
+    private final MessageTemplateRepository messageTemplateRepo;
 
     public OrganizationPurgeService(AppUserRepository userRepo,
                                     DocumentSequenceRepository documentSequenceRepo,
@@ -74,7 +94,17 @@ public class OrganizationPurgeService {
                                     ExpenseDocumentRepository expenseDocumentRepo,
                                     CashDocumentRepository cashDocumentRepo,
                                     CashDayCloseRepository cashDayCloseRepo,
-                                    BranchCashOpeningRepository branchCashOpeningRepo) {
+                                    BranchCashOpeningRepository branchCashOpeningRepo,
+                                    CreditFollowupRepository followupRepo,
+                                    ReconLineRepository reconLineRepo,
+                                    ReconBatchRepository reconBatchRepo,
+                                    ClaimActionRepository claimActionRepo,
+                                    EstimateLineRepository estimateLineRepo,
+                                    EstimateRepository estimateRepo,
+                                    StaffAdvanceEntryRepository staffEntryRepo,
+                                    StaffMemberRepository staffMemberRepo,
+                                    MessageLogRepository messageLogRepo,
+                                    MessageTemplateRepository messageTemplateRepo) {
         this.userRepo = userRepo;
         this.documentSequenceRepo = documentSequenceRepo;
         this.mastersService = mastersService;
@@ -93,6 +123,16 @@ public class OrganizationPurgeService {
         this.cashDocumentRepo = cashDocumentRepo;
         this.cashDayCloseRepo = cashDayCloseRepo;
         this.branchCashOpeningRepo = branchCashOpeningRepo;
+        this.followupRepo = followupRepo;
+        this.reconLineRepo = reconLineRepo;
+        this.reconBatchRepo = reconBatchRepo;
+        this.claimActionRepo = claimActionRepo;
+        this.estimateLineRepo = estimateLineRepo;
+        this.estimateRepo = estimateRepo;
+        this.staffEntryRepo = staffEntryRepo;
+        this.staffMemberRepo = staffMemberRepo;
+        this.messageLogRepo = messageLogRepo;
+        this.messageTemplateRepo = messageTemplateRepo;
     }
 
     /**
@@ -121,10 +161,16 @@ public class OrganizationPurgeService {
      */
     @Transactional
     public void purgeChildren(long orgId) {
+        // Recon lines reference settlement lines (RESTRICT), so recon goes
+        // before everything it can point at. Batches cascade their lines, but
+        // explicit-first keeps the counts truthful.
+        long reconLines = reconLineRepo.deleteByOrgId(orgId);
+        long reconBatches = reconBatchRepo.deleteByOrgId(orgId);
         // Receive side first — attachments, then lines, then claim closes + documents,
         // all before the job cards they hang off. (Stored attachment blobs are left to
         // storage lifecycle rules; purge is a rare Super-Admin action on mis-onboarded orgs.)
         long attachments = attachmentRepo.deleteByOrgId(orgId);
+        long followups = followupRepo.deleteByOrgId(orgId);
         long settlementLines = settlementLineRepo.deleteByOrgId(orgId);
         long claimCloses = claimCloseRepo.deleteByOrgId(orgId);
         long receiveDocuments = receiveDocumentRepo.deleteByOrgId(orgId);
@@ -133,7 +179,15 @@ public class OrganizationPurgeService {
         long cashDocuments = cashDocumentRepo.deleteByOrgId(orgId);
         long cashDayCloses = cashDayCloseRepo.deleteByOrgId(orgId);
         long cashOpenings = branchCashOpeningRepo.deleteByOrgId(orgId);
+        long staffEntries = staffEntryRepo.deleteByOrgId(orgId);
+        long staffMembers = staffMemberRepo.deleteByOrgId(orgId);
+        long messageLogs = messageLogRepo.deleteByOrgId(orgId);
+        long messageTemplates = messageTemplateRepo.deleteByOrgId(orgId);
 
+        // Claim actions and estimates hang off job cards — before them.
+        long claimActions = claimActionRepo.deleteByOrgId(orgId);
+        long estimateLines = estimateLineRepo.deleteByOrgId(orgId);
+        long estimates = estimateRepo.deleteByOrgId(orgId);
         long jobCards = jobCardRepo.deleteByOrgId(orgId);
         long auditEvents = auditEventRepo.deleteByOrgId(orgId);
         long users = userRepo.deleteByOrganization_Id(orgId);
@@ -144,12 +198,16 @@ public class OrganizationPurgeService {
         long receivers = receiverRepo.deleteByOrgId(orgId);
         long branches = branchRepo.deleteByOrgId(orgId);
 
-        log.info("Org purge: orgId={} deleted attachments={} settlementLines={} claimCloses={} "
+        log.info("Org purge: orgId={} deleted attachments={} followups={} settlementLines={} claimCloses={} "
                 + "receiveDocuments={} expenseLines={} expenseDocuments={} cashDocuments={} cashDayCloses={} "
-                + "cashOpenings={} jobCards={} auditEvents={} users={} branches={} customers={} vehicles={} "
+                + "cashOpenings={} reconLines={} reconBatches={} claimActions={} estimateLines={} estimates={} "
+                + "staffEntries={} staffMembers={} messageLogs={} messageTemplates={} "
+                + "jobCards={} auditEvents={} users={} branches={} customers={} vehicles={} "
                 + "receivers={} sequences={} + all masters",
-            orgId, attachments, settlementLines, claimCloses, receiveDocuments, expenseLines, expenseDocuments,
-            cashDocuments, cashDayCloses, cashOpenings, jobCards, auditEvents, users, branches, customers,
+            orgId, attachments, followups, settlementLines, claimCloses, receiveDocuments, expenseLines, expenseDocuments,
+            cashDocuments, cashDayCloses, cashOpenings, reconLines, reconBatches, claimActions, estimateLines, estimates,
+            staffEntries, staffMembers, messageLogs, messageTemplates,
+            jobCards, auditEvents, users, branches, customers,
             vehicles, receivers, seqs);
     }
 }

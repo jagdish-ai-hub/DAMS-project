@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, Fragment } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { searchApi, type SearchHit } from '../api/search'
-import { customersApi, type CustomerHistory } from '../api/customers'
+import { customersApi, type CreditStatus, type CustomerHistory, type JobCardSummary } from '../api/customers'
+import { jobCardsApi } from '../api/jobCards'
 import { receiptsApi, type ReceiveDocument } from '../api/receipts'
-import { card, ErrorBanner, Skeleton, SkeletonRows, inr, initials, fmtDateShort } from '../shell/ui'
+import { card, ErrorBanner, Skeleton, SkeletonRows, inr, initials, fmtDateShort, inputStyle } from '../shell/ui'
 import AddPaymentModal from './AddPaymentModal'
 import ViewReceiptsModal from './ViewReceiptsModal'
 import PrintReceiptModal from './PrintReceiptModal'
+import StatementModal from './StatementModal'
 import ClaimFinalBadge from '../shared/ClaimFinalBadge'
+import OfflineBanner from '../shared/OfflineBanner'
 import { Printer } from 'lucide-react'
 import HelpButton from '../help/HelpButton'
 
@@ -162,6 +165,10 @@ function HomeSearch(props: {
       </div>
 
       <ErrorBanner message={error} />
+
+      <div style={{ maxWidth: 640, margin: '14px auto 0' }}>
+        <OfflineBanner />
+      </div>
 
       {hits != null && (
         <div style={{
@@ -349,6 +356,8 @@ function CustomerHistoryView(props: {
   const [payTarget, setPayTarget] = useState<PaymentTarget | null>(null)
   const [receiptsTarget, setReceiptsTarget] = useState<ReceiptsTarget | null>(null)
   const [printDoc, setPrintDoc] = useState<ReceiveDocument | null>(null)
+  const [statementFor, setStatementFor] = useState<number | null>(null)
+  const [credit, setCredit] = useState<CreditStatus | null>(null)
   const [reloadTick, setReloadTick] = useState(0)
   const { onLoaded } = props
 
@@ -368,6 +377,10 @@ function CustomerHistoryView(props: {
       })
       .catch((e) => live && setError(apiError(e, 'Could not load this customer.')))
       .finally(() => live && setLoading(false))
+    // B2B exposure vs limit (FEAT-46, warn-first) — best effort, never blocks history.
+    customersApi.creditStatus(props.customerId)
+      .then(({ data }) => live && setCredit(data))
+      .catch(() => live && setCredit(null))
     return () => {
       live = false
     }
@@ -435,8 +448,29 @@ function CustomerHistoryView(props: {
               >
                 ＋ New Expense
               </button>
+              <button
+                type="button"
+                onClick={() => setStatementFor(data.customerId)}
+                title="Dues, payments and balance across all vehicles — print or share on WhatsApp"
+                style={{ border: '1.5px solid var(--line)', background: 'var(--surface)', borderRadius: 8, padding: '9px 14px', fontSize: '0.85rem', fontWeight: 700, color: 'var(--navy2)', cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 38 }}
+              >
+                Statement
+              </button>
             </div>
           </div>
+
+          {credit?.creditLimit != null && (
+            <div style={{
+              borderRadius: 9, padding: '9px 14px', fontSize: '0.82rem', marginBottom: 16,
+              background: credit.breached ? 'var(--red-bg, #FDECEC)' : 'var(--navy3)',
+              border: `1px solid ${credit.breached ? 'var(--red)' : 'var(--line)'}`,
+              color: credit.breached ? 'var(--red)' : 'var(--muted)',
+            }}>
+              {credit.breached
+                ? <><strong>Over credit limit.</strong> Exposure {inr(credit.exposure)} vs limit {inr(credit.creditLimit)} — collect before extending more credit.</>
+                : <>Credit limit {inr(credit.creditLimit)} · exposure {inr(credit.exposure)} · headroom {credit.headroom != null ? inr(credit.headroom) : '—'}</>}
+            </div>
+          )}
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12, marginBottom: 16 }}>
             <Stat label="Job Cards" value={String(data.jobCardCount)} />
@@ -459,7 +493,8 @@ function CustomerHistoryView(props: {
                 </div>
               )}
               {data.jobCards.map((j) => (
-                <div key={j.id} style={{
+                <Fragment key={j.id}>
+                <div style={{
                   display: 'flex', alignItems: 'center', gap: 14, padding: '13px 0',
                   borderBottom: '1px solid var(--line)', flexWrap: 'wrap',
                 }}>
@@ -548,7 +583,17 @@ function CustomerHistoryView(props: {
                   ) : j.balance > 0 && j.receiveDocumentId != null ? (
                     <SoonButton label="Add Payment" small title="Only the home-branch cashier can record this payment" />
                   ) : null}
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/app/estimates?jobCardId=${j.id}`)}
+                    title="Quote this job before work starts — the bill shows variance vs the quote"
+                    style={{ border: 'none', background: 'none', color: 'var(--navy2)', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Quote
+                  </button>
                 </div>
+                <JobFollowups job={j} onSaved={() => setReloadTick((n) => n + 1)} />
+                </Fragment>
               ))}
             </div>
           </section>
@@ -614,6 +659,61 @@ function CustomerHistoryView(props: {
           onClose={() => setPrintDoc(null)}
         />
       )}
+      {statementFor != null && (
+        <StatementModal
+          customerId={statementFor}
+          onClose={() => setStatementFor(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
+ * Per-job follow-up fields (FEAT-39/50): next service due date (drives
+ * renewal reminders) and stuck reason (drives the floor board). Saved on
+ * blur/Enter via the same job-card PATCH — small inputs, no modal.
+ */
+function JobFollowups({ job, onSaved }: { job: JobCardSummary; onSaved: () => void }) {
+  const [due, setDue] = useState(job.serviceDueDate ?? '')
+  const [stuck, setStuck] = useState(job.stuckReason ?? '')
+  const [saving, setSaving] = useState(false)
+
+  async function save(patch: { serviceDueDate?: string | null; clearServiceDueDate?: boolean; stuckReason?: string | null }) {
+    setSaving(true)
+    try {
+      await jobCardsApi.patch(job.id, patch)
+      onSaved()
+    } catch {
+      /* the history reload surfaces errors; a failed save just stays dirty */
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', padding: '0 0 13px', fontSize: '0.76rem', alignItems: 'center' }}>
+      <label style={{ color: 'var(--muted)' }}>
+        Service due{' '}
+        <input
+          type="date"
+          value={due}
+          onChange={(e) => setDue(e.target.value)}
+          onBlur={() => { if (due !== (job.serviceDueDate ?? '')) void save(due ? { serviceDueDate: due } : { clearServiceDueDate: true }) }}
+          style={{ ...inputStyle, width: 'auto', padding: '4px 7px', fontSize: '0.76rem', minHeight: 30 }}
+        />
+      </label>
+      <label style={{ color: 'var(--muted)', flex: 1, minWidth: 200 }}>
+        Stuck?{' '}
+        <input
+          value={stuck}
+          onChange={(e) => setStuck(e.target.value)}
+          onBlur={() => { if (stuck !== (job.stuckReason ?? '')) void save({ stuckReason: stuck || null }) }}
+          placeholder="e.g. waiting for Eicher approval"
+          style={{ ...inputStyle, width: '100%', maxWidth: 320, padding: '4px 7px', fontSize: '0.76rem', minHeight: 30 }}
+        />
+      </label>
+      {saving && <span style={{ color: 'var(--faint)' }}>saving…</span>}
     </div>
   )
 }

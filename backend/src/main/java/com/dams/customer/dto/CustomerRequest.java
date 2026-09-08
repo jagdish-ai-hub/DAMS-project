@@ -18,4 +18,11 @@ public class CustomerRequest {
 
     @Size(max = 32, message = "Phone must be at most 32 characters")
     private String phone;
+
+    /**
+     * B2B ceiling (FEAT-46). Null = no limit. Warn-first in v1: never blocks
+     * posting, but the counter sees exposure-vs-limit. Owner/FM/Accountant
+     * writable via the same update path.
+     */
+    private java.math.BigDecimal creditLimit;
 }

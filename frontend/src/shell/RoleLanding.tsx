@@ -6,6 +6,7 @@ const NEXT_STAGE: Record<Exclude<Role, 'SUPER_ADMIN'>, string> = {
   FINANCE_MANAGER: 'Your approvals & claims queue is your home screen.',
   ACCOUNTANT: 'Your review queue is your home screen.',
   CASHIER: 'Customer search, receipts, expenses, and the cash page arrive in Stages 3–6.',
+  AUDITOR: 'Your read-only window: dashboard, override audit and masters are in the top nav.',
 }
 
 /**

@@ -133,7 +133,7 @@ function Group({ title, rows, onOpen }: { title: string; rows: MyEntry[]; onOpen
   )
 }
 
-function badgeTone(e: MyEntry): 'green' | 'amber' | 'gray' | 'red' {
+export function badgeTone(e: MyEntry): 'green' | 'amber' | 'gray' | 'red' {
   if (e.queried) return 'amber'
   if (e.workflowStatus === 'REJECTED') return 'red'
   if (e.settled || e.workflowStatus === 'APPROVED' || e.workflowStatus === 'CLOSED') return 'green'

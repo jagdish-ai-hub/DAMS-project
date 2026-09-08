@@ -57,6 +57,13 @@ public class ExpenseDocumentController {
         return expenseDocumentService.get(id);
     }
 
+    @GetMapping("/awaiting-bills")
+    @Operation(summary = "Expenses parked waiting for their bills, oldest first (FEAT-47)")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','AUDITOR')")
+    public java.util.List<ExpenseDocumentResponse> awaitingBills() {
+        return expenseDocumentService.awaitingBills();
+    }
+
     @PatchMapping("/{id}")
     @Operation(summary = "Edit the expense header (draft or queried documents only)")
     @PreAuthorize("hasAuthority('CASHIER')")

@@ -17,7 +17,7 @@ Tally remains the accounting system of record. DAMS is not accounting
 software — it's the clean, verified, ledger-tagged pipe that feeds
 accountants, plus the owner's live window into branch operations.
 
-## Role hierarchy (five levels)
+## Role hierarchy (five levels + auditor)
 
 - **SUPER_ADMIN** — platform level, not tied to any organization. Onboards
   new dealership organizations (creates the org + its first Owner login).
@@ -35,6 +35,9 @@ accountants, plus the owner's live window into branch operations.
   documents explicitly.
 - **CASHIER** — exactly one branch. Creates Receive and Expense entries,
   adds payments against existing job cards, does daily cash closing.
+- **AUDITOR** — outside the hierarchy: org-wide read-only (dashboard, override
+  audit, masters, follow-ups, exports). Zero write access anywhere; no review
+  queues. For the CA at year-end instead of Excel dumps or a borrowed login.
 
 A user never verifies or approves an entry they created or last modified.
 
@@ -390,24 +393,31 @@ auth, like an S3 presigned URL), `/swagger-ui.html`, `/swagger-ui/**`,
 | Admin (cross-org exception) | `admin/controller/AdminOrgController` | `GET|POST /admin/organizations`, `GET|PATCH|DELETE /admin/organizations/{id}` |
 | Branches | `branch/controller/BranchController` | `GET /branches`, `GET /branches/{id}`, `POST /branches`, `PATCH /branches/{id}` |
 | Users | `user/controller/UserController` | `GET /users`, `GET /users/{id}`, `POST /users`, `PATCH /users/{id}` |
-| Org settings | `organization/controller/OrgSettingsController` | `GET /organization`, `PATCH /organization` |
+| Org settings | `organization/controller/OrgSettingsController` | `GET /organization`, `PATCH /organization` (name, multi-branch toggle, cash countersign threshold, digest opt-in) |
 | Masters | `masters/controller/MastersController` | `GET /masters/{type}`, `GET /masters/{type}/{id}`, `GET /masters/{type}/usage` (90-day use counts, deactivation guard), `POST /masters/{type}` (Owner), `PATCH /masters/{type}/{id}` (Owner) |
 | Budgets | `budget/controller/BudgetController` | `GET /budgets?month=YYYYMM`, `PUT /budgets` (Owner upsert `{categoryId, monthKey, capAmount}`; caps inform, never block) |
 | Receivers | `receiver/controller/ReceiverController` | `GET /receivers`, `GET /receivers/{id}`, `POST /receivers`, `PATCH /receivers/{id}` |
-| Customers | `customer/controller/CustomerController` | `GET /customers`, `GET /customers/{id}`, `GET /customers/{id}/history`, `POST /customers`, `PATCH /customers/{id}` |
+| Customers | `customer/controller/CustomerController` | `GET /customers`, `GET /customers/{id}`, `GET /customers/{id}/history`, `GET /customers/{id}/credit-status` (exposure vs limit, warn-first), `POST /customers`, `PATCH /customers/{id}` (incl. `creditLimit`) |
 | Vehicles | `vehicle/controller/VehicleController` | `GET /vehicles`, `POST /vehicles` (lookup + deduped create; number normalised) |
-| Job cards | `jobcard/controller/JobCardController` | `POST /job-cards` (existing or inline customer/vehicle create), `GET /job-cards/{id}` (derived `{branchCode}-JC-{id}` ref), `PATCH /job-cards/{id}` (invoiceNo, invoiceAmount/clear, vehicleNo, dbmId, b2b, gstNo, categoryId, businessStatusId), `POST /job-cards/{id}/close-claim` (FM) |
+| Job cards | `jobcard/controller/JobCardController` | `POST /job-cards` (existing or inline customer/vehicle create), `GET /job-cards/{id}` (derived `{branchCode}-JC-{id}` ref), `PATCH /job-cards/{id}` (invoiceNo, invoiceAmount/clear, vehicleNo, dbmId, b2b, gstNo, categoryId, businessStatusId, serviceDueDate/clear, stuckReason), `POST /job-cards/{id}/close-claim` (FM), `GET /job-cards/board` (WIP, oldest first), `GET /job-cards/renewals` (overdue + 45d) |
 | Receipts | `receive/controller/ReceiveDocumentController` | `POST /receipts`, `GET /receipts/{id}`, `POST /receipts/{id}/submit`, `POST /receipts/{id}/resubmit`, `POST /receipts/{id}/lines`, `PATCH /receipts/{id}/lines/{lineNo}`, `DELETE /receipts/{id}/lines/{lineNo}`, `POST|GET /receipts/{id}/attachments`, `POST|GET /receipts/{id}/lines/{lineNo}/attachments` |
-| Expenses | `expense/controller/ExpenseDocumentController` | `POST /expenses`, `GET /expenses/{id}`, `PATCH /expenses/{id}`, `POST /expenses/{id}/submit`, `POST /expenses/{id}/resubmit`, `POST /expenses/{id}/transfer-to-claim`, `POST /expenses/{id}/lines`, `PATCH /expenses/{id}/lines/{lineNo}`, `DELETE /expenses/{id}/lines/{lineNo}`, `POST|GET /expenses/{id}/attachments`, `POST|GET /expenses/{id}/lines/{lineNo}/attachments` |
+| Expenses | `expense/controller/ExpenseDocumentController` | `POST /expenses`, `GET /expenses/{id}`, `GET /expenses/awaiting-bills` (parked on 'Awaiting Receipt', oldest first), `PATCH /expenses/{id}`, `POST /expenses/{id}/submit`, `POST /expenses/{id}/resubmit`, `POST /expenses/{id}/transfer-to-claim`, `POST /expenses/{id}/lines`, `PATCH /expenses/{id}/lines/{lineNo}`, `DELETE /expenses/{id}/lines/{lineNo}`, `POST|GET /expenses/{id}/attachments`, `POST|GET /expenses/{id}/lines/{lineNo}/attachments` |
 | Cash docs | `cash/controller/CashDocumentController` | `POST /cash-documents`, `GET /cash-documents`, `GET /cash-documents/{id}`, `PATCH /cash-documents/{id}`, `POST /cash-documents/{id}/submit`, `POST /cash-documents/{id}/resubmit`, `DELETE /cash-documents/{id}` |
-| Cash day | `cash/controller/CashController` | `GET /cash/drawer`, `POST /cash/opening`, `POST|GET /cash/close-day` |
+| Cash day | `cash/controller/CashController` | `GET /cash/drawer`, `POST /cash/opening`, `POST|GET /cash/close-day`, `POST /cash/close-day/{id}/countersign` (Accountant, threshold breaches) |
 | Cash reopen | `cash/controller/CashReopenController` | `POST /cash/reopen-requests` (Cashier, reason required), `GET /cash/reopen-requests` (Acct/FM/Owner), `POST /cash/reopen-requests/{id}/approve|reject` (FM) |
 | Review | `review/controller/ReviewController` | `GET /review/receipts|expenses|cash`, `GET /review/fm/receipts|expenses|cash`, `POST /receipts/{id}/verify|query|reject`, `POST /receipts/bulk-verify`, `POST /receipts/bulk-approve` (FM), `POST /receipts/{id}/lines/{lineNo}/override`, `POST /receipts/{id}/approve`, `POST /expenses/{id}/verify|bulk-verify|query|reject`, `POST /expenses/bulk-approve` (FM), `POST /expenses/{id}/lines/{lineNo}/override`, `POST /expenses/{id}/close`, `POST /expenses/{id}/approve`, `POST /cash-documents/{id}/verify|approve|query|reject` |
 | Search | `search/controller/SearchController` | `GET /search?q=` (also matches UTR/transaction-ref last-4, doc numbers, vehicle/customer/job-card) |
 | AI assistant | `ai/controller/AiController` | `POST /ai/ask`, `GET /ai/brief`, `GET /ai/benchmark`, `GET /ai/anomalies`, `GET /ai/risk`, `GET /ai/queries/roots`, `GET /ai/claims/insights`, `GET /ai/cash/advice`, `GET /ai/close/checklist`, `GET /ai/receivers/duplicates`, `GET /ai/masters/health`, `GET /ai/limits/advice`, `GET /ai/search` (all read-only; only write is `ai_query_log` trace row) |
 | My Entries | `myentries/controller/MyEntriesController` | `GET /my-entries` |
+| Follow-ups | `followup/controller/FollowupController` | `GET /followups` (`?overdueOnly=`), `GET /followups/defaulters` (ranked by exposure), `POST /followups` (open/re-promise), `POST /followups/{id}/close` |
+| Messaging | `messaging/controller/MessageController` | `GET /messages/templates` (defaults seeded), `GET /messages/log`, `POST /messages/send` (nightly owner digest runs 20:00 IST when opted in) |
+| Claim actions | `jobcard/controller/ClaimActionController` | `GET /claim-actions` (open, most overdue first), `GET /claim-actions/job-card/{jobCardId}`, `POST /claim-actions` (FM/Owner), `POST /claim-actions/{id}/complete` |
+| Reconciliation | `recon/controller/ReconController` | `GET /recon/batches`, `GET /recon/batches/{batchId}/lines`, `POST /recon/upload` (CSV `date,utr,amount[,narration]`), `POST /recon/lines/{lineId}/confirm|ignore` (match explains only, never moves money) |
+| Staff advances | `staff/controller/StaffController` | `GET /staff` (with derived outstanding), `POST /staff`, `POST /staff/{staffId}/deactivate`, `GET|POST /staff/{staffId}/entries` (ADVANCE/RECOVERY, never edited) |
+| Estimates | `estimate/controller/EstimateController` | `GET /estimates?jobCardId=`, `POST /estimates` (supersedes live), `POST /estimates/{id}/approve|reject` (FM/Owner) |
+| Ledger | `ledger/controller/LedgerController` | `GET /ledger/customers/{customerId}/statement` (read-only over history) |
 | Dashboard | `dashboard/controller/DashboardController` | `GET /dashboard/summary` (`period=today|mtd|custom`, `?from=&to=` custom range), `GET /dashboard/outstanding`, `GET /dashboard/activity` |
-| Override audit | `audit/controller/OverrideAuditController` | `GET /override-audit` (Owner+FM, filterable user/branch/date) |
+| Override audit | `audit/controller/OverrideAuditController` | `GET /override-audit` (Owner+FM+Auditor, filterable user/branch/date) |
 | Attachments | `attachment/controller/AttachmentController` | `GET /attachments/{id}`, `DELETE /attachments/{id}`, `GET /attachments/raw` (public w/ signature) |
 
 Docs for every row above come from annotations (`@Operation`/`@Tag`), not a

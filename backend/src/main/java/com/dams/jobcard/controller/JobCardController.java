@@ -4,6 +4,9 @@ import com.dams.jobcard.dto.CloseClaimRequest;
 import com.dams.jobcard.dto.JobCardCreateRequest;
 import com.dams.jobcard.dto.JobCardPatchRequest;
 import com.dams.jobcard.dto.JobCardResponse;
+import com.dams.jobcard.dto.RenewalRow;
+import com.dams.jobcard.dto.WipRow;
+import com.dams.jobcard.service.BoardService;
 import com.dams.jobcard.service.ClaimCloseService;
 import com.dams.jobcard.service.JobCardService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -28,10 +31,13 @@ public class JobCardController {
 
     private final JobCardService jobCardService;
     private final ClaimCloseService claimCloseService;
+    private final BoardService boardService;
 
-    public JobCardController(JobCardService jobCardService, ClaimCloseService claimCloseService) {
+    public JobCardController(JobCardService jobCardService, ClaimCloseService claimCloseService,
+                             BoardService boardService) {
         this.jobCardService = jobCardService;
         this.claimCloseService = claimCloseService;
+        this.boardService = boardService;
     }
 
     @PostMapping
@@ -60,5 +66,19 @@ public class JobCardController {
     @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
     public JobCardResponse closeClaim(@PathVariable Long id, @Valid @RequestBody CloseClaimRequest request) {
         return claimCloseService.closeClaim(id, request);
+    }
+
+    @GetMapping("/board")
+    @Operation(summary = "WIP floor board: open job cards oldest first (FEAT-50)")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','AUDITOR')")
+    public java.util.List<WipRow> board() {
+        return boardService.wip();
+    }
+
+    @GetMapping("/renewals")
+    @Operation(summary = "Service/AMC dues: overdue + next 45 days (FEAT-39)")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER','AUDITOR')")
+    public java.util.List<RenewalRow> renewals() {
+        return boardService.renewals();
     }
 }

@@ -28,6 +28,9 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Set;
 
@@ -95,12 +98,26 @@ public class AttachmentService {
         a.setFilename(safeFilename(file.getOriginalFilename()));
         a.setContentType(file.getContentType());
         a.setSizeBytes(content.length);
+        // FEAT-37: content hash for exact-duplicate detection. Same bytes twice
+        // in one org = the same bill attached twice — warned, never blocked.
+        a.setSha256(sha256Hex(content));
         a.setUploadedBy(branchScope.currentUserId());
         a = attachmentRepo.save(a);
 
         log.info("Attachment uploaded: orgId={} {} #{} attachmentId={} bytes={}",
             orgId, parentType, parentId, a.getId(), content.length);
-        return AttachmentResponse.of(a);
+        java.util.List<AttachmentResponse.DuplicateRef> duplicates = attachmentRepo
+            .findByOrgIdAndSha256AndIdNot(orgId, a.getSha256(), a.getId()).stream()
+            .map(d -> new AttachmentResponse.DuplicateRef(
+                d.getId(), d.getParentType().name(), d.getParentId(), d.getFilename()))
+            .toList();
+        if (!duplicates.isEmpty()) {
+            // A warning in the response and the log — not an audit event and not
+            // a block: honest re-uploads (same bill for estimate + claim) exist.
+            log.warn("Duplicate bill photo: orgId={} attachmentId={} matches {} other(s)",
+                orgId, a.getId(), duplicates.size());
+        }
+        return AttachmentResponse.of(a, duplicates);
     }
 
     @Transactional(readOnly = true)
@@ -264,5 +281,15 @@ public class AttachmentService {
         }
         String base = original.substring(original.replace('\\', '/').lastIndexOf('/') + 1);
         return base.length() > 200 ? base.substring(base.length() - 200) : base;
+    }
+
+    /** SHA-256 hex of the uploaded bytes (FEAT-37 duplicate detection). */
+    private static String sha256Hex(byte[] content) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
+        } catch (NoSuchAlgorithmException e) {
+            // SHA-256 is guaranteed on every JDK — this is defensive, not expected.
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
     }
 }

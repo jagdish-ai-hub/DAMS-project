@@ -162,8 +162,24 @@ public class ExpenseDocumentService {
         return assemble(doc);
     }
 
-    /** Resolve a document's {@code lineNo} to the expense-line id — for the line attachment endpoints. */
+    /**
+     * Expenses parked waiting for their bills (FEAT-47). Matches the seeded
+     * 'Awaiting Receipt' business status by name; if the org renamed or
+     * removed that master row, the list is empty rather than wrong.
+     * Branch-scoped like every other expense read.
+     */
     @Transactional(readOnly = true)
+    public java.util.List<ExpenseDocumentResponse> awaitingBills() {
+        Long orgId = TenantContext.requireOrgId();
+        return statusRepo.findByOrgIdAndNameIgnoreCase(orgId, "Awaiting Receipt")
+            .map(status -> expenseDocumentRepo
+                .findByOrgIdAndBusinessStatusIdOrderByCreatedAtAsc(orgId, status.getId()).stream()
+                .filter(doc -> branchScope.canSeeBranch(doc.getBranchId()))
+                .map(this::assemble).toList())
+            .orElse(java.util.List.of());
+    }
+
+    /** Resolve a document's {@code lineNo} to the expense-line id — for the line attachment endpoints. */    @Transactional(readOnly = true)
     public Long expenseLineId(Long documentId, Integer lineNo) {
         Long orgId = TenantContext.requireOrgId();
         load(orgId, documentId); // 404 / org check

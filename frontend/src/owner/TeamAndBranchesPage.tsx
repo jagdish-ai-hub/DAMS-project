@@ -13,6 +13,7 @@ const ROLE_OPTS: { value: Role; label: string; branchMode: 'none' | 'single' | '
   { value: 'FINANCE_MANAGER', label: 'Finance Manager', branchMode: 'none' },
   { value: 'ACCOUNTANT', label: 'Accountant', branchMode: 'multi' },
   { value: 'CASHIER', label: 'Cashier', branchMode: 'single' },
+  { value: 'AUDITOR', label: 'Auditor (read-only)', branchMode: 'none' },
 ]
 
 function apiError(err: unknown, fallback: string) {
@@ -212,6 +213,7 @@ function UserModal(props: { editing: TeamUser | null; branches: Branch[]; onClos
   const activeBranches = props.branches.filter((b) => b.active || props.editing)
   const [name, setName] = useState(props.editing?.name ?? '')
   const [email, setEmail] = useState(props.editing?.email ?? '')
+  const [phone, setPhone] = useState(props.editing?.phone ?? '')
   const [role, setRole] = useState<Role>(props.editing?.role ?? 'CASHIER')
   const [homeBranchId, setHomeBranchId] = useState<number | null>(
     props.editing?.homeBranchId ?? activeBranches[0]?.id ?? null,
@@ -233,6 +235,7 @@ function UserModal(props: { editing: TeamUser | null; branches: Branch[]; onClos
         name,
         email,
         role,
+        phone: phone.trim() || null,
         ...(branchMode === 'single' ? { homeBranchId } : {}),
         ...(branchMode === 'multi' ? { branchIds } : {}),
         ...(props.editing ? { active } : {}),
@@ -279,6 +282,9 @@ function UserModal(props: { editing: TeamUser | null; branches: Branch[]; onClos
         <Field label="Full name"><TextInput value={name} onChange={setName} required placeholder="e.g. Priya Nair" /></Field>
         <Field label="Email" hint={props.editing ? 'Login email cannot be changed here' : 'The invite is sent here'}>
           <TextInput value={email} onChange={setEmail} type="email" required disabled={!!props.editing} placeholder="you@example.com" />
+        </Field>
+        <Field label="Phone" hint="For the nightly digest and message alerts (optional)">
+          <TextInput value={phone} onChange={setPhone} placeholder="e.g. 9876543210" />
         </Field>
         <Field label="Role">
           <select value={role} onChange={(e) => setRole(e.target.value as Role)} style={inputStyle}>

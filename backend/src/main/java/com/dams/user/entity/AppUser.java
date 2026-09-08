@@ -56,6 +56,14 @@ public class AppUser {
     @Column(name = "password_hash")
     private String passwordHash;
 
+    /**
+     * Contact number (FEAT-36/42). Nullable — filled by the Owner on the Team
+     * page; used for the nightly digest and transactional messages. Never
+     * backfilled: contact data is never invented.
+     */
+    @Column(length = 20)
+    private String phone;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
     private Role role;

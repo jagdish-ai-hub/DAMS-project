@@ -13,14 +13,22 @@ import TeamAndBranchesPage from '../owner/TeamAndBranchesPage'
 import MastersPage from '../owner/MastersPage'
 import SettingsPage from '../settings/SettingsPage'
 import CashierHomePage from '../cashier/CashierHomePage'
+import EstimatesPage from '../cashier/EstimatesPage'
 import NewReceiptPage from '../cashier/NewReceiptPage'
 import NewExpensePage from '../cashier/NewExpensePage'
 import CashPage from '../cashier/CashPage'
 import MyEntriesPage from '../cashier/MyEntriesPage'
 import ReviewQueuePage from '../accountant/ReviewQueuePage'
+import AwaitingBillsPage from '../accountant/AwaitingBillsPage'
+import ReconPage from '../accountant/ReconPage'
 import FmQueuePage from '../finance/FmQueuePage'
+import ClaimsChasePage from '../finance/ClaimsChasePage'
 import OverrideAuditPage from '../overrideaudit/OverrideAuditPage'
 import DashboardPage from '../owner/DashboardPage'
+import ReceivablesPage from '../owner/ReceivablesPage'
+import FloorPage from '../owner/FloorPage'
+import MessagesPage from '../owner/MessagesPage'
+import StaffPage from '../owner/StaffPage'
 import AskDamsPanel from '../owner/AskDamsPanel'
 
 type NavItem = { to: string; label: string; end?: boolean }
@@ -35,23 +43,48 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   ],
   OWNER: [
     { to: '/app', label: 'Dashboard', end: true },
+    { to: '/app/receivables', label: 'Dues' },
+    { to: '/app/floor', label: 'Floor' },
+    { to: '/app/claims-chase', label: 'Chase' },
+    { to: '/app/messages', label: 'Messages' },
+    { to: '/app/recon', label: 'Reconcile' },
+    { to: '/app/staff', label: 'Staff' },
     { to: '/app/team', label: 'Team & Branches' },
     { to: '/app/masters', label: 'Masters' },
     { to: '/app/override-audit', label: 'Override Audit' },
     { to: '/app/settings', label: 'Settings' },
   ],
+  AUDITOR: [
+    { to: '/app', label: 'Dashboard', end: true },
+    { to: '/app/override-audit', label: 'Override Audit' },
+    { to: '/app/masters', label: 'Masters' },
+    { to: '/app/settings', label: 'Settings' },
+  ],
   FINANCE_MANAGER: [
     { to: '/app', label: 'Approvals & Claims', end: true },
+    { to: '/app/claims-chase', label: 'Chase' },
+    { to: '/app/receivables', label: 'Dues' },
+    { to: '/app/floor', label: 'Floor' },
+    { to: '/app/messages', label: 'Messages' },
+    { to: '/app/recon', label: 'Reconcile' },
+    { to: '/app/staff', label: 'Staff' },
     { to: '/app/override-audit', label: 'Override Audit' },
     { to: '/app/settings', label: 'Settings' },
   ],
   ACCOUNTANT: [
     { to: '/app', label: 'Review Queue', end: true },
+    { to: '/app/awaiting-bills', label: 'Bills' },
+    { to: '/app/recon', label: 'Reconcile' },
+    { to: '/app/receivables', label: 'Dues' },
+    { to: '/app/staff', label: 'Staff' },
+    { to: '/app/floor', label: 'Floor' },
     { to: '/app/settings', label: 'Settings' },
   ],
   CASHIER: [
     { to: '/app', label: 'Home', end: true },
     { to: '/app/cash', label: 'Cash' },
+    { to: '/app/receivables', label: 'Dues' },
+    { to: '/app/floor', label: 'Floor' },
     { to: '/app/my-entries', label: 'My Entries' },
     { to: '/app/settings', label: 'Settings' },
   ],
@@ -138,11 +171,14 @@ export default function AppShell() {
   const isCashier = user.role === 'CASHIER'
   const isAccountant = user.role === 'ACCOUNTANT'
   const isFinanceManager = user.role === 'FINANCE_MANAGER'
+  const isAuditor = user.role === 'AUDITOR'
   const navItems = NAV_BY_ROLE[user.role]
 
   const homeElement = isSuperAdmin
     ? <Navigate to="/app/organizations" replace />
-    : isCashier
+    : isAuditor
+      ? <DashboardPage />
+      : isCashier
       ? <CashierHomePage />
       : isAccountant
         ? <ReviewQueuePage />
@@ -322,12 +358,20 @@ export default function AppShell() {
             <Route index element={homeElement} />
             {isSuperAdmin && <Route path="organizations" element={<OrganizationsPage />} />}
             {isOwner && <Route path="team" element={<TeamAndBranchesPage />} />}
-            {isOwner && <Route path="masters" element={<MastersPage />} />}
+            {(isOwner || isAuditor) && <Route path="masters" element={<MastersPage readOnly={isAuditor} />} />}
             {isCashier && <Route path="new-receipt" element={<NewReceiptPage />} />}
             {isCashier && <Route path="new-expense" element={<NewExpensePage />} />}
-            {isCashier && <Route path="cash" element={<CashPage />} />}
+            {(isCashier || isAccountant) && <Route path="cash" element={<CashPage />} />}
             {isCashier && <Route path="my-entries" element={<MyEntriesPage />} />}
-            {(isOwner || isFinanceManager) && <Route path="override-audit" element={<OverrideAuditPage />} />}
+            {(isOwner || isFinanceManager || isAuditor) && <Route path="override-audit" element={<OverrideAuditPage />} />}
+            {(isOwner || isFinanceManager || isAccountant || isCashier) && <Route path="receivables" element={<ReceivablesPage />} />}
+            {(isOwner || isFinanceManager || isAccountant || isCashier) && <Route path="floor" element={<FloorPage />} />}
+            {(isOwner || isFinanceManager) && <Route path="claims-chase" element={<ClaimsChasePage />} />}
+            {(isOwner || isFinanceManager || isAccountant) && <Route path="messages" element={<MessagesPage />} />}
+            {(isOwner || isFinanceManager || isAccountant) && <Route path="recon" element={<ReconPage />} />}
+            {(isOwner || isFinanceManager || isAccountant) && <Route path="staff" element={<StaffPage />} />}
+            {(isCashier || isAccountant || isFinanceManager || isOwner) && <Route path="estimates" element={<EstimatesPage />} />}
+            {(isAccountant || isFinanceManager || isOwner) && <Route path="awaiting-bills" element={<AwaitingBillsPage />} />}
             <Route path="settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/app" replace />} />
           </Routes>

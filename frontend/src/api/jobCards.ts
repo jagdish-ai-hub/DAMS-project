@@ -30,6 +30,8 @@ export interface JobCard {
   claimClosedAt: string | null
   canRecordPayment: boolean
   createdAt: string
+  serviceDueDate: string | null
+  stuckReason: string | null
 }
 
 export interface CloseClaimRequest {
@@ -51,6 +53,7 @@ export interface JobCardCreateRequest {
   invoiceAmount?: number
   b2b?: boolean
   gstNo?: string
+  serviceDueDate?: string | null
 }
 
 export interface JobCardPatchRequest {
@@ -63,6 +66,36 @@ export interface JobCardPatchRequest {
   gstNo?: string
   categoryId?: number
   businessStatusId?: number
+  serviceDueDate?: string | null
+  clearServiceDueDate?: boolean
+  stuckReason?: string | null
+}
+
+export interface WipRow {
+  jobCardId: number
+  reference: string
+  branchId: number
+  branchCode: string
+  customerName: string
+  vehicleNo: string | null
+  categoryName: string
+  businessStatusName: string
+  openedDate: string
+  ageDays: number
+  stuckReason: string | null
+  pendingAmount: number
+}
+
+export interface RenewalRow {
+  jobCardId: number
+  reference: string
+  branchId: number
+  branchCode: string
+  customerName: string
+  customerPhone: string | null
+  vehicleNo: string | null
+  serviceDueDate: string
+  daysUntilDue: number
 }
 
 export const jobCardsApi = {
@@ -77,5 +110,11 @@ export const jobCardsApi = {
   },
   closeClaim(id: number, data: CloseClaimRequest) {
     return api.post<JobCard>(`/api/v1/job-cards/${id}/close-claim`, data)
+  },
+  board() {
+    return api.get<WipRow[]>('/api/v1/job-cards/board')
+  },
+  renewals() {
+    return api.get<RenewalRow[]>('/api/v1/job-cards/renewals')
   },
 }

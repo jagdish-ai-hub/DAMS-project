@@ -44,4 +44,20 @@ public class JobCardPatchRequest {
 
     /** If true, clears the invoice amount on the job card (sets it to null). */
     private Boolean clearInvoiceAmount;
+
+    /**
+     * Next service/AMC due date (FEAT-39). Null = leave unchanged. Never
+     * defaulted — nobody gets nagged by accident.
+     */
+    private java.time.LocalDate serviceDueDate;
+
+    /** If true, clears the service due date (no reminder wanted). */
+    private Boolean clearServiceDueDate;
+
+    /**
+     * Why a WIP/hold job card isn't moving (FEAT-50). Null = leave unchanged;
+     * blank clears it when the status moves on.
+     */
+    @Size(max = 500, message = "Stuck reason must be at most 500 characters")
+    private String stuckReason;
 }

@@ -35,6 +35,14 @@ public class Customer {
     @Column(length = 32)
     private String phone;
 
+    /**
+     * B2B ceiling (FEAT-46). NULL = no limit (existing behaviour). Enforcement
+     * is warn-first in v1: posting is never blocked, but the counter sees
+     * exposure-vs-limit and the defaulter view ranks breaches first.
+     */
+    @Column(name = "credit_limit", precision = 14, scale = 2)
+    private java.math.BigDecimal creditLimit;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 }

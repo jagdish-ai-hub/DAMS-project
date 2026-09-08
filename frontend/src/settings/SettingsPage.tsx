@@ -4,7 +4,7 @@ import { orgSettingsApi, type OrgSettings } from '../api/orgSettings'
 import { useAuth } from '../auth/useAuth'
 import { branchLabel, useBranchNames } from '../shared/useBranchNames'
 import type { Role } from '../auth/AuthContext'
-import { card, ErrorBanner, Field, ghostBtn, primaryBtn, Spinner, TextInput, initials } from '../shell/ui'
+import { card, ErrorBanner, Field, ghostBtn, inputStyle, primaryBtn, Spinner, TextInput, initials } from '../shell/ui'
 
 function apiError(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback
@@ -16,6 +16,7 @@ const ROLE_LABEL: Record<Role, string> = {
   FINANCE_MANAGER: 'Finance Manager',
   ACCOUNTANT: 'Accountant',
   CASHIER: 'Cashier',
+  AUDITOR: 'Auditor (read-only)',
 }
 
 export default function SettingsPage() {
@@ -156,7 +157,7 @@ function OrgSettingsForm() {
     orgSettingsApi.get().then((r) => setSettings(r.data)).catch((e) => setError(apiError(e, 'Could not load settings.')))
   }, [])
 
-  async function save(patch: { name?: string; multiBranchCashierAccess?: boolean }, key: string) {
+  async function save(patch: { name?: string; multiBranchCashierAccess?: boolean; cashVarianceCountersignThreshold?: number | null; digestEnabled?: boolean }, key: string) {
     setError('')
     setSavingKey(key)
     try {
@@ -205,6 +206,51 @@ function OrgSettingsForm() {
           <div style={{ color: 'var(--muted)', fontSize: '0.8rem', marginTop: 2 }}>
             When on, cashiers can search and see customers &amp; job cards across all branches.
             It never changes which branch a cashier's own documents post under. Default off.
+          </div>
+        </span>
+      </label>
+
+      <div style={{ fontSize: '0.85rem' }}>
+        <strong>Cash variance countersign threshold (₹)</strong>
+        <div style={{ color: 'var(--muted)', fontSize: '0.8rem', margin: '2px 0 6px' }}>
+          A day-close whose |variance| exceeds this parks for an accountant's countersign instead of
+          locking clean. Empty = off. Below-threshold days close exactly as before.
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            type="number"
+            min={0}
+            value={settings.cashVarianceCountersignThreshold ?? ''}
+            onChange={(e) => {
+              const v = e.target.value === '' ? null : Number(e.target.value)
+              setSettings({ ...settings, cashVarianceCountersignThreshold: v })
+            }}
+            placeholder="e.g. 2000"
+            style={{ ...inputStyle, width: 160 }}
+          />
+          <button
+            style={{ ...ghostBtn, minHeight: 38, padding: '0 16px' }}
+            disabled={savingKey === 'threshold'}
+            onClick={() => save({ cashVarianceCountersignThreshold: settings.cashVarianceCountersignThreshold }, 'threshold')}
+          >
+            {savingKey === 'threshold' ? '…' : 'Save'}
+          </button>
+        </div>
+      </div>
+
+      <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: '0.85rem' }}>
+        <input
+          type="checkbox"
+          checked={settings.digestEnabled}
+          disabled={savingKey === 'digest'}
+          onChange={(e) => save({ digestEnabled: e.target.checked }, 'digest')}
+          style={{ marginTop: 3 }}
+        />
+        <span>
+          <strong>Nightly owner digest (WhatsApp, 8pm)</strong>
+          <div style={{ color: 'var(--muted)', fontSize: '0.8rem', marginTop: 2 }}>
+            Pushes today's collections, spend, pending reviews and unclosed branches to every owner
+            with a phone number on the Team page. Until a real provider is configured, sends are logged.
           </div>
         </span>
       </label>

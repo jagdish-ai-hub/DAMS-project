@@ -10,6 +10,7 @@ const ROLE_LABEL: Record<Role, string> = {
   FINANCE_MANAGER: 'Finance Manager',
   ACCOUNTANT: 'Accountant',
   CASHIER: 'Cashier',
+  AUDITOR: 'Auditor (read-only)',
 }
 
 /**

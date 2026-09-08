@@ -1,5 +1,6 @@
 package com.dams.customer.controller;
 
+import com.dams.customer.dto.CreditStatusResponse;
 import com.dams.customer.dto.CustomerHistoryResponse;
 import com.dams.customer.dto.CustomerRequest;
 import com.dams.customer.dto.CustomerResponse;
@@ -33,23 +34,30 @@ public class CustomerController {
 
     @GetMapping
     @Operation(summary = "Search customers by name or phone (?q=)")
-    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER')")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER','AUDITOR')")
     public List<CustomerResponse> list(@RequestParam(name = "q", required = false) String q) {
         return customerService.search(q);
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Get one customer with their vehicles")
-    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER')")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER','AUDITOR')")
     public CustomerResponse get(@PathVariable Long id) {
         return customerService.get(id);
     }
 
     @GetMapping("/{id}/history")
     @Operation(summary = "Customer history card — totals, job cards, payment timeline")
-    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER')")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER','AUDITOR')")
     public CustomerHistoryResponse history(@PathVariable Long id) {
         return customerService.history(id);
+    }
+
+    @GetMapping("/{id}/credit-status")
+    @Operation(summary = "B2B exposure vs credit limit — warn-first, never blocks posting (FEAT-46)")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER','AUDITOR')")
+    public CreditStatusResponse creditStatus(@PathVariable Long id) {
+        return customerService.creditStatus(id);
     }
 
     @PostMapping

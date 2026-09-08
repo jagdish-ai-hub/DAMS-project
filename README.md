@@ -873,7 +873,9 @@ current-month dashboard data; `SEED_FORCE=1` adds another batch).
 
 ```bash
 cd backend  && mvn test      # backend unit + slice tests (incl. CrossOrgIsolationTest via Testcontainers — needs Docker locally, always runs in CI)
-cd frontend && npm test      # Vitest + React Testing Library
+cd backend  && mvn verify    # full suite + JaCoCo report (target/site/jacoco/) + 45% line-coverage gate
+cd frontend && npm test      # Vitest + React Testing Library (unit; e2e/ is excluded)
+cd frontend && npm run test:e2e  # Playwright multi-role flows (auth, cashier, review, owner) vs the prod build, API mocked
 cd frontend && npm run lint  # eslint
 cd frontend && npm run build # tsc + vite build
 ```

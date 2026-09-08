@@ -45,6 +45,22 @@
 | **FEAT-32** | **Cash-Day Reopen by Request** | Cashier, FM | Locked-day miscounts fixed via request (reason mandatory) → FM approve removes the close / reject keeps it; fully audited, no silent reopen. | `backend/.../cash/`, `V24__cash_close_reopen_request.sql`, `frontend/src/api/cash.ts`, `cashier/CashPage.tsx`, `finance/FmQueuePage.tsx` | ✅ Done |
 | **FEAT-33** | **Owner Dashboard Helper Layer** | Owner | Evening-brief one-liner, getting-started checklist, staff scorecard + 14-day register (from existing aggregates), collapsible AI hub. | `frontend/src/owner/DashboardPage.tsx`, `AiInsightsSection.tsx` | ✅ Done |
 | **FEAT-34** | **UTR / Transaction-Ref Search** | All Roles (scoped) | `GET /search` also matches settlement/expense transaction refs (min 4 chars), resolved to the job card's customer. | `backend/.../search/SearchService.java` | ✅ Done |
+| **FEAT-35** | **Receivable Follow-up (dues with owners + dates)** | Cashier, Accountant, Owner | Due date + customer promise per credit doc; overdue derived live; defaulter view ranked by exposure; WhatsApp reminders. | `V25__credit_followup.sql`, `backend/.../followup/`, `frontend/src/api/followups.ts`, `owner/ReceivablesPage.tsx` | ✅ Done |
+| **FEAT-36** | **Message Provider Seam + Templates + Log** | All (system-sent) | Org `{{variable}}` templates, logging sender by default (WhatsApp plugs in later), every attempt audited. | `V26__messaging.sql`, `V35__org_messaging_flags.sql`, `V36__user_phone.sql`, `backend/.../messaging/`, `frontend/src/api/messaging.ts`, `owner/MessagesPage.tsx` | ✅ Done |
+| **FEAT-37** | **Duplicate Bill-Photo Detection** | Cashier, Accountant, FM | SHA-256 at upload; same bytes twice warns (never blocks) with the other location. | `V27__attachment_sha256.sql`, `attachment/.../AttachmentService.java`, `AttachmentResponse.duplicateOf`, `cashier/AttachmentsPanel.tsx` | ✅ Done |
+| **FEAT-38** | **Claim Next-Action Tracker** | FM, Owner | Next step + owner + due date per open claim; overdue derived; completing keeps history. | `V28__claim_action.sql`, `backend/.../jobcard/` (`ClaimAction*`), `frontend/src/api/claimActions.ts`, `finance/ClaimsChasePage.tsx` | ✅ Done |
+| **FEAT-39** | **Service/AMC Renewal Reminders** | Owner, Cashier | `service_due_date` per job card (never defaulted); renewals view (overdue + 45d) with WhatsApp nudges. | `V34__jobcard_followup_fields.sql`, `jobcard/.../BoardService.java` (`renewals`), `cashier/CashierHomePage.tsx` (due editor), `owner/FloorPage.tsx` | ✅ Done |
+| **FEAT-40** | **Bank Statement Reconciliation** | Accountant, FM, Owner | Statement CSV upload; EXACT (UTR+amount) and AMOUNT_DATE (±2d) suggestions; confirm/ignore; matching never moves money. | `V29__bank_reconciliation.sql`, `backend/.../recon/`, `frontend/src/api/recon.ts`, `accountant/ReconPage.tsx` | ✅ Done |
+| **FEAT-41** | **Large-Variance Countersign** | Cashier, Accountant, Owner | Close breaching the org threshold parks PENDING; accountant confirms (never own close). Off when threshold unset. | `V30__cash_countersign.sql`, `cash/.../CashCloseService.java` (`countersign`), `POST /cash/close-day/{id}/countersign`, `cashier/CashPage.tsx` (accountant read + button), `settings/SettingsPage.tsx` (threshold) | ✅ Done |
+| **FEAT-42** | **Nightly Owner Digest (WhatsApp 8pm)** | Owner | Collections/spend/net, pending reviews, unclosed branches pushed where the owner is. Opt-in + owner phone required. | `messaging/.../DigestService.java` (`@Scheduled` 20:00 IST), `organization.digest_enabled`, `settings/SettingsPage.tsx` (toggle), `owner/TeamAndBranchesPage.tsx` (phone) | ✅ Done |
+| **FEAT-43** | **Shareable Customer Ledger** | Cashier, Owner | Dues/payments/balance across all vehicles; print like the slip or share on WhatsApp. Read-only over history. | `backend/.../ledger/`, `frontend/src/api/ledger.ts`, `cashier/StatementModal.tsx`, history Statement button | ✅ Done |
+| **FEAT-44** | **Staff Advance Ledger** | Cashier, Accountant, Owner | ADVANCE out / RECOVERY in per staff; outstanding derived; recovery can't exceed outstanding; never edited/deleted. | `V31__staff_advance.sql`, `backend/.../staff/`, `frontend/src/api/staff.ts`, `owner/StaffPage.tsx` | ✅ Done |
+| **FEAT-45** | **Auditor Read-Only Role** | Auditor (CA) | Org-wide read (dashboard, audit, masters, follow-ups, exports); zero writes; no review queues. | `user/.../Role.java` (+`BranchScope`, `UserService`, phone), controller authorities, `shell/AppShell.tsx` nav/routes, `owner/MastersPage.tsx` (`readOnly`) | ✅ Done |
+| **FEAT-46** | **B2B Credit Limits (warn-first)** | Cashier, Accountant, Owner | Limit per customer; exposure = Σ pending; breach banners the counter + ranks defaulters; posting never blocked. | `V32__customer_credit_limit.sql`, `customer/...` (`creditStatus`), `GET /customers/{id}/credit-status`, history banner | ✅ Done |
+| **FEAT-47** | **Awaiting-Bills Herd** | Accountant, FM | Expenses parked on 'Awaiting Receipt', oldest first; attach the bill on the entry to clear. | `expense/...` (`awaitingBills`), `GET /expenses/awaiting-bills`, `frontend/src/api/expenses.ts`, `accountant/AwaitingBillsPage.tsx` | ✅ Done |
+| **FEAT-48** | **Estimates (quote before work)** | Cashier, FM, Owner | Draft → Approve/Reject; re-quote supersedes (history kept); variance vs final invoice on every response. | `V33__estimate.sql`, `backend/.../estimate/`, `frontend/src/api/estimates.ts`, `cashier/EstimatesPage.tsx` (`?jobCardId=`), history Quote button | ✅ Done |
+| **FEAT-49** | **Offline Outbox (queue-and-sync)** | Cashier | Network failures queue creates locally; sync posts them as drafts. Edits/submits need the server and fail loudly. | `frontend/src/shared/outbox.ts`, `shared/OfflineBanner.tsx`, hooked into receipt/expense/cash creates | ✅ Done |
+| **FEAT-50** | **Floor / WIP Board** | Owner, FM, Accountant, Cashier | Open jobs oldest first with stuck reasons + pending; read-only visibility, explicitly not workshop management. | `jobcard/.../BoardService.java` (`wip`), `GET /job-cards/board`, history stuck-reason editor, `owner/FloorPage.tsx` | ✅ Done |
 
 ---
 
@@ -295,3 +311,76 @@
 ### FEAT-34: UTR / Transaction-Ref Search
 - **Dealership Context:** "Money left, which entry was it?" — accountants search by the UTR fragment on the bank SMS.
 - **Files:** `backend/.../search/SearchService.java` (settlement/expense `transaction_ref` contains-match, min 4 chars, org + branch scoped, resolved to the job card's customer as match field `"UTR"`). Tests: `SearchBranchScopeTest` UTR cases.
+
+## 5. Receivables-to-Floor Batch (FEAT-35 → FEAT-50) — ✅ Done
+
+> Ranked by rupees protected ÷ build size (see `docs/PRODUCT_ROADMAP.md` Part 2).
+> New migrations V25–V36 (no applied migration edited); new packages `followup/`,
+> `messaging/`, `recon/`, `staff/`, `estimate/`, `ledger/` + job-card board/claim-action
+> extensions; `OrganizationPurgeService` covers every new table in FK-safe order;
+> AGENT.md API map updated alongside. Verified: backend 244 green (37 new),
+> `tsc`/`eslint`/vitest (45) clean, Playwright 29 green (12 new).
+
+### FEAT-35: Receivable Follow-up
+- **Dealership Context:** Credit dues aged silently — the outstanding list was display-only with no owner, date, or next step.
+- **Files:** `V25__credit_followup.sql` (one live row per doc, overdue derived never stored) + `followup/` package (`FollowupService`: open/re-promise/close, defaulter ranking by live outstanding, branch-scoped reads), `GET|POST /followups`, `GET /followups/defaulters`, `frontend/src/api/followups.ts`, `owner/ReceivablesPage.tsx` (promise form, overdue filter, Remind via FEAT-36, Collected). Tests: `FollowupServiceTest`.
+
+### FEAT-36: Message Provider Seam + Templates + Log
+- **Dealership Context:** The only outbound channel was a log-stub email; owners, drivers and fleet managers live on WhatsApp.
+- **Files:** `V26__messaging.sql` (templates + append-only log, defaults seeded per org) + `V35__org_messaging_flags.sql` (`digest_enabled`) + `V36__user_phone.sql`; `messaging/` package (`MessageSender` seam + `LoggingMessageSender`, `{{variable}}` renderer, LOGGED vs SENT vs FAILED), `GET /messages/templates|log`, `POST /messages/send`, `owner/MessagesPage.tsx` (send form, log). Tests: `MessagingServiceTest`.
+
+### FEAT-37: Duplicate Bill-Photo Detection
+- **Dealership Context:** The cheapest fraud is one bill photo attached to two claims; the risk score mentioned hashes nothing computed.
+- **Files:** `V27__attachment_sha256.sql` + `AttachmentService.upload` (SHA-256 over bytes, same-org lookup excluding self), `AttachmentResponse.duplicateOf`, `cashier/AttachmentsPanel.tsx` (amber warning banner, attach-anyway). Warn-only by design — estimate+claim re-uploads are honest.
+
+### FEAT-38: Claim Next-Action Tracker
+- **Dealership Context:** Aging buckets show old claims; nothing records the next step, so claims die from neglect and write off as pure loss.
+- **Files:** `V28__claim_action.sql` (no deletes — chase history matters at write-off) + `jobcard/` (`ClaimAction*`, `ClaimActionController`: FM/Owner writes, overdue derived), `frontend/src/api/claimActions.ts`, `finance/ClaimsChasePage.tsx`. Tests: `ClaimActionServiceTest`.
+
+### FEAT-39: Service/AMC Renewal Reminders
+- **Dealership Context:** AMC dates passed silently; lapsed AMCs are revenue walking to a competitor.
+- **Files:** `V34__jobcard_followup_fields.sql` (`service_due_date`, never defaulted) + `BoardService.renewals` (overdue + 45d, most-overdue first), `GET /job-cards/renewals`, history due-date editor, `owner/FloorPage.tsx` renewals tab with WhatsApp nudges. Tests: `BoardServiceTest`.
+
+### FEAT-40: Bank Statement Reconciliation
+- **Dealership Context:** QR/UPI lines typed with a UTR are reconciled by eye; unmatched money surfaces weeks later.
+- **Files:** `V29__bank_reconciliation.sql` (`recon_batch` + `recon_line`) + `recon/` package (CSV parse with IN/UK date formats, EXACT = UTR-last-12 + amount, AMOUNT_DATE = ±2d suggestion-only, one-line-one-match, confirm/ignore; matching never moves money), `GET|POST /recon/*`, `frontend/src/api/recon.ts`, `accountant/ReconPage.tsx`. Tests: `ReconMatchingTest`.
+
+### FEAT-41: Large-Variance Countersign
+- **Dealership Context:** The cashier counts, reports and closes their own day — variance is self-declared text, the weakest control in a cash business.
+- **Files:** `V30__cash_countersign.sql` (`countersign_status` + org threshold, NULL = off) + `CashCloseService.closeDay` (breach parks PENDING) and `countersign` (accountant confirms, never own close) + `POST /cash/close-day/{id}/countersign`, `cashier/CashPage.tsx` (accountant read mode + countersign button), `settings/SettingsPage.tsx` (threshold). Tests: `CashCountersignTest`.
+
+### FEAT-42: Nightly Owner Digest
+- **Dealership Context:** The morning brief lives in a dashboard the owner rarely opens; evening numbers travel by phone call.
+- **Files:** `messaging/.../DigestService.java` (`@Scheduled` 20:00 IST, per-org try/catch, `TenantContext` set/clear), reuses `DashboardService.summary`, opt-in + owner-phone skip rules, org toggle in Settings, phone on Team page.
+
+### FEAT-43: Shareable Customer Ledger
+- **Dealership Context:** "What do we owe across all our vehicles?" was read out from a screen; the slip covers one payment, nothing covers the account.
+- **Files:** `ledger/` package (read-only composition over `CustomerService.history`), `GET /ledger/customers/{id}/statement`, `frontend/src/api/ledger.ts`, `cashier/StatementModal.tsx` (print CSS like the slip + `wa.me` share), history Statement button.
+
+### FEAT-44: Staff Advance Ledger
+- **Dealership Context:** Staff advances live in a notebook; recovery-from-wages is disputed monthly.
+- **Files:** `V31__staff_advance.sql` (own staff master — neither customers nor receivers — plus append-only entries) + `staff/` package (outstanding derived, recovery capped at outstanding, deactivate-not-duplicate, inactive staff take nothing), `GET|POST /staff/*`, `frontend/src/api/staff.ts`, `owner/StaffPage.tsx`. Tests: `StaffServiceTest`.
+
+### FEAT-45: Auditor Read-Only Role
+- **Dealership Context:** The CA gets Excel dumps or someone's login. Both are bad.
+- **Files:** `Role.AUDITOR` (string-mapped, no DDL) + `BranchScope` org-wide + read authorities on dashboard/audit/export/customer-GETs/followups/claims/masters-GET/budgets-GET + `UserService` (org-wide binding, phone, label) + `shell/AppShell.tsx` (Dashboard/Audit/Masters nav, home = dashboard) + `owner/MastersPage.tsx` (`readOnly`: no Add/Edit/budget inputs, `ReceiversSection` too) + `ROLE_TO_HELP` reuses owner reading guides. Review queues excluded (action-dense). Tests: e2e auditor isolation + masters read-only.
+
+### FEAT-46: B2B Credit Limits (warn-first)
+- **Dealership Context:** B2B dues accumulate with no ceiling; the counter keeps extending credit past any sane limit.
+- **Files:** `V32__customer_credit_limit.sql` (NULL = no limit) + `CustomerService.creditStatus` (exposure = Σ pending) + `GET /customers/{id}/credit-status`, history breach banner, defaulter ranking input. Posting never blocked in v1 (hard block needs an Owner override path — v2).
+
+### FEAT-47: Awaiting-Bills Herd
+- **Dealership Context:** 'Awaiting Receipt' status existed but nobody herded it; month-end became a bill-chasing scramble with provisional Tally entries.
+- **Files:** `ExpenseDocumentService.awaitingBills` (matches the seeded status by name; empty — never wrong — if renamed) + `GET /expenses/awaiting-bills`, `frontend/src/api/expenses.ts`, `accountant/AwaitingBillsPage.tsx`.
+
+### FEAT-48: Estimates
+- **Dealership Context:** The job card carries only the final invoice; the agreed figure lives in conversation and disputes erupt at payment time.
+- **Files:** `V33__estimate.sql` (`estimate` + `estimate_line`, SUPERSEDED not deleted) + `estimate/` package (create totals, supersede-live, DRAFT-only decide, variance vs invoice on every response), `GET|POST /estimates`, `frontend/src/api/estimates.ts`, `cashier/EstimatesPage.tsx` (`?jobCardId=`), history Quote button. Tests: `EstimateServiceTest`.
+
+### FEAT-49: Offline Outbox
+- **Dealership Context:** No network = no records = end-of-day reconstruction from memory — the Excel-era failure mode DAMS exists to kill.
+- **Files:** `frontend/src/shared/outbox.ts` (localStorage queue, `isOfflineError` = no-response failures only) + `shared/OfflineBanner.tsx` (offline notice, queued list with discard, sync-as-draft one-by-one with navigation to the created draft, server rejections stay queued with reason), hooked into receipt/expense/cash-movement creates. Edits/submits/closes need the server and fail loudly. Tests: `shared/outbox.test.ts`.
+
+### FEAT-50: Floor / WIP Board
+- **Dealership Context:** `business_status` exists per job card but no view answers "what's in the bays, and what's stuck?" — idle bays are unbilled revenue.
+- **Files:** `BoardService.wip` (open cards, oldest first, stuck reason + pending via the batched calculator) + `GET /job-cards/board`, history stuck-reason editor (`PATCH /job-cards`), `owner/FloorPage.tsx`. Explicitly not workshop management (no scheduling, no inventory). Tests: `BoardServiceTest`.

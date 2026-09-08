@@ -11,6 +11,8 @@ import {
 import { card, ErrorBanner, inr, primaryBtn, ghostBtn, inputStyle, Spinner, istToday, fmtDateTime } from '../shell/ui'
 import AttachmentsPanel, { type LineTarget } from './AttachmentsPanel'
 import { useDraftRecovery } from '../shared/useDraftRecovery'
+import { isOfflineError, outboxEnqueue } from '../shared/outbox'
+import OfflineBanner from '../shared/OfflineBanner'
 import { useAuth } from '../auth/useAuth'
 
 /** The most recent accountant question / rejection reason, for the fix-and-resubmit banner. */
@@ -322,7 +324,13 @@ export default function NewExpensePage() {
         navigate(`/app/new-expense?editDoc=${data.id}`, { replace: true })
       }
     } catch (e) {
-      setError(apiError(e, 'Could not save the expense.'))
+      if (isOfflineError(e)) {
+        // FEAT-49: the network dropped — queue as a draft, sync from the banner later.
+        outboxEnqueue('expense', `Expense (${lines.length} line${lines.length === 1 ? '' : 's'})`, buildBody(false))
+        setNotice('Offline — queued on this device. It becomes a draft when you sync.')
+      } else {
+        setError(apiError(e, 'Could not save the expense.'))
+      }
     } finally {
       setBusy(false)
     }
@@ -563,6 +571,7 @@ export default function NewExpensePage() {
           {notice}
         </div>
       )}
+      <OfflineBanner />
       <ErrorBanner message={error} />
 
       {readOnly && loadedDoc && (

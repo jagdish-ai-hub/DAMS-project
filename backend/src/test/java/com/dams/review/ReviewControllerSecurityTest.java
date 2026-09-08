@@ -9,6 +9,7 @@ import com.dams.export.controller.ExportController;
 import com.dams.export.service.ExportService;
 import com.dams.jobcard.controller.JobCardController;
 import com.dams.jobcard.dto.JobCardResponse;
+import com.dams.jobcard.service.BoardService;
 import com.dams.jobcard.service.ClaimCloseService;
 import com.dams.jobcard.service.JobCardService;
 import com.dams.receive.dto.ReceiveDocumentResponse;
@@ -52,6 +53,8 @@ class ReviewControllerSecurityTest {
     private JobCardService jobCardService;
     @MockBean
     private ClaimCloseService claimCloseService;
+    @MockBean
+    private BoardService boardService;
     @MockBean
     private ExportService exportService;
     @MockBean

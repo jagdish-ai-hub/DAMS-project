@@ -28,7 +28,7 @@ function apiError(err: unknown, fallback: string) {
 /** Tolerant parse of GET /masters/{type}/usage — backend MasterUsageResponse is
  *  {id, name, useCount, usedLast90d}; older shapes {id, usedCount}/{id: count}
  *  are also accepted. Unknown shapes yield an empty map. */
-function toUsageMap(data: unknown): Record<number, number> {
+export function toUsageMap(data: unknown): Record<number, number> {
   const map: Record<number, number> = {}
   if (Array.isArray(data)) {
     for (const r of data as { id?: unknown; useCount?: unknown; usedCount?: unknown; count?: unknown }[]) {
@@ -45,7 +45,7 @@ function toUsageMap(data: unknown): Record<number, number> {
   return map
 }
 
-export default function MastersPage() {
+export default function MastersPage({ readOnly = false }: { readOnly?: boolean }) {
   const [tab, setTab] = useState(TABS[0])
   const [rows, setRows] = useState<MasterRow[]>([])
   const [categories, setCategories] = useState<MasterRow[]>([])
@@ -156,13 +156,15 @@ export default function MastersPage() {
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             )}
-            <button
-              style={{ ...primaryBtn(), minHeight: 36 }}
-              disabled={tab.extra === 'sub' && parentId == null}
-              onClick={() => setModal({ editing: null })}
-            >
-              + Add
-            </button>
+            {!readOnly && (
+              <button
+                style={{ ...primaryBtn(), minHeight: 36 }}
+                disabled={tab.extra === 'sub' && parentId == null}
+                onClick={() => setModal({ editing: null })}
+              >
+                + Add
+              </button>
+            )}
           </div>
 
           <ErrorBanner message={error} />
@@ -212,12 +214,15 @@ export default function MastersPage() {
                           categoryName={r.name}
                           monthKey={budgetMonth}
                           initialCap={budgetsByCat[r.id]}
+                          readOnly={readOnly}
                         />
                       </td>
                     )}
                     <td style={td}>{r.active ? <Badge tone="green">Active</Badge> : <Badge>Inactive</Badge>}</td>
                     <td style={{ ...td, textAlign: 'right' }}>
-                      <button style={{ ...ghostBtn, minHeight: 36, padding: '4px 12px' }} onClick={() => setModal({ editing: r })}>Edit</button>
+                      {!readOnly && (
+                        <button style={{ ...ghostBtn, minHeight: 36, padding: '4px 12px' }} onClick={() => setModal({ editing: r })}>Edit</button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -230,7 +235,7 @@ export default function MastersPage() {
         </section>
       </div>
 
-      <ReceiversSection />
+      <ReceiversSection readOnly={readOnly} />
 
       {modal && (
         <MasterModal
@@ -405,11 +410,12 @@ function MasterModal(props: {
  * Owner-only). Saves via POST /api/v1/budgets; failures surface inline and
  * never break the surrounding masters CRUD.
  */
-function BudgetCell({ categoryId, categoryName, monthKey, initialCap }: {
+function BudgetCell({ categoryId, categoryName, monthKey, initialCap, readOnly = false }: {
   categoryId: number
   categoryName: string
   monthKey: string
   initialCap: number | undefined
+  readOnly?: boolean
 }) {
   const [cap, setCap] = useState(initialCap != null ? String(initialCap) : '')
   const [savedCap, setSavedCap] = useState<number | undefined>(initialCap)
@@ -446,6 +452,7 @@ function BudgetCell({ categoryId, categoryName, monthKey, initialCap }: {
         aria-label={`Monthly budget for ${categoryName}`}
         value={cap}
         placeholder="No cap"
+        disabled={readOnly}
         onChange={(e) => setCap(e.target.value)}
         onBlur={() => void save()}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void save() } }}
@@ -454,7 +461,7 @@ function BudgetCell({ categoryId, categoryName, monthKey, initialCap }: {
       {saving ? (
         <span style={{ fontSize: '0.72rem', color: 'var(--faint)' }}>…</span>
       ) : (
-        dirty && (
+        dirty && !readOnly && (
           <button type="button" onClick={() => void save()} style={{ ...ghostBtn, minHeight: 34, padding: '4px 10px' }}>
             Set
           </button>

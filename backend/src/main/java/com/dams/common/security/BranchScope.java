@@ -58,7 +58,7 @@ public class BranchScope {
             .orElseThrow(() -> DamsException.forbidden("The signed-in user is not part of this organization"));
 
         return switch (user.getRole()) {
-            case OWNER, FINANCE_MANAGER -> Optional.empty();
+            case OWNER, FINANCE_MANAGER, AUDITOR -> Optional.empty();
             case ACCOUNTANT -> Optional.of(
                 branchAccessRepo.findByUserId(user.getId()).stream()
                     .map(UserBranchAccess::getBranchId)

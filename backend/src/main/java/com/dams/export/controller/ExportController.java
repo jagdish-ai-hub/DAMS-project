@@ -30,7 +30,7 @@ public class ExportController {
 
     @GetMapping("/receipts")
     @Operation(summary = "Export receipts ledger to Tally/Excel compatible CSV")
-    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT')")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','AUDITOR')")
     public ResponseEntity<byte[]> exportReceipts(
         @RequestParam(name = "branchId", required = false) Long branchId,
         @RequestParam(name = "from", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -47,7 +47,7 @@ public class ExportController {
 
     @GetMapping("/expenses")
     @Operation(summary = "Export expenses ledger to Tally/Excel compatible CSV")
-    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT')")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','AUDITOR')")
     public ResponseEntity<byte[]> exportExpenses(
         @RequestParam(name = "branchId", required = false) Long branchId,
         @RequestParam(name = "from", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,

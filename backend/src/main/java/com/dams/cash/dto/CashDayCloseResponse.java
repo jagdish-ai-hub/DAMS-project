@@ -17,6 +17,10 @@ public record CashDayCloseResponse(
     String varianceRemark,
     Long closedBy,
     String closedByName,
-    Instant closedAt
+    Instant closedAt,
+    // FEAT-41: NOT_REQUIRED | PENDING | COUNTERSIGNED
+    String countersignStatus,
+    Long countersignedBy,
+    Instant countersignedAt
 ) {
 }

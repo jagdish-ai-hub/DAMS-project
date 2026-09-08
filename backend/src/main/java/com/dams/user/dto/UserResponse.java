@@ -16,6 +16,7 @@ public record UserResponse(
     Long id,
     String name,
     String email,
+    String phone,
     Role role,
     boolean active,
     boolean invitePending,

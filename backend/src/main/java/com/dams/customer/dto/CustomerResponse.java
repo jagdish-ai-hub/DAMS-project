@@ -13,12 +13,13 @@ public record CustomerResponse(
     Long id,
     String name,
     String phone,
+    java.math.BigDecimal creditLimit,
     List<VehicleRef> vehicles,
     Instant createdAt
 ) {
     public record VehicleRef(Long id, String vehicleNo) {}
 
     public static CustomerResponse of(Customer c, List<VehicleRef> vehicles) {
-        return new CustomerResponse(c.getId(), c.getName(), c.getPhone(), vehicles, c.getCreatedAt());
+        return new CustomerResponse(c.getId(), c.getName(), c.getPhone(), c.getCreditLimit(), vehicles, c.getCreatedAt());
     }
 }

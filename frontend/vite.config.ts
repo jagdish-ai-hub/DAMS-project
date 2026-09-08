@@ -17,5 +17,7 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    // Browser E2E lives in e2e/ under Playwright — never under Vitest/jsdom.
+    exclude: ['**/node_modules/**', '**/dist/**', 'e2e/**'],
   },
 })

@@ -19,6 +19,13 @@ public interface SettlementLineRepository extends JpaRepository<SettlementLine, 
     List<SettlementLine> findByOrgIdAndReceiveDocumentIdInOrderByLineNoAsc(Long orgId, List<Long> receiveDocumentIds);
 
     /**
+     * Recon candidates (FEAT-40): referenced lines in a date window. Matching
+     * happens in ReconService — this just bounds the candidate set.
+     */
+    List<SettlementLine> findByOrgIdAndTransactionDateBetweenAndTransactionRefIsNotNull(
+        Long orgId, java.time.LocalDate from, java.time.LocalDate to);
+
+    /**
      * Sum of every settlement line on a job card, across ALL of its receive documents except
      * REJECTED ones (a rejected document's lines are void). This is the Σ term of Pending
      * Amount — see {@link com.dams.jobcard.service.PendingAmountCalculator}.

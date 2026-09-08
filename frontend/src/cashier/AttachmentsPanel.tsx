@@ -78,10 +78,24 @@ export default function AttachmentsPanel(props: {
 
   const [isDragging, setIsDragging] = useState(false)
   const [lightbox, setLightbox] = useState<{ url: string; filename: string; contentType?: string } | null>(null)
+  // FEAT-37: exact-duplicate warning from the last upload batch (same bytes
+  // elsewhere in the org). A warning, never a block.
+  const [dupNotice, setDupNotice] = useState<string>('')
+
+  /** Collect duplicate warnings from an upload response. */
+  function collectDup(res: { data: Attachment }) {
+    const dups = res.data.duplicateOf ?? []
+    if (dups.length > 0) {
+      setDupNotice(
+        `Same photo already attached to ${dups.map((d) => `${d.parentType} #${d.parentId} (${d.filename})`).join(', ')} — attached anyway, flagged for the reviewer.`,
+      )
+    }
+  }
 
   function addFiles(files: File[]) {
     if (files.length === 0) return
     setError('')
+    setDupNotice('')
     // Compress asynchronously so phone photos shrink before staging; stage
     // immediately with originals only if compression fails (it resolves back).
     void Promise.all(files.map((f) => compressImage(f))).then((out) => {
@@ -126,8 +140,8 @@ export default function AttachmentsPanel(props: {
         }
       }
       for (const s of ready) {
-        if (s.target === 'doc') await api.attachToDocument(id, s.file)
-        else await api.attachToLine(id, s.target, s.file)
+        if (s.target === 'doc') await collectDup(await api.attachToDocument(id, s.file))
+        else await collectDup(await api.attachToLine(id, s.target, s.file))
       }
       setStaged((prev) => prev.filter((s) => s.tooBig))
       setLoaded(await fetchAll(id))
@@ -171,6 +185,14 @@ export default function AttachmentsPanel(props: {
       </div>
 
       <ErrorBanner message={error} />
+      {dupNotice && (
+        <div style={{
+          background: 'var(--amber-bg)', border: '1px solid #EAD3AE', color: 'var(--amber)',
+          borderRadius: 8, padding: '9px 12px', fontSize: '0.78rem', marginBottom: 10,
+        }}>
+          <strong>Possible duplicate bill:</strong> {dupNotice}
+        </div>
+      )}
 
       {frozen ? (
         <div style={{ fontSize: '0.8rem', color: 'var(--faint)' }}>

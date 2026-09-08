@@ -104,6 +104,7 @@ public class UserService {
         user.setOrganization(org);
         user.setName(request.getName().trim());
         user.setEmail(email);
+        user.setPhone(normalisePhone(request.getPhone()));
         user.setRole(role);
         user.setActive(true);
         user.setHomeBranchId(homeBranchId);
@@ -145,6 +146,7 @@ public class UserService {
 
         user.setName(request.getName().trim());
         user.setRole(newRole);
+        user.setPhone(normalisePhone(request.getPhone()));
         if (request.getActive() != null) {
             user.setActive(request.getActive());
         }
@@ -165,6 +167,14 @@ public class UserService {
 
     // --- helpers ---
 
+    /** Trims blanks to null — an empty phone field means "no number", not "". */
+    private static String normalisePhone(String phone) {
+        if (phone == null || phone.isBlank()) {
+            return null;
+        }
+        return phone.trim();
+    }
+
     private AppUser load(Long id) {
         return userRepo.findByIdAndOrganization_Id(id, TenantContext.requireOrgId())
             .orElseThrow(() -> DamsException.notFound("User", id));
@@ -178,7 +188,7 @@ public class UserService {
 
     /** Validates and returns the branch ids this role needs (empty for org-wide roles). */
     private List<Long> resolveBranchIds(Long orgId, Role role, UserRequest request) {
-        if (role == Role.OWNER || role == Role.FINANCE_MANAGER) {
+        if (role == Role.OWNER || role == Role.FINANCE_MANAGER || role == Role.AUDITOR) {
             return List.of();
         }
         if (role == Role.CASHIER) {
@@ -246,6 +256,7 @@ public class UserService {
             user.getId(),
             user.getName(),
             user.getEmail(),
+            user.getPhone(),
             user.getRole(),
             user.isActive(),
             user.getPasswordHash() == null,
@@ -259,6 +270,9 @@ public class UserService {
     private String branchAccessLabel(Role role, List<Long> branchIds, Map<Long, Branch> branchesById) {
         if (role == Role.OWNER || role == Role.FINANCE_MANAGER) {
             return "All branches";
+        }
+        if (role == Role.AUDITOR) {
+            return "All branches (read-only)";
         }
         if (branchIds.isEmpty()) {
             return "No branches";
@@ -277,6 +291,7 @@ public class UserService {
             case FINANCE_MANAGER -> "Finance Manager";
             case ACCOUNTANT -> "Accountant";
             case CASHIER -> "Cashier";
+            case AUDITOR -> "Auditor";
             case SUPER_ADMIN -> "Super Admin";
         };
     }

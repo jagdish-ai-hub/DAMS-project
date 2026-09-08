@@ -5,6 +5,7 @@ export interface TeamUser {
   id: number
   name: string
   email: string
+  phone: string | null
   role: Role
   active: boolean
   invitePending: boolean
@@ -22,6 +23,7 @@ export interface UserRequest {
   homeBranchId?: number | null
   branchIds?: number[]
   active?: boolean
+  phone?: string | null
 }
 
 export const usersApi = {

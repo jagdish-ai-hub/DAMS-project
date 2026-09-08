@@ -46,6 +46,8 @@ public record CustomerHistoryResponse(
         boolean receiveDocumentSettled,
         boolean claimOverridden,     // FM closed the claim at a different final amount ("Overridden · Final")
         BigDecimal claimFinalAmount,
+        java.time.LocalDate serviceDueDate,  // FEAT-39: null = no reminder wanted
+        String stuckReason,                  // FEAT-50: why a WIP job isn't moving
         Instant createdAt
     ) {}
 

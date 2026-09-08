@@ -14,7 +14,7 @@ function apiError(err: unknown, fallback: string) {
  * rule as every other master list — deactivating hides the vendor from expense
  * forms without rewriting history.
  */
-export default function ReceiversSection() {
+export default function ReceiversSection({ readOnly = false }: { readOnly?: boolean }) {
   const [rows, setRows] = useState<Receiver[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -39,7 +39,9 @@ export default function ReceiversSection() {
     <section style={card} aria-label="Receivers and vendors">
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
         <h2 style={{ ...cardTitle, marginBottom: 0, flex: 1 }}>Receivers / vendors</h2>
-        <button style={{ ...primaryBtn(), minHeight: 36 }} onClick={() => setModal({ editing: null })}>+ Add</button>
+        {!readOnly && (
+          <button style={{ ...primaryBtn(), minHeight: 36 }} onClick={() => setModal({ editing: null })}>+ Add</button>
+        )}
       </div>
       <ErrorBanner message={error} />
       <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
@@ -57,7 +59,9 @@ export default function ReceiversSection() {
                 <td style={td}>{r.phone ?? '—'}</td>
                 <td style={td}>{r.active ? <Badge tone="green">Active</Badge> : <Badge>Inactive</Badge>}</td>
                 <td style={{ ...td, textAlign: 'right' }}>
-                  <button style={{ ...ghostBtn, minHeight: 36, padding: '4px 12px' }} onClick={() => setModal({ editing: r })}>Edit</button>
+                  {!readOnly && (
+                    <button style={{ ...ghostBtn, minHeight: 36, padding: '4px 12px' }} onClick={() => setModal({ editing: r })}>Edit</button>
+                  )}
                 </td>
               </tr>
             ))}

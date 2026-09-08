@@ -11,6 +11,9 @@ import {
 } from '../api/cash'
 import { card, ErrorBanner, inr, primaryBtn, ghostBtn, inputStyle, Modal, Badge, Skeleton, SkeletonRows, fmtDate, istToday } from '../shell/ui'
 import HelpButton from '../help/HelpButton'
+import { useAuth } from '../auth/useAuth'
+import { isOfflineError, outboxEnqueue } from '../shared/outbox'
+import OfflineBanner from '../shared/OfflineBanner'
 
 /**
  * Cash page (AGENT.md decision #1 — no HTML mockup). One dedicated per-branch, per-day
@@ -25,7 +28,7 @@ function apiError(err: unknown, fallback: string) {
 }
 
 /** The most recent reviewer question / rejection reason, for the fix-and-resubmit banner. */
-function queryNote(history: DocumentHistoryEntry[]): string | null {
+export function queryNote(history: DocumentHistoryEntry[]): string | null {
   for (let i = history.length - 1; i >= 0; i--) {
     const h = history[i]
     if ((h.action === 'Queried' || h.action === 'Rejected') && h.note) return h.note
@@ -34,6 +37,10 @@ function queryNote(history: DocumentHistoryEntry[]): string | null {
 }
 
 export default function CashPage() {
+  const { user } = useAuth()
+  // Accountants open this page read-only to countersign threshold-breaching
+  // closes (FEAT-41) — they never create movements or close days here.
+  const readOnly = user?.role === 'ACCOUNTANT'
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const editDocId = params.get('editDoc') ? Number(params.get('editDoc')) : null
@@ -105,6 +112,7 @@ export default function CashPage() {
       </div>
 
       <ErrorBanner message={error} />
+      <OfflineBanner />
       {drawer == null && !error && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <Skeleton height={120} radius={10} />
@@ -117,8 +125,9 @@ export default function CashPage() {
           <DrawerCard drawer={drawer} />
 
           {drawer.closed ? (
-            <ClosedBanner drawer={drawer} />
+            <ClosedBanner drawer={drawer} canCountersign={readOnly} readOnly={readOnly} onCountersigned={refresh} />
           ) : (
+            !readOnly && (
             <div style={{ display: 'flex', gap: 10, margin: '14px 0 18px', flexWrap: 'wrap' }}>
               <button type="button" onClick={() => setMovementModal({ direction: 'IN' })}
                 style={{ ...primaryBtn(), background: 'var(--green)', minHeight: 38 }}>
@@ -139,17 +148,18 @@ export default function CashPage() {
                 Close Day
               </button>
             </div>
+            )
           )}
 
           <MovementsTable
             movements={drawer.movements}
-            locked={drawer.closed}
+            locked={drawer.closed || readOnly}
             onEdit={(m) => setMovementModal({ direction: m.direction, editDoc: m })}
           />
         </>
       )}
 
-      {movementModal && drawer && (
+      {movementModal && drawer && !readOnly && (
         <MovementModal
           date={date}
           banks={banks}
@@ -159,7 +169,7 @@ export default function CashPage() {
           onDone={() => { setMovementModal(null); refresh() }}
         />
       )}
-      {closeModal && drawer && (
+      {closeModal && drawer && !readOnly && (
         <CloseDayModal
           drawer={drawer}
           onClose={() => setCloseModal(false)}
@@ -211,8 +221,29 @@ function Line({ k, v, tone, note }: { k: string; v: string; tone?: 'green' | 're
   )
 }
 
-function ClosedBanner({ drawer }: { drawer: CashDrawer }) {
+function ClosedBanner({ drawer, canCountersign, readOnly, onCountersigned }: {
+  drawer: CashDrawer
+  canCountersign: boolean
+  readOnly: boolean
+  onCountersigned: () => void
+}) {
   const c = drawer.close!
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  async function countersign() {
+    setBusy(true)
+    setErr('')
+    try {
+      await cashApi.countersign(c.id)
+      onCountersigned()
+    } catch (e) {
+      setErr(apiError(e, 'Could not countersign.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div style={{
       background: 'var(--gray-bg)', border: '1px solid var(--line)', borderRadius: 9,
@@ -221,10 +252,26 @@ function ClosedBanner({ drawer }: { drawer: CashDrawer }) {
       <strong>Day closed.</strong> Counted {inr(c.countedAmount)} vs computed {inr(c.computedClosing)} ·{' '}
       variance <span style={{ color: c.variance === 0 ? 'var(--green)' : 'var(--amber)', fontWeight: 700 }}>{inr(c.variance)}</span>
       {c.varianceRemark && <> · “{c.varianceRemark}”</>} · by {c.closedByName ?? '—'}
+      {c.countersignStatus === 'PENDING' && (
+        <div style={{ marginTop: 8 }}>
+          <Badge tone="amber">Awaiting countersign — variance above the org threshold</Badge>
+          {canCountersign && (
+            <div style={{ marginTop: 6 }}>
+              <button type="button" onClick={countersign} disabled={busy} style={primaryBtn(busy)}>
+                {busy ? 'Confirming…' : 'Countersign (I counted with the cashier)'}
+              </button>
+              {err && <div style={{ color: 'var(--red)', fontSize: '0.76rem', marginTop: 4 }}>{err}</div>}
+            </div>
+          )}
+        </div>
+      )}
+      {c.countersignStatus === 'COUNTERSIGNED' && (
+        <div style={{ marginTop: 6 }}><Badge tone="green">Countersigned</Badge></div>
+      )}
       <div style={{ fontSize: '0.74rem', color: 'var(--faint)', marginTop: 3 }}>
         This date is locked — no new cash movements or backdated cash payments.
       </div>
-      <ReopenRequestBox closeDate={drawer.date} />
+      {!readOnly && <ReopenRequestBox closeDate={drawer.date} />}
     </div>
   )
 }
@@ -414,7 +461,14 @@ function MovementModal(props: {
       }
       props.onDone()
     } catch (e) {
-      setError(apiError(e, 'Could not save the movement.'))
+      // FEAT-49: new movements queue offline as drafts; edits/resubmits need
+      // the server (they reference a server id) and fail loudly instead.
+      if (!edit && isOfflineError(e)) {
+        outboxEnqueue('cash', `Cash ${direction === 'IN' ? 'In' : 'Out'} — Rs.${amount}`, { ...body(), submit: false })
+        props.onDone()
+      } else {
+        setError(apiError(e, 'Could not save the movement.'))
+      }
     } finally {
       setBusy(false)
     }
