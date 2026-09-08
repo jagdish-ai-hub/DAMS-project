@@ -16,6 +16,7 @@ CREATE TABLE cash_close_reopen_request (
     requested_by  BIGINT        NOT NULL REFERENCES app_user(id) ON DELETE RESTRICT,
     decided_by    BIGINT        REFERENCES app_user(id)          ON DELETE RESTRICT,
     decided_at    TIMESTAMPTZ,
+    decision_note VARCHAR(500),
     created_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
 
     CONSTRAINT cash_reopen_status_chk CHECK (status IN ('PENDING','APPROVED','REJECTED'))
