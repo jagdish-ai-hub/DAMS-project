@@ -189,13 +189,17 @@ jobs:
           done
           [ "$ok" = 1 ] || { echo "backend never became healthy"; tail -n 80 /tmp/dams-smoke.log; exit 1; }
           echo "### API smoke" >> "$GITHUB_STEP_SUMMARY"
-          check() { # check <desc> <curl-args...> -- <expected-status>
+          check() { # check <desc> <curl-args...> — records failures, never aborts: every probe runs
             local desc="$1"; shift
             local code
-            code=$(curl -s -o /dev/null -w "%{http_code}" "$@")
+            code=$(curl -s -o /dev/null -w "%{http_code}" "$@") || code="000"
             echo "- $desc → HTTP $code" >> "$GITHUB_STEP_SUMMARY"
-            [ "$code" = "$SMOKE_EXPECT" ] || { echo "SMOKE FAIL: $desc → $code (wanted $SMOKE_EXPECT)"; return 1; }
+            if [ "$code" != "$SMOKE_EXPECT" ]; then
+              echo "SMOKE FAIL: $desc → $code (wanted $SMOKE_EXPECT)" | tee -a "$GITHUB_STEP_SUMMARY"
+              SMOKE_FAILURES=$((SMOKE_FAILURES + 1))
+            fi
           }
+          SMOKE_FAILURES=0
           SMOKE_EXPECT=200 check "health is UP" http://127.0.0.1:8080/actuator/health
           SMOKE_EXPECT=200 check "OpenAPI docs serve" http://127.0.0.1:8080/api-docs
           SMOKE_EXPECT=401 check "dashboard without token is refused" http://127.0.0.1:8080/api/v1/dashboard/summary?period=today
@@ -203,6 +207,11 @@ jobs:
             -X POST http://127.0.0.1:8080/api/v1/auth/login \
             -H 'Content-Type: application/json' \
             -d '{"email":"nobody@x.in","password":"wrong"}'
+          if [ "$SMOKE_FAILURES" != 0 ]; then
+            echo "$SMOKE_FAILURES smoke probe(s) failed — backend log tail:" | tee -a "$GITHUB_STEP_SUMMARY"
+            tail -n 60 /tmp/dams-smoke.log || true
+            exit 1
+          fi
           echo "smoke OK" >> "$GITHUB_STEP_SUMMARY"
       - name: Backend log on failure
         if: failure()
