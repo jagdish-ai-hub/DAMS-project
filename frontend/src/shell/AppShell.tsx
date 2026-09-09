@@ -103,7 +103,7 @@ export default function AppShell() {
     function onKey(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
-        setAskOpen(true)
+        setAskOpen((prev) => !prev)
       }
     }
     document.addEventListener('keydown', onKey)
@@ -197,10 +197,11 @@ export default function AppShell() {
           {canAsk && (
             <button
               type="button"
-              onClick={() => setAskOpen(true)}
+              onClick={() => setAskOpen((prev) => !prev)}
               title="Ask DAMS (Ctrl+K)"
               style={{
-                background: 'rgba(255,255,255,.14)', color: '#fff', border: 'none', borderRadius: 7,
+                background: askOpen ? 'rgba(255,255,255,.28)' : 'rgba(255,255,255,.14)',
+                color: '#fff', border: 'none', borderRadius: 7,
                 padding: '6px clamp(8px, 1.2vw, 12px)', fontSize: '0.83rem', fontWeight: 600, cursor: 'pointer',
                 minHeight: 32, display: 'flex', alignItems: 'center', gap: 5,
               }}

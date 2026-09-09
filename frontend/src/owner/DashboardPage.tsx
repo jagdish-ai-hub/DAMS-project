@@ -78,7 +78,7 @@ export default function DashboardPage() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <GlobalSearch />
-          <button type="button" onClick={() => setAskOpen(true)} style={{ ...primaryBtn(), minHeight: 36, whiteSpace: 'nowrap' }}>
+          <button type="button" onClick={() => setAskOpen((prev) => !prev)} style={{ ...primaryBtn(), minHeight: 36, whiteSpace: 'nowrap' }}>
             Ask DAMS
           </button>
         </div>
