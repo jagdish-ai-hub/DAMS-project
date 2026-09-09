@@ -258,23 +258,7 @@ class MoneyFlowLifecycleTest {
         verify(expenseDocumentRepo, never()).save(any());
     }
 
-    // Bulk review is partial-success by design: one bad row must not strand the good ones.
 
-    @Test
-    void bulkVerifyReceipts_verifiesTheSubmitted_skipsTheRest_withPerDocReasons() {
-        ReceiveDocument ready = receiveDocWithId(R_ID, "OOR-AUG26-R-005", WorkflowStatus.SUBMITTED);
-        ReceiveDocument alreadyDone = receiveDocWithId(501L, "OOR-AUG26-R-006", WorkflowStatus.VERIFIED);
-        when(receiveDocumentRepo.findByIdAndOrgId(R_ID, ORG)).thenReturn(Optional.of(ready));
-        when(receiveDocumentRepo.findByIdAndOrgId(501L, ORG)).thenReturn(Optional.of(alreadyDone));
-
-        var response = service.bulkVerifyReceipts(List.of(R_ID, 501L));
-
-        assertThat(ready.getWorkflowStatus()).isEqualTo(WorkflowStatus.VERIFIED);
-        assertThat(alreadyDone.getWorkflowStatus()).isEqualTo(WorkflowStatus.VERIFIED);
-        assertThat(response.verifiedIds()).containsExactly(R_ID);
-        assertThat(response.skippedReasons()).hasSize(1);
-        assertThat(response.skippedReasons().get(0)).contains("OOR-AUG26-R-006");
-    }
 
     // Cash movements walk the same maker-checker chain as customer documents.
 

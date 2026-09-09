@@ -28,10 +28,8 @@ public interface ExpenseDocumentRepository extends JpaRepository<ExpenseDocument
         Long orgId, ExpenseWorkflowStatus workflowStatus, Collection<Long> branchIds);
 
     /** Finance Manager queue — documents in one workflow state org-wide, oldest first. */
-    List<ExpenseDocument> findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(        Long orgId, ExpenseWorkflowStatus workflowStatus);
-
-    /** Awaiting-bills herd (FEAT-47) — documents parked on one business status, oldest first. */
-    List<ExpenseDocument> findByOrgIdAndBusinessStatusIdOrderByCreatedAtAsc(Long orgId, Long businessStatusId);
+    List<ExpenseDocument> findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(
+        Long orgId, ExpenseWorkflowStatus workflowStatus);
 
     boolean existsByOrgIdAndDocumentNo(Long orgId, String documentNo);
 

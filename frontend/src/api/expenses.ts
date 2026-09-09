@@ -103,9 +103,6 @@ export const expensesApi = {
   get(id: number) {
     return api.get<ExpenseDocument>(`/api/v1/expenses/${id}`)
   },
-  awaitingBills() {
-    return api.get<ExpenseDocument[]>('/api/v1/expenses/awaiting-bills')
-  },
   create(data: CreateExpenseRequest) {
     return api.post<ExpenseDocument>('/api/v1/expenses', data)
   },

@@ -64,11 +64,4 @@ public class CashController {
         @RequestParam(name = "date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         return cashCloseService.getClose(branchId, date);
     }
-
-    @PostMapping("/close-day/{id}/countersign")
-    @Operation(summary = "ACCOUNTANT — countersign a threshold-breaching close (FEAT-41)")
-    @PreAuthorize("hasAuthority('ACCOUNTANT')")
-    public CashDayCloseResponse countersign(@PathVariable Long id) {
-        return cashCloseService.countersign(id);
-    }
 }

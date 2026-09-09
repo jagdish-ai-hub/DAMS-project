@@ -1,6 +1,5 @@
 package com.dams.customer.controller;
 
-import com.dams.customer.dto.CreditStatusResponse;
 import com.dams.customer.dto.CustomerHistoryResponse;
 import com.dams.customer.dto.CustomerRequest;
 import com.dams.customer.dto.CustomerResponse;
@@ -51,13 +50,6 @@ public class CustomerController {
     @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER','AUDITOR')")
     public CustomerHistoryResponse history(@PathVariable Long id) {
         return customerService.history(id);
-    }
-
-    @GetMapping("/{id}/credit-status")
-    @Operation(summary = "B2B exposure vs credit limit — warn-first, never blocks posting (FEAT-46)")
-    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER','AUDITOR')")
-    public CreditStatusResponse creditStatus(@PathVariable Long id) {
-        return customerService.creditStatus(id);
     }
 
     @PostMapping

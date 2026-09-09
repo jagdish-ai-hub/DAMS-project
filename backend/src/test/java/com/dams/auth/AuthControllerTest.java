@@ -21,6 +21,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -92,6 +93,31 @@ class AuthControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void login_allowsCors_fromAnyLocalhostPort() throws Exception {
+        LoginRequest req = new LoginRequest();
+        req.setEmail("admin@dams.local");
+        req.setPassword("admin123");
+
+        LoginResponse resp = new LoginResponse("access-token", Role.SUPER_ADMIN, null, null, "Super Admin");
+        when(authService.login(any(LoginRequest.class))).thenReturn(resp);
+
+        // Preflight OPTIONS from a unique local port
+        mockMvc.perform(options("/api/v1/auth/login")
+                .header("Origin", "http://localhost:5175")
+                .header("Access-Control-Request-Method", "POST"))
+            .andExpect(status().isOk())
+            .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5175"));
+
+        // Actual POST from a unique local port
+        mockMvc.perform(post("/api/v1/auth/login")
+                .header("Origin", "http://localhost:5175")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isOk())
+            .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5175"));
     }
 
     // --- Accept invite ---

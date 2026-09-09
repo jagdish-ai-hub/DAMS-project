@@ -8,9 +8,7 @@ import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, type AnyDoc 
 import GlobalSearch from '../shared/GlobalSearch'
 import HelpButton from '../help/HelpButton'
 import { useAuth } from '../auth/useAuth'
-import { Download } from 'lucide-react'
-import ExportModal from '../shared/ExportModal'
-import { useRiskMap, RiskDot, } from '../review/AiRiskBadge'
+import { useRiskMap, RiskDot } from '../review/AiRiskBadge'
 import type { RiskScore } from '../api/ai'
 
 /**
@@ -35,9 +33,6 @@ export default function ReviewQueuePage() {
   const [error, setError] = useState('')
   const [flash, setFlash] = useState('')
   const [tick, setTick] = useState(0)
-  const [showExportModal, setShowExportModal] = useState(false)
-  const [selectedIds, setSelectedIds] = useState<number[]>([])
-  const [bulkBusy, setBulkBusy] = useState(false)
 
   const reload = useCallback(() => setTick((n) => n + 1), [])
   const riskMap = useRiskMap(type)
@@ -63,44 +58,8 @@ export default function ReviewQueuePage() {
   function pickType(t: ReviewType) {
     setType(t)
     setSelectedId(null)
-    setSelectedIds([])
     setDoc(null)
     setFlash('')
-  }
-
-  async function handleBulkVerify() {
-    if (selectedIds.length === 0 || type === 'cash') return
-    setBulkBusy(true)
-    setError('')
-    try {
-      const res = await reviewApi.bulkVerify(type, selectedIds)
-      const data = res.data
-      const skipped = data.skippedReasons.length
-      setFlash(`Bulk verified ${data.verifiedCount} ${type}s successfully.${skipped > 0 ? ` (${skipped} skipped: ${data.skippedReasons.slice(0, 3).join('; ')}${skipped > 3 ? '…' : ''})` : ''}`)
-      setTimeout(() => setFlash(''), 4000)
-      setSelectedIds([])
-      reload()
-    } catch (e) {
-      setError(apiError(e, 'Could not bulk verify items.'))
-    } finally {
-      setBulkBusy(false)
-    }
-  }
-
-  function toggleSelect(id: number) {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    )
-  }
-
-  function toggleSelectAll() {
-    if (!items || items.length === 0) return
-    const allSelected = items.every((it) => selectedIds.includes(it.id))
-    if (allSelected) {
-      setSelectedIds([])
-    } else {
-      setSelectedIds(items.map((it) => it.id))
-    }
   }
 
   function afterAction(message: string, keepOpen: boolean) {
@@ -123,23 +82,6 @@ export default function ReviewQueuePage() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={() => setShowExportModal(true)}
-            style={{
-              ...ghostBtn,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              minHeight: 36,
-              padding: '6px 12px',
-              fontSize: '0.8rem',
-              fontWeight: 600,
-            }}
-          >
-            <Download size={15} />
-            <span>Export Tally / CSV</span>
-          </button>
           <GlobalSearch />
         </div>
       </div>
@@ -160,12 +102,6 @@ export default function ReviewQueuePage() {
             onType={pickType}
             onSelect={setSelectedId}
             riskMap={riskMap}
-            selectedIds={selectedIds}
-            onToggleSelect={toggleSelect}
-            onToggleSelectAll={toggleSelectAll}
-            onClearSelected={() => setSelectedIds([])}
-            onBulkVerify={handleBulkVerify}
-            bulkBusy={bulkBusy}
           />
         </div>
         <div className={selectedId == null ? 'hidden lg:block border-t lg:border-t-0 lg:border-l border-[var(--line)] p-4 sm:p-6 overflow-y-auto' : 'block border-t lg:border-t-0 lg:border-l border-[var(--line)] p-4 sm:p-6 overflow-y-auto'}>
@@ -182,8 +118,6 @@ export default function ReviewQueuePage() {
               : <RecordDetail type={type} doc={doc} onDone={afterAction} onBack={() => setSelectedId(null)} />}
         </div>
       </div>
-
-      {showExportModal && <ExportModal onClose={() => setShowExportModal(false)} />}
     </div>
   )
 }
@@ -197,30 +131,8 @@ function QueuePane(props: {
   onType: (t: ReviewType) => void
   onSelect: (id: number) => void
   riskMap: Map<number, RiskScore>
-  selectedIds: number[]
-  onToggleSelect: (id: number) => void
-  onToggleSelectAll: () => void
-  onClearSelected: () => void
-  onBulkVerify: () => void
-  bulkBusy: boolean
 }) {
   const { items } = props
-  const [overLimitOnly, setOverLimitOnly] = useState(false)
-  const [overrideOnly, setOverrideOnly] = useState(false)
-  const [noBillOnly, setNoBillOnly] = useState(false)
-  const hasRisk = props.riskMap.size > 0
-
-  const visible = useMemo(() => {
-    return (items ?? []).filter((it) => {
-      if (overLimitOnly && !it.overLimit) return false
-      if (overrideOnly && !it.hasOverride) return false
-      if (noBillOnly) {
-        const r = props.riskMap.get(it.id)
-        if (!r || !r.reasons.some((reason) => reason.toLowerCase().includes('bill'))) return false
-      }
-      return true
-    })
-  }, [items, overLimitOnly, overrideOnly, noBillOnly, props.riskMap])
   return (
     <div style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
       <div style={{ display: 'flex', padding: 12, gap: 4 }}>
@@ -242,97 +154,21 @@ function QueuePane(props: {
           {items?.length ?? 0}
         </span>
       </div>
-      <div style={{ display: 'flex', gap: 12, padding: '0 14px 8px', fontSize: '0.76rem', flexWrap: 'wrap' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
-          <input type="checkbox" checked={overLimitOnly} onChange={(e) => setOverLimitOnly(e.target.checked)} />
-          Over-limit
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
-          <input type="checkbox" checked={overrideOnly} onChange={(e) => setOverrideOnly(e.target.checked)} />
-          Has override
-        </label>
-        {hasRisk && (
-          <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
-            <input type="checkbox" checked={noBillOnly} onChange={(e) => setNoBillOnly(e.target.checked)} />
-            No bill
-          </label>
-        )}
-      </div>
-
-      {props.type !== 'cash' && items && items.length > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '6px 14px', borderBottom: '1px solid var(--line)', background: 'var(--bg)',
-          fontSize: '0.76rem',
-        }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600 }}>
-            <input
-              type="checkbox"
-              checked={items.length > 0 && items.every((it) => props.selectedIds.includes(it.id))}
-              onChange={props.onToggleSelectAll}
-            />
-            <span>Select All ({items.length})</span>
-          </label>
-          {props.selectedIds.length > 0 && (
-            <span style={{ color: 'var(--navy)', fontWeight: 700 }}>
-              {props.selectedIds.length} selected
-            </span>
-          )}
-        </div>
-      )}
 
       {items == null && <div style={{ padding: 14 }}><SkeletonRows rows={5} height={52} /></div>}
       {items != null && items.length === 0 && (
         <p style={{ padding: 14, color: 'var(--faint)', fontSize: '0.82rem' }}>Nothing waiting on you — the queue is clear.</p>
       )}
-      {items != null && items.length > 0 && visible.length === 0 && (
-        <p style={{ padding: 14, color: 'var(--faint)', fontSize: '0.82rem' }}>No items match these filters.</p>
-      )}
 
-      {(visible ?? []).map((it) => (
+      {(items ?? []).map((it) => (
         <QueueRow
           key={it.id}
           it={it}
           selected={props.selectedId === it.id}
           onSelect={() => props.onSelect(it.id)}
           risk={props.riskMap.get(it.id)}
-          checked={props.type !== 'cash' ? props.selectedIds.includes(it.id) : undefined}
-          onToggleCheck={props.type !== 'cash' ? () => props.onToggleSelect(it.id) : undefined}
         />
       ))}
-
-      {props.type !== 'cash' && props.selectedIds.length > 0 && (
-        <div style={{
-          position: 'sticky', bottom: 0, zIndex: 10,
-          background: 'var(--navy)', color: '#fff', padding: '10px 14px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-          boxShadow: '0 -2px 10px rgba(0,0,0,0.15)',
-        }}>
-          <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>
-            {props.selectedIds.length} item{props.selectedIds.length === 1 ? '' : 's'} selected
-          </span>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button
-              type="button"
-              onClick={props.onClearSelected}
-              style={{ ...ghostBtn, color: '#fff', border: '1px solid rgba(255,255,255,0.3)', minHeight: 30, padding: '3px 10px', fontSize: '0.75rem' }}
-            >
-              Clear
-            </button>
-            <button
-              type="button"
-              onClick={props.onBulkVerify}
-              disabled={props.bulkBusy}
-              style={{
-                background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 6,
-                padding: '4px 12px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', minHeight: 30,
-              }}
-            >
-              {props.bulkBusy ? 'Verifying…' : `Verify (${props.selectedIds.length})`}
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -342,84 +178,49 @@ export function QueueRow({
   selected,
   onSelect,
   risk,
-  checked,
-  onToggleCheck,
 }: {
   it: ReviewQueueItem
   selected: boolean
   onSelect: () => void
   risk?: RiskScore
-  checked?: boolean
-  onToggleCheck?: () => void
 }) {
   return (
-    <div
+    <button
+      type="button"
+      onClick={onSelect}
       style={{
+        textAlign: 'left',
+        border: 'none',
         borderBottom: '1px solid var(--line)',
         borderLeft: `3px solid ${selected ? 'var(--navy)' : 'transparent'}`,
         background: selected ? 'var(--navy3)' : 'transparent',
-        display: 'flex',
-        alignItems: 'stretch',
+        cursor: 'pointer',
+        padding: '12px 14px',
         minHeight: 44,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 3,
+        width: '100%',
       }}
     >
-      {onToggleCheck && (
-        <div
-          onClick={(e) => {
-            e.stopPropagation()
-            onToggleCheck()
-          }}
-          style={{
-            padding: '12px 0 12px 12px',
-            display: 'flex',
-            alignItems: 'flex-start',
-            cursor: 'pointer',
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={Boolean(checked)}
-            onChange={() => {}}
-            style={{ cursor: 'pointer', marginTop: 2 }}
-          />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+        <span style={{ fontFamily: 'Consolas, monospace', fontSize: '0.7rem', fontWeight: 700, color: 'var(--navy2)' }}>
+          {it.documentNo ?? 'draft'}
+        </span>
+        <span style={{ marginLeft: 'auto', fontSize: '0.68rem', color: 'var(--faint)' }}>{it.branchCode}</span>
+      </div>
+      <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{it.partyName}</div>
+      <div style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>
+        {it.categoryName} · <strong style={{ fontVariantNumeric: 'tabular-nums' }}>{inr(it.amount)}</strong>
+      </div>
+      {(it.overLimit || it.hasOverride || (risk && risk.score > 0)) && (
+        <div style={{ display: 'flex', gap: 5, marginTop: 2 }}>
+          {it.hasOverride && <Tag>Overridden</Tag>}
+          {it.overLimit && <Tag>Above limit</Tag>}
+          {risk && risk.score > 0 && <RiskDot risk={risk} />}
         </div>
       )}
-      <button
-        type="button"
-        onClick={onSelect}
-        style={{
-          flex: 1,
-          textAlign: 'left',
-          border: 'none',
-          background: 'transparent',
-          cursor: 'pointer',
-          padding: '12px 14px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 3,
-          width: '100%',
-          minWidth: 0,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <span style={{ fontFamily: 'Consolas, monospace', fontSize: '0.7rem', fontWeight: 700, color: 'var(--navy2)' }}>
-            {it.documentNo ?? 'draft'}
-          </span>
-          <span style={{ marginLeft: 'auto', fontSize: '0.68rem', color: 'var(--faint)' }}>{it.branchCode}</span>
-        </div>
-        <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{it.partyName}</div>
-        <div style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>
-          {it.categoryName} · <strong style={{ fontVariantNumeric: 'tabular-nums' }}>{inr(it.amount)}</strong>
-        </div>
-        {(it.overLimit || it.hasOverride || (risk && risk.score > 0)) && (
-          <div style={{ display: 'flex', gap: 5, marginTop: 2 }}>
-            {it.hasOverride && <Tag>Overridden</Tag>}
-            {it.overLimit && <Tag>Above limit</Tag>}
-            {risk && risk.score > 0 && <RiskDot risk={risk} />}
-          </div>
-        )}
-      </button>
-    </div>
+    </button>
   )
 }
 

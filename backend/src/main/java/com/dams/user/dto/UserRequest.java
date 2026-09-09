@@ -42,10 +42,6 @@ public class UserRequest {
 
     private List<Long> branchIds;
 
-    /** Contact number for messages/digest (FEAT-36/42). Optional, max 20 chars. */
-    @Size(max = 20, message = "Phone must be at most 20 characters")
-    private String phone;
-
     /** Update only — ignored on create (new users start active). */
     private Boolean active;
 }

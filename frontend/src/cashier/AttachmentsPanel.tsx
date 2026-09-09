@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
-import { UploadCloud } from 'lucide-react'
 import type { Attachment } from '../api/receipts'
 import { ErrorBanner, ghostBtn, primaryBtn, Spinner } from '../shell/ui'
-import AttachmentLightbox from '../shared/AttachmentLightbox'
 
 /** The six attachment calls — identical shape on `receiptsApi` and `expensesApi`. */
 export type AttachmentApi = {
@@ -46,7 +44,6 @@ export default function AttachmentsPanel(props: {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
-  const cameraRef = useRef<HTMLInputElement>(null)
 
   const lineKey = lineTargets.map((t) => t.lineNo).join(',')
 
@@ -76,45 +73,20 @@ export default function AttachmentsPanel(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docId, lineKey])
 
-  const [isDragging, setIsDragging] = useState(false)
-  const [lightbox, setLightbox] = useState<{ url: string; filename: string; contentType?: string } | null>(null)
-  // FEAT-37: exact-duplicate warning from the last upload batch (same bytes
-  // elsewhere in the org). A warning, never a block.
-  const [dupNotice, setDupNotice] = useState<string>('')
-
-  /** Collect duplicate warnings from an upload response. */
-  function collectDup(res: { data: Attachment }) {
-    const dups = res.data.duplicateOf ?? []
-    if (dups.length > 0) {
-      setDupNotice(
-        `Same photo already attached to ${dups.map((d) => `${d.parentType} #${d.parentId} (${d.filename})`).join(', ')} — attached anyway, flagged for the reviewer.`,
-      )
-    }
-  }
-
-  function addFiles(files: File[]) {
-    if (files.length === 0) return
-    setError('')
-    setDupNotice('')
-    // Compress asynchronously so phone photos shrink before staging; stage
-    // immediately with originals only if compression fails (it resolves back).
-    void Promise.all(files.map((f) => compressImage(f))).then((out) => {
-      setStaged((prev) => [
-        ...prev,
-        ...out.map((file) => ({
-          id: `${file.name}-${file.size}-${Date.now()}-${Math.random()}`,
-          file,
-          target: 'doc' as 'doc' | number,
-          tooBig: file.size > MAX_MB * 1024 * 1024,
-        })),
-      ])
-    })
-  }
-
   function onPick(e: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
     e.target.value = ''
-    addFiles(files)
+    if (files.length === 0) return
+    setError('')
+    setStaged((prev) => [
+      ...prev,
+      ...files.map((file) => ({
+        id: `${file.name}-${file.size}-${Date.now()}-${Math.random()}`,
+        file,
+        target: 'doc' as 'doc' | number,
+        tooBig: file.size > MAX_MB * 1024 * 1024,
+      })),
+    ])
   }
 
   function setTarget(id: string, target: 'doc' | number) {
@@ -140,8 +112,8 @@ export default function AttachmentsPanel(props: {
         }
       }
       for (const s of ready) {
-        if (s.target === 'doc') await collectDup(await api.attachToDocument(id, s.file))
-        else await collectDup(await api.attachToLine(id, s.target, s.file))
+        if (s.target === 'doc') await api.attachToDocument(id, s.file)
+        else await api.attachToLine(id, s.target, s.file)
       }
       setStaged((prev) => prev.filter((s) => s.tooBig))
       setLoaded(await fetchAll(id))
@@ -152,10 +124,10 @@ export default function AttachmentsPanel(props: {
     }
   }
 
-  async function view(att: Loaded) {
+  async function view(attId: number) {
     try {
-      const { data } = await api.signedUrl(att.id)
-      setLightbox({ url: data.url, filename: att.filename, contentType: att.contentType })
+      const { data } = await api.signedUrl(attId)
+      window.open(data.url, '_blank', 'noopener')
     } catch {
       setError('Could not open that document.')
     }
@@ -185,14 +157,6 @@ export default function AttachmentsPanel(props: {
       </div>
 
       <ErrorBanner message={error} />
-      {dupNotice && (
-        <div style={{
-          background: 'var(--amber-bg)', border: '1px solid #EAD3AE', color: 'var(--amber)',
-          borderRadius: 8, padding: '9px 12px', fontSize: '0.78rem', marginBottom: 10,
-        }}>
-          <strong>Possible duplicate bill:</strong> {dupNotice}
-        </div>
-      )}
 
       {frozen ? (
         <div style={{ fontSize: '0.8rem', color: 'var(--faint)' }}>
@@ -208,55 +172,8 @@ export default function AttachmentsPanel(props: {
             onChange={onPick}
             style={{ display: 'none' }}
           />
-          <input
-            ref={cameraRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={onPick}
-            style={{ display: 'none' }}
-          />
-
-          <div
-            onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={(e) => {
-              e.preventDefault()
-              setIsDragging(false)
-              if (e.dataTransfer.files?.length) {
-                addFiles(Array.from(e.dataTransfer.files))
-              }
-            }}
-            onClick={() => fileRef.current?.click()}
-            style={{
-              border: isDragging ? '2px dashed var(--navy)' : '1.5px dashed var(--line)',
-              background: isDragging ? 'var(--navy3)' : 'var(--bg)',
-              borderRadius: 8,
-              padding: '16px 14px',
-              textAlign: 'center',
-              cursor: busy ? 'wait' : 'pointer',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 4,
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <UploadCloud size={22} style={{ color: isDragging ? 'var(--navy)' : 'var(--muted)' }} />
-            <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--navy)' }}>
-              Drag &amp; drop receipts here, or <span style={{ textDecoration: 'underline' }}>browse</span>
-            </div>
-            <div style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>
-              PDF or images up to {MAX_MB} MB each
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => cameraRef.current?.click()}
-            style={{ ...ghostBtn, minHeight: 38, marginTop: 8 }}
-          >
-            📷 Take photo
+          <button type="button" onClick={() => fileRef.current?.click()} style={{ ...ghostBtn, minHeight: 36 }} disabled={busy}>
+            📎 Add documents
           </button>
 
           {staged.length > 0 && (
@@ -347,7 +264,7 @@ export default function AttachmentsPanel(props: {
             </span>
             <span style={{ fontSize: '0.72rem', color: 'var(--faint)', whiteSpace: 'nowrap' }}>{fmtSize(a.sizeBytes)}</span>
             <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-              <button type="button" onClick={() => view(a)} style={{ ...ghostBtn, minHeight: 36 }} aria-label={`View attachment ${a.filename}`}>View</button>
+              <button type="button" onClick={() => view(a.id)} style={{ ...ghostBtn, minHeight: 36 }} aria-label={`View attachment ${a.filename}`}>View</button>
               {!frozen && !a.frozen && (
                 <button
                   type="button"
@@ -363,15 +280,6 @@ export default function AttachmentsPanel(props: {
           </div>
         ))}
       </div>
-
-      {lightbox && (
-        <AttachmentLightbox
-          url={lightbox.url}
-          filename={lightbox.filename}
-          contentType={lightbox.contentType}
-          onClose={() => setLightbox(null)}
-        />
-      )}
     </section>
   )
 }
@@ -380,60 +288,6 @@ function fmtSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
-// Counter phones shoot multi-MB photos that stall on slow uploads — shrink
-// images to max 1600px JPEG 0.8 client-side. PDFs pass through untouched.
-function compressImage(file: File): Promise<File> {
-  if (!file.type.startsWith('image/')) return Promise.resolve(file)
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(file)
-    const img = new Image()
-    img.onload = () => {
-      try {
-        const max = 1600
-        const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight))
-        const w = Math.max(1, Math.round(img.naturalWidth * scale))
-        const h = Math.max(1, Math.round(img.naturalHeight * scale))
-        if (scale >= 1) {
-          URL.revokeObjectURL(url)
-          resolve(file)
-          return
-        }
-        const canvasEl = document.createElement('canvas')
-        canvasEl.width = w
-        canvasEl.height = h
-        const ctx = canvasEl.getContext('2d')
-        if (!ctx) {
-          URL.revokeObjectURL(url)
-          resolve(file)
-          return
-        }
-        ctx.drawImage(img, 0, 0, w, h)
-        canvasEl.toBlob(
-          (blob) => {
-            URL.revokeObjectURL(url)
-            if (!blob) {
-              resolve(file)
-              return
-            }
-            const name = file.name.replace(/\.\w+$/, '') + '.jpg'
-            resolve(new File([blob], name, { type: 'image/jpeg' }))
-          },
-          'image/jpeg',
-          0.8,
-        )
-      } catch {
-        URL.revokeObjectURL(url)
-        resolve(file)
-      }
-    }
-    img.onerror = () => {
-      URL.revokeObjectURL(url)
-      resolve(file)
-    }
-    img.src = url
-  })
 }
 
 function errMsg(e: unknown): string {

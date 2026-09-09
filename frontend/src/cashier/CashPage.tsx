@@ -1,19 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { mastersApi, type MasterRow } from '../api/masters'
 import {
   cashApi,
-  reopenApi,
   type CashDirection,
   type CashDocument,
   type CashDrawer,
   type DocumentHistoryEntry,
 } from '../api/cash'
-import { card, ErrorBanner, inr, primaryBtn, ghostBtn, inputStyle, Modal, Badge, Skeleton, SkeletonRows, fmtDate, istToday } from '../shell/ui'
+import { card, ErrorBanner, inr, primaryBtn, ghostBtn, inputStyle, Modal, Skeleton, SkeletonRows, fmtDate, istToday, Badge } from '../shell/ui'
 import HelpButton from '../help/HelpButton'
-import { useAuth } from '../auth/useAuth'
-import { isOfflineError, outboxEnqueue } from '../shared/outbox'
-import OfflineBanner from '../shared/OfflineBanner'
 
 /**
  * Cash page (AGENT.md decision #1 — no HTML mockup). One dedicated per-branch, per-day
@@ -37,10 +33,6 @@ export function queryNote(history: DocumentHistoryEntry[]): string | null {
 }
 
 export default function CashPage() {
-  const { user } = useAuth()
-  // Accountants open this page read-only to countersign threshold-breaching
-  // closes (FEAT-41) — they never create movements or close days here.
-  const readOnly = user?.role === 'ACCOUNTANT'
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const editDocId = params.get('editDoc') ? Number(params.get('editDoc')) : null
@@ -112,7 +104,6 @@ export default function CashPage() {
       </div>
 
       <ErrorBanner message={error} />
-      <OfflineBanner />
       {drawer == null && !error && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <Skeleton height={120} radius={10} />
@@ -125,9 +116,8 @@ export default function CashPage() {
           <DrawerCard drawer={drawer} />
 
           {drawer.closed ? (
-            <ClosedBanner drawer={drawer} canCountersign={readOnly} readOnly={readOnly} onCountersigned={refresh} />
+            <ClosedBanner drawer={drawer} />
           ) : (
-            !readOnly && (
             <div style={{ display: 'flex', gap: 10, margin: '14px 0 18px', flexWrap: 'wrap' }}>
               <button type="button" onClick={() => setMovementModal({ direction: 'IN' })}
                 style={{ ...primaryBtn(), background: 'var(--green)', minHeight: 38 }}>
@@ -148,18 +138,17 @@ export default function CashPage() {
                 Close Day
               </button>
             </div>
-            )
           )}
 
           <MovementsTable
             movements={drawer.movements}
-            locked={drawer.closed || readOnly}
+            locked={drawer.closed}
             onEdit={(m) => setMovementModal({ direction: m.direction, editDoc: m })}
           />
         </>
       )}
 
-      {movementModal && drawer && !readOnly && (
+      {movementModal && drawer && (
         <MovementModal
           date={date}
           banks={banks}
@@ -169,7 +158,7 @@ export default function CashPage() {
           onDone={() => { setMovementModal(null); refresh() }}
         />
       )}
-      {closeModal && drawer && !readOnly && (
+      {closeModal && drawer && (
         <CloseDayModal
           drawer={drawer}
           onClose={() => setCloseModal(false)}
@@ -221,29 +210,8 @@ function Line({ k, v, tone, note }: { k: string; v: string; tone?: 'green' | 're
   )
 }
 
-function ClosedBanner({ drawer, canCountersign, readOnly, onCountersigned }: {
-  drawer: CashDrawer
-  canCountersign: boolean
-  readOnly: boolean
-  onCountersigned: () => void
-}) {
+function ClosedBanner({ drawer }: { drawer: CashDrawer }) {
   const c = drawer.close!
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState('')
-
-  async function countersign() {
-    setBusy(true)
-    setErr('')
-    try {
-      await cashApi.countersign(c.id)
-      onCountersigned()
-    } catch (e) {
-      setErr(apiError(e, 'Could not countersign.'))
-    } finally {
-      setBusy(false)
-    }
-  }
-
   return (
     <div style={{
       background: 'var(--gray-bg)', border: '1px solid var(--line)', borderRadius: 9,
@@ -252,83 +220,9 @@ function ClosedBanner({ drawer, canCountersign, readOnly, onCountersigned }: {
       <strong>Day closed.</strong> Counted {inr(c.countedAmount)} vs computed {inr(c.computedClosing)} ·{' '}
       variance <span style={{ color: c.variance === 0 ? 'var(--green)' : 'var(--amber)', fontWeight: 700 }}>{inr(c.variance)}</span>
       {c.varianceRemark && <> · “{c.varianceRemark}”</>} · by {c.closedByName ?? '—'}
-      {c.countersignStatus === 'PENDING' && (
-        <div style={{ marginTop: 8 }}>
-          <Badge tone="amber">Awaiting countersign — variance above the org threshold</Badge>
-          {canCountersign && (
-            <div style={{ marginTop: 6 }}>
-              <button type="button" onClick={countersign} disabled={busy} style={primaryBtn(busy)}>
-                {busy ? 'Confirming…' : 'Countersign (I counted with the cashier)'}
-              </button>
-              {err && <div style={{ color: 'var(--red)', fontSize: '0.76rem', marginTop: 4 }}>{err}</div>}
-            </div>
-          )}
-        </div>
-      )}
-      {c.countersignStatus === 'COUNTERSIGNED' && (
-        <div style={{ marginTop: 6 }}><Badge tone="green">Countersigned</Badge></div>
-      )}
       <div style={{ fontSize: '0.74rem', color: 'var(--faint)', marginTop: 3 }}>
         This date is locked — no new cash movements or backdated cash payments.
       </div>
-      {!readOnly && <ReopenRequestBox closeDate={drawer.date} />}
-    </div>
-  )
-}
-
-// ───────────────────────────── Reopen request (cashier side) ─────────────────────────────
-// A closed day cannot be silently reopened (AGENT.md). The cashier files a request with a
-// mandatory reason; a Finance Manager approves/rejects it and every step is audited.
-
-function ReopenRequestBox({ closeDate }: { closeDate: string }) {
-  const [open, setOpen] = useState(false)
-  const [reason, setReason] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState('')
-  const [err, setErr] = useState('')
-
-  async function submit() {
-    if (!reason.trim()) { setErr('Tell the Finance Manager what was miscounted.'); return }
-    setBusy(true)
-    setErr('')
-    setMsg('')
-    try {
-      await reopenApi.request(closeDate, reason.trim())
-      setMsg('Reopen requested — the Finance Manager will approve or reject it.')
-      setReason('')
-      setOpen(false)
-    } catch (e) {
-      setErr(apiError(e, 'Could not send the reopen request.'))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <div style={{ marginTop: 8 }}>
-      {!open ? (
-        <button type="button" onClick={() => setOpen(true)} style={{ ...ghostBtn, minHeight: 32, fontSize: '0.76rem' }}>
-          Mistake in this close? Request reopen
-        </button>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
-          <label style={{ fontSize: '0.76rem', fontWeight: 600 }}>What was miscounted?
-            <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={500}
-              placeholder="e.g. counted 56,700 but typed 57,600 — recount attached"
-              style={{ ...inputStyle, width: '100%', marginTop: 4 }} />
-          </label>
-          {err && <span style={{ fontSize: '0.76rem', color: 'var(--red)' }}>{err}</span>}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" onClick={() => void submit()} disabled={busy} style={{ ...primaryBtn(), minHeight: 32, fontSize: '0.78rem' }}>
-              {busy ? 'Sending…' : 'Send request'}
-            </button>
-            <button type="button" onClick={() => { setOpen(false); setErr(''); }} style={{ ...ghostBtn, minHeight: 32, fontSize: '0.78rem' }}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-      {msg && <div style={{ fontSize: '0.76rem', color: 'var(--green)', marginTop: 6 }}>{msg}</div>}
     </div>
   )
 }
@@ -367,7 +261,20 @@ function MovementsTable(props: {
               const editable = !props.locked && (m.workflowStatus === 'DRAFT' || m.workflowStatus === 'QUERIED')
               return (
                 <tr key={m.id}>
-                  <td style={cell}><span style={{ fontFamily: 'Consolas, monospace', fontSize: '0.8rem', fontWeight: 700, color: 'var(--navy2)' }}>{m.documentNo ?? 'draft'}</span></td>
+                  <td style={cell}>
+                    <button
+                      type="button"
+                      onClick={() => props.onEdit(m)}
+                      title="View movement details"
+                      style={{
+                        background: 'none', border: 'none', padding: 0,
+                        fontFamily: 'Consolas, monospace', fontSize: '0.8rem', fontWeight: 700,
+                        color: 'var(--navy2)', cursor: 'pointer', textAlign: 'left',
+                      }}
+                    >
+                      {m.documentNo ?? 'draft'}
+                    </button>
+                  </td>
                   <td style={cell}>
                     <span style={{
                       fontSize: '0.7rem', fontWeight: 800, padding: '2px 7px', borderRadius: 5,
@@ -385,10 +292,14 @@ function MovementsTable(props: {
                       {m.workflowStatus}
                     </Badge>
                   </td>
-                  <td style={cell}>
-                    {editable && (
+                  <td style={{ ...cell, textAlign: 'right' }}>
+                    {editable ? (
                       <button type="button" onClick={() => props.onEdit(m)} style={ghostBtn}>
                         {m.workflowStatus === 'QUERIED' ? 'Fix & Resubmit' : 'Edit'}
+                      </button>
+                    ) : (
+                      <button type="button" onClick={() => props.onEdit(m)} style={{ ...ghostBtn, color: 'var(--muted)', borderColor: 'var(--line)' }}>
+                        View
                       </button>
                     )}
                   </td>
@@ -461,27 +372,29 @@ function MovementModal(props: {
       }
       props.onDone()
     } catch (e) {
-      // FEAT-49: new movements queue offline as drafts; edits/resubmits need
-      // the server (they reference a server id) and fail loudly instead.
-      if (!edit && isOfflineError(e)) {
-        outboxEnqueue('cash', `Cash ${direction === 'IN' ? 'In' : 'Out'} — Rs.${amount}`, { ...body(), submit: false })
-        props.onDone()
-      } else {
-        setError(apiError(e, 'Could not save the movement.'))
-      }
+      setError(apiError(e, 'Could not save the movement.'))
     } finally {
       setBusy(false)
     }
   }
 
-  return (
+    const fieldInputStyle: CSSProperties = {
+      ...inputStyle,
+      background: readOnly ? 'var(--gray-bg)' : '#fff',
+      cursor: readOnly ? 'default' : undefined,
+      color: readOnly ? 'var(--ink)' : undefined,
+    }
+
+    return (
     <Modal
-      title={edit ? `Edit ${edit.documentNo ?? 'draft movement'}` : direction === 'IN' ? 'Cash In from bank' : 'Cash Out to bank'}
+      title={edit ? (readOnly ? `View ${edit.documentNo ?? 'Movement'}` : `Edit ${edit.documentNo ?? 'draft movement'}`) : direction === 'IN' ? 'Cash In from bank' : 'Cash Out to bank'}
       subtitle={edit ? undefined : 'internal money movement — no customer or job card'}
       onClose={props.onClose}
       footer={
         <>
-          <button type="button" onClick={props.onClose} style={ghostBtn} disabled={busy}>Cancel</button>
+          <button type="button" onClick={props.onClose} style={ghostBtn} disabled={busy}>
+            {readOnly ? 'Close' : 'Cancel'}
+          </button>
           {!readOnly && (queried ? (
             <button type="button" onClick={() => save(true)} style={primaryBtn(busy)} disabled={busy}>Save & Resubmit</button>
           ) : (
@@ -511,11 +424,14 @@ function MovementModal(props: {
 
       <div style={{ display: 'flex', border: '1.5px solid var(--line)', borderRadius: 7, overflow: 'hidden', width: 'fit-content' }}>
         {(['IN', 'OUT'] as const).map((d) => (
-          <button key={d} type="button" onClick={() => setDirection(d)}
+          <button key={d} type="button" onClick={() => !readOnly && setDirection(d)}
+            disabled={readOnly}
             style={{
-              border: 'none', padding: '6px 18px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer',
+              border: 'none', padding: '6px 18px', fontSize: '0.8rem', fontWeight: 700,
+              cursor: readOnly ? 'default' : 'pointer',
               background: direction === d ? (d === 'IN' ? 'var(--green)' : 'var(--red)') : 'var(--surface)',
               color: direction === d ? '#fff' : 'var(--muted)',
+              opacity: readOnly && direction !== d ? 0.35 : 1,
             }}>
             {d === 'IN' ? 'IN from bank' : 'OUT to bank'}
           </button>
@@ -523,22 +439,22 @@ function MovementModal(props: {
       </div>
 
       <label style={fieldLabel}>Date
-        <input type="date" value={transactionDate} max={todayStr()} onChange={(e) => setTransactionDate(e.target.value)} style={inputStyle} />
+        <input type="date" value={transactionDate} max={todayStr()} onChange={(e) => setTransactionDate(e.target.value)} style={fieldInputStyle} readOnly={readOnly} />
       </label>
       <label style={fieldLabel}>Amount
-        <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" style={{ ...inputStyle, textAlign: 'right' }} />
+        <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" style={{ ...fieldInputStyle, textAlign: 'right' }} readOnly={readOnly} />
       </label>
       <label style={fieldLabel}>Bank
-        <select value={bankId} onChange={(e) => setBankId(e.target.value === '' ? '' : Number(e.target.value))} style={inputStyle}>
+        <select value={bankId} onChange={(e) => setBankId(e.target.value === '' ? '' : Number(e.target.value))} style={fieldInputStyle} disabled={readOnly}>
           <option value="">— none —</option>
           {props.banks.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>
       </label>
       <label style={fieldLabel}>Transaction ID
-        <input value={transactionRef} onChange={(e) => setTransactionRef(e.target.value)} placeholder="NEFT / deposit slip no." style={inputStyle} />
+        <input value={transactionRef} onChange={(e) => setTransactionRef(e.target.value)} placeholder="NEFT / deposit slip no." style={fieldInputStyle} readOnly={readOnly} />
       </label>
       <label style={fieldLabel}>Remark
-        <input value={remark} onChange={(e) => setRemark(e.target.value)} style={inputStyle} />
+        <input value={remark} onChange={(e) => setRemark(e.target.value)} style={fieldInputStyle} readOnly={readOnly} />
       </label>
       </fieldset>
     </Modal>
@@ -553,32 +469,9 @@ function CloseDayModal(props: { drawer: CashDrawer; onClose: () => void; onDone:
   const [remark, setRemark] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [counts, setCounts] = useState<Record<number, string>>({})
 
   const variance = useMemo(() => (counted === '' ? 0 : Number(counted) - computed), [counted, computed])
   const needRemark = variance !== 0
-
-  // Denomination helper: counting physical notes/coins is less error-prone than
-  // typing one big total. Editing any count re-sums and prefills counted above.
-  const calcTotal = useMemo(() => {
-    let sum = 0
-    for (const d of DENOMS) {
-      const c = Number(counts[d] || 0)
-      if (c > 0) sum += d * c
-    }
-    return sum
-  }, [counts])
-
-  function setCount(denom: number, raw: string) {
-    const next = { ...counts, [denom]: raw }
-    setCounts(next)
-    let sum = 0
-    for (const d of DENOMS) {
-      const c = Number(next[d] || 0)
-      if (c > 0) sum += d * c
-    }
-    if (sum > 0) setCounted(String(sum))
-  }
 
   async function confirm() {
     if (!props.drawer.openingSet) { setError('Cannot close the day: the branch opening balance must be set by an Accountant first'); return }
@@ -616,31 +509,6 @@ function CloseDayModal(props: { drawer: CashDrawer; onClose: () => void; onDone:
       <label style={fieldLabel}>Physically counted cash
         <input type="number" value={counted} onChange={(e) => setCounted(e.target.value)} placeholder="0" style={{ ...inputStyle, textAlign: 'right' }} />
       </label>
-      <div style={{ border: '1px solid var(--line)', borderRadius: 8, padding: 10, background: 'var(--bg)' }}>
-        <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--muted)', marginBottom: 8 }}>
-          Denomination calculator — enter note / coin counts
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 8 }}>
-          {DENOMS.map((d) => (
-            <label key={d} style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.74rem', fontWeight: 700, color: 'var(--muted)' }}>
-              ₹{d}
-              <input
-                type="number"
-                min={0}
-                inputMode="numeric"
-                value={counts[d] ?? ''}
-                onChange={(e) => setCount(d, e.target.value)}
-                placeholder="0"
-                style={{ ...inputStyle, padding: '6px 8px', textAlign: 'right' }}
-              />
-            </label>
-          ))}
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', paddingTop: 8 }}>
-          <span style={{ color: 'var(--muted)' }}>Calculator total</span>
-          <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{inr(calcTotal)}</span>
-        </div>
-      </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem', padding: '4px 0' }}>
         <span style={{ color: 'var(--muted)' }}>Variance (counted − computed)</span>
         <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: variance === 0 ? 'var(--green)' : 'var(--amber)' }}>
@@ -660,6 +528,3 @@ function CloseDayModal(props: { drawer: CashDrawer; onClose: () => void; onDone:
 }
 
 const fieldLabel = { display: 'flex', flexDirection: 'column' as const, gap: 5, fontSize: '0.78rem', fontWeight: 600, color: 'var(--muted)' }
-
-/** Indian currency denominations for the close-day count helper. */
-const DENOMS = [500, 200, 100, 50, 20, 10, 5, 2, 1]

@@ -44,10 +44,7 @@ public record JobCardResponse(
     String claimClosedByName,
     Instant claimClosedAt,
     boolean canRecordPayment,
-    Instant createdAt,
-    // FEAT-39/50 follow-up fields
-    java.time.LocalDate serviceDueDate,
-    String stuckReason
+    Instant createdAt
 ) {
     public static String reference(String branchCode, Long id) {
         return branchCode + "-JC-" + id;

@@ -41,19 +41,10 @@ public class OrgSettingsService {
         if (request.getMultiBranchCashierAccess() != null) {
             org.setMultiBranchCashierAccess(request.getMultiBranchCashierAccess());
         }
-        if (request.getCashVarianceCountersignThreshold() != null) {
-            // Zero or negative disables — a threshold must be a positive amount.
-            java.math.BigDecimal t = request.getCashVarianceCountersignThreshold();
-            org.setCashVarianceCountersignThreshold(t.signum() > 0 ? t : null);
-        }
-        if (request.getDigestEnabled() != null) {
-            org.setDigestEnabled(request.getDigestEnabled());
-        }
         orgRepo.save(org);
 
-        log.info("Org settings updated: orgId={} multiBranchCashierAccess={} countersignThreshold={} digest={}",
-            org.getId(), org.isMultiBranchCashierAccess(),
-            org.getCashVarianceCountersignThreshold(), org.isDigestEnabled());
+        log.info("Org settings updated: orgId={} multiBranchCashierAccess={}",
+            org.getId(), org.isMultiBranchCashierAccess());
         return OrgSettingsResponse.of(org);
     }
 

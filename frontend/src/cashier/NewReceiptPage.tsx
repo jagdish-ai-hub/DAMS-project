@@ -4,15 +4,8 @@ import { mastersApi, type MasterRow } from '../api/masters'
 import { customersApi } from '../api/customers'
 import { jobCardsApi } from '../api/jobCards'
 import { receiptsApi, type CreateReceiptRequest, type DocumentHistoryEntry, type ReceiveDocument } from '../api/receipts'
-import { card, ErrorBanner, inr, primaryBtn, ghostBtn, inputStyle, Spinner, istToday, fmtDateTime } from '../shell/ui'
+import { card, ErrorBanner, inr, primaryBtn, ghostBtn, inputStyle, Spinner, istToday } from '../shell/ui'
 import AttachmentsPanel, { type LineTarget } from './AttachmentsPanel'
-import { Printer, QrCode } from 'lucide-react'
-import PrintReceiptModal from './PrintReceiptModal'
-import UpiQrModal from './UpiQrModal'
-import { useDraftRecovery } from '../shared/useDraftRecovery'
-import { isOfflineError, outboxEnqueue } from '../shared/outbox'
-import OfflineBanner from '../shared/OfflineBanner'
-import { useAuth } from '../auth/useAuth'
 
 /** The most recent accountant question / rejection reason, for the fix-and-resubmit banner. */
 function queryNote(history: DocumentHistoryEntry[]): string | null {
@@ -52,7 +45,6 @@ function apiError(err: unknown, fallback: string) {
 export default function NewReceiptPage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const { user } = useAuth()
   const editDocId = params.get('editDoc') ? Number(params.get('editDoc')) : null
   const prefillCustomerId = params.get('customerId') ? Number(params.get('customerId')) : null
 
@@ -79,33 +71,6 @@ export default function NewReceiptPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const [showPrintModal, setShowPrintModal] = useState(false)
-  const [upiModal, setUpiModal] = useState<{ amount: number; customerName: string; docRef?: string } | null>(null)
-
-  const draftData = useMemo(() => ({
-    customerId,
-    customerName,
-    vehicleNo,
-    dbmId,
-    invoiceNo,
-    invoiceAmount,
-    categoryId,
-    businessStatusId,
-    b2b,
-    gstNo,
-    lines,
-  }), [customerId, customerName, vehicleNo, dbmId, invoiceNo, invoiceAmount, categoryId, businessStatusId, b2b, gstNo, lines])
-
-  // Draft key is scoped to org+user — testers share machines and switch accounts constantly,
-  // so a global key would offer one cashier another's half-typed lines.
-  const draftStorageKey = `dams_${user?.orgId ?? 0}_${user?.userId ?? 0}_receipt_draft`
-  const {
-    hasDraft,
-    draftTimestamp,
-    restoreDraft,
-    discardDraft,
-    clearDraft,
-  } = useDraftRecovery<typeof draftData>(draftStorageKey, draftData, !editDocId && !loadedDoc)
 
   // masters + optional prefill / edit-load
   useEffect(() => {
@@ -294,13 +259,7 @@ export default function NewReceiptPage() {
         navigate(`/app/new-receipt?editDoc=${data.id}`, { replace: true })
       }
     } catch (e) {
-      if (isOfflineError(e)) {
-        // FEAT-49: the network dropped — queue as a draft, sync from the banner later.
-        outboxEnqueue('receipt', `Receipt (${lines.length} line${lines.length === 1 ? '' : 's'})`, buildBody(false))
-        setNotice('Offline — queued on this device. It becomes a draft when you sync.')
-      } else {
-        setError(apiError(e, 'Could not save the receipt.'))
-      }
+      setError(apiError(e, 'Could not save the receipt.'))
     } finally {
       setBusy(false)
     }
@@ -491,7 +450,6 @@ export default function NewReceiptPage() {
   }
 
   function finish(submitted: boolean, doc: ReceiveDocument) {
-    clearDraft()
     const ref = doc.documentNo ?? `draft #${doc.id}`
     navigate(`/app?flash=${encodeURIComponent(submitted ? `${ref} submitted for checking` : `${ref} saved as draft`)}`)
   }
@@ -520,7 +478,6 @@ export default function NewReceiptPage() {
           {notice}
         </div>
       )}
-      <OfflineBanner />
       <ErrorBanner message={error} />
 
       {readOnly && loadedDoc && (
@@ -536,65 +493,12 @@ export default function NewReceiptPage() {
         </div>
       )}
 
-      {hasDraft && (
-        <div style={{
-          background: 'var(--amber-bg)', border: '1px solid #EAD3AE', color: 'var(--amber)',
-          borderRadius: 8, padding: '10px 14px', marginBottom: 12,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap',
-        }}>
-          <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>
-            📋 Unsaved draft found from {draftTimestamp ? fmtDateTime(draftTimestamp.toISOString()) : ''}. Would you like to restore it?
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              type="button"
-              onClick={() => {
-                const restored = restoreDraft()
-                if (restored) {
-                  if (restored.customerId != null) setCustomerId(restored.customerId)
-                  if (restored.customerName) setCustomerName(restored.customerName)
-                  if (restored.vehicleNo) setVehicleNo(restored.vehicleNo)
-                  if (restored.dbmId) setDbmId(restored.dbmId)
-                  if (restored.invoiceNo) setInvoiceNo(restored.invoiceNo)
-                  if (restored.invoiceAmount) setInvoiceAmount(restored.invoiceAmount)
-                  if (restored.categoryId) setCategoryId(restored.categoryId)
-                  if (restored.businessStatusId) setBusinessStatusId(restored.businessStatusId)
-                  if (restored.b2b != null) setB2b(restored.b2b)
-                  if (restored.gstNo) setGstNo(restored.gstNo)
-                  if (restored.lines && restored.lines.length > 0) setLines(restored.lines)
-                }
-              }}
-              style={{ ...primaryBtn(false), padding: '4px 12px', minHeight: 30, fontSize: '0.78rem' }}
-            >
-              Restore Draft
-            </button>
-            <button
-              type="button"
-              onClick={discardDraft}
-              style={{ ...ghostBtn, padding: '4px 12px', minHeight: 30, fontSize: '0.78rem' }}
-            >
-              Discard
-            </button>
-          </div>
-        </div>
-      )}
-
       <section style={{ ...card, padding: 0, marginTop: 12 }}>
         <fieldset disabled={readOnly} style={{ border: 'none', margin: 0, padding: 0, minWidth: 0 }}>
         <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <h3 style={{ fontSize: '0.94rem', fontWeight: 700 }}>Receive Entry</h3>
           <span style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>customer receipt — one record per job / cause</span>
           <span style={{ flex: 1 }} />
-          {loadedDoc?.documentNo && (
-            <button
-              type="button"
-              onClick={() => setShowPrintModal(true)}
-              style={{ ...ghostBtn, display: 'inline-flex', alignItems: 'center', gap: 6, minHeight: 32, padding: '4px 10px', fontSize: '0.78rem' }}
-            >
-              <Printer size={15} />
-              <span>Print Receipt</span>
-            </button>
-          )}
           <span style={{
             fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em',
             padding: '2px 9px', borderRadius: 999,
@@ -727,34 +631,7 @@ export default function NewReceiptPage() {
                         </select>
                       </td>
                       <td style={cellStyle}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <input type="number" value={l.amount} onChange={(e) => setLine(i, { amount: e.target.value })} style={{ ...cellInput, textAlign: 'right' }} />
-                          {(m?.name?.toLowerCase().includes('upi') || (Number(l.amount) > 0 && !m?.name?.toLowerCase().includes('cash'))) && (
-                            <button
-                              type="button"
-                              title="Generate UPI QR for customer"
-                              onClick={() => setUpiModal({
-                                amount: Number(l.amount) || 0,
-                                customerName: customerName || 'Customer',
-                                docRef: loadedDoc?.documentNo ?? undefined,
-                              })}
-                              style={{
-                                border: '1px solid var(--line)',
-                                background: 'var(--surface)',
-                                borderRadius: 6,
-                                padding: '5px 7px',
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: 'var(--navy)',
-                                minHeight: 32,
-                              }}
-                            >
-                              <QrCode size={15} />
-                            </button>
-                          )}
-                        </div>
+                        <input type="number" value={l.amount} onChange={(e) => setLine(i, { amount: e.target.value })} style={{ ...cellInput, textAlign: 'right' }} />
                       </td>
                       <td style={cellStyle}>
                         <select value={l.bankId} disabled={!m?.requiresBank} onChange={(e) => setLine(i, { bankId: e.target.value === '' ? '' : Number(e.target.value) })} style={cellInput}>
@@ -832,18 +709,6 @@ export default function NewReceiptPage() {
         </div>
         </fieldset>
       </section>
-
-      {showPrintModal && loadedDoc && (
-        <PrintReceiptModal doc={loadedDoc} onClose={() => setShowPrintModal(false)} />
-      )}
-      {upiModal && (
-        <UpiQrModal
-          amount={upiModal.amount}
-          customerName={upiModal.customerName}
-          docRef={upiModal.docRef}
-          onClose={() => setUpiModal(null)}
-        />
-      )}
     </div>
   )
 }

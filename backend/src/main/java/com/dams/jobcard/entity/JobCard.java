@@ -71,22 +71,6 @@ public class JobCard {
     @Column(name = "business_status_id", nullable = false)
     private Long businessStatusId;
 
-    /**
-     * When the vehicle is next due back — AMC expiry, service reminder
-     * (FEAT-39). Set at billing; NULL means "no reminder wanted", never
-     * defaulted, so nobody gets nagged by accident.
-     */
-    @Column(name = "service_due_date")
-    private java.time.LocalDate serviceDueDate;
-
-    /**
-     * Why a WIP/hold job card isn't moving (FEAT-50 floor board). Free text —
-     * reasons are "waiting for Eicher approval", not categories. Cleared when
-     * the status moves on.
-     */
-    @Column(name = "stuck_reason", length = 500)
-    private String stuckReason;
-
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 }

@@ -19,13 +19,6 @@ public interface SettlementLineRepository extends JpaRepository<SettlementLine, 
     List<SettlementLine> findByOrgIdAndReceiveDocumentIdInOrderByLineNoAsc(Long orgId, List<Long> receiveDocumentIds);
 
     /**
-     * Recon candidates (FEAT-40): referenced lines in a date window. Matching
-     * happens in ReconService — this just bounds the candidate set.
-     */
-    List<SettlementLine> findByOrgIdAndTransactionDateBetweenAndTransactionRefIsNotNull(
-        Long orgId, java.time.LocalDate from, java.time.LocalDate to);
-
-    /**
      * Sum of every settlement line on a job card, across ALL of its receive documents except
      * REJECTED ones (a rejected document's lines are void). This is the Σ term of Pending
      * Amount — see {@link com.dams.jobcard.service.PendingAmountCalculator}.
@@ -160,48 +153,6 @@ public interface SettlementLineRepository extends JpaRepository<SettlementLine, 
                                              @Param("to") java.time.LocalDate to,
                                              @Param("branchId") Long branchId);
 
-    @Query("""
-        select l, d, j
-        from SettlementLine l, ReceiveDocument d, JobCard j
-        where l.receiveDocumentId = d.id
-          and d.jobCardId = j.id
-          and l.orgId = :orgId
-          and d.workflowStatus <> com.dams.receive.entity.WorkflowStatus.REJECTED
-          and d.branchId in :branchIds
-          and l.transactionDate between :from and :to
-        order by l.transactionDate desc, l.id desc
-        """)
-    List<Object[]> findLinesForExport(
-        @Param("orgId") Long orgId,
-        @Param("branchIds") java.util.Collection<Long> branchIds,
-        @Param("from") java.time.LocalDate from,
-        @Param("to") java.time.LocalDate to);
-
     /** Super Admin org-purge only. */
     long deleteByOrgId(Long orgId);
-
-    /** Masters usage — settlement lines on a mode (or bank) with a recent transaction date. */
-    @Query("""
-        select count(l) from SettlementLine l
-        where l.orgId = :orgId
-          and l.settlementModeId = :modeId
-          and l.transactionDate >= :since
-        """)
-    long countByOrgIdAndSettlementModeIdSince(@Param("orgId") Long orgId,
-                                              @Param("modeId") Long modeId,
-                                              @Param("since") java.time.LocalDate since);
-
-    @Query("""
-        select count(l) from SettlementLine l
-        where l.orgId = :orgId
-          and l.bankId = :bankId
-          and l.transactionDate >= :since
-        """)
-    long countByOrgIdAndBankIdSince(@Param("orgId") Long orgId,
-                                    @Param("bankId") Long bankId,
-                                    @Param("since") java.time.LocalDate since);
-
-    /** Universal search — UTR / transaction-ref fragment (case-insensitive). */
-    List<SettlementLine> findByOrgIdAndTransactionRefContainingIgnoreCase(
-        Long orgId, String fragment, org.springframework.data.domain.Limit limit);
 }

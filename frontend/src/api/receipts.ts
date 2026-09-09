@@ -112,9 +112,6 @@ export interface Attachment {
   sizeBytes: number
   frozen: boolean
   uploadedAt: string
-  // FEAT-37: exact duplicates found at upload (same bytes elsewhere in the
-  // org) — a warning, never a block. Null when none.
-  duplicateOf: { attachmentId: number; parentType: string; parentId: number; filename: string }[] | null
 }
 
 export interface SignedUrl {

@@ -130,57 +130,6 @@ public interface ExpenseLineRepository extends JpaRepository<ExpenseLine, Long> 
                                           @Param("to") LocalDate to,
                                           @Param("branchId") Long branchId);
 
-    @Query("""
-        select l, d
-        from ExpenseLine l, ExpenseDocument d
-        where l.expenseDocumentId = d.id
-          and l.orgId = :orgId
-          and d.workflowStatus <> com.dams.expense.entity.ExpenseWorkflowStatus.REJECTED
-          and d.branchId in :branchIds
-          and l.transactionDate between :from and :to
-        order by l.transactionDate desc, l.id desc
-        """)
-    List<Object[]> findLinesForExport(
-        @Param("orgId") Long orgId,
-        @Param("branchIds") java.util.Collection<Long> branchIds,
-        @Param("from") LocalDate from,
-        @Param("to") LocalDate to);
-
     /** Super Admin org-purge only. */
     long deleteByOrgId(Long orgId);
-
-    /** Masters usage — expense lines on a sub-category / mode / bank with a recent transaction date. */
-    @Query("""
-        select count(l) from ExpenseLine l
-        where l.orgId = :orgId
-          and l.subCategoryId = :subCategoryId
-          and l.transactionDate >= :since
-        """)
-    long countByOrgIdAndSubCategoryIdSince(@Param("orgId") Long orgId,
-                                           @Param("subCategoryId") Long subCategoryId,
-                                           @Param("since") LocalDate since);
-
-    @Query("""
-        select count(l) from ExpenseLine l
-        where l.orgId = :orgId
-          and l.expenseModeId = :modeId
-          and l.transactionDate >= :since
-        """)
-    long countByOrgIdAndExpenseModeIdSince(@Param("orgId") Long orgId,
-                                           @Param("modeId") Long modeId,
-                                           @Param("since") LocalDate since);
-
-    @Query("""
-        select count(l) from ExpenseLine l
-        where l.orgId = :orgId
-          and l.bankId = :bankId
-          and l.transactionDate >= :since
-        """)
-    long countByOrgIdAndBankIdSince(@Param("orgId") Long orgId,
-                                    @Param("bankId") Long bankId,
-                                    @Param("since") LocalDate since);
-
-    /** Universal search — UTR / transaction-ref fragment (case-insensitive). */
-    List<ExpenseLine> findByOrgIdAndTransactionRefContainingIgnoreCase(
-        Long orgId, String fragment, org.springframework.data.domain.Limit limit);
 }

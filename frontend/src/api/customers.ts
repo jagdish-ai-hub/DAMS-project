@@ -9,7 +9,6 @@ export interface Customer {
   id: number
   name: string
   phone: string | null
-  creditLimit: number | null
   vehicles: VehicleRef[]
   createdAt: string
 }
@@ -17,16 +16,6 @@ export interface Customer {
 export interface CustomerRequest {
   name: string
   phone?: string
-  creditLimit?: number | null
-}
-
-export interface CreditStatus {
-  customerId: number
-  customerName: string
-  creditLimit: number | null
-  exposure: number
-  breached: boolean
-  headroom: number | null
 }
 
 export interface JobCardSummary {
@@ -46,10 +35,8 @@ export interface JobCardSummary {
   canRecordPayment: boolean
   receiveDocumentId: number | null
   receiveDocumentSettled: boolean
-  claimOverridden: boolean
-  claimFinalAmount: number | null
-  serviceDueDate: string | null
-  stuckReason: string | null
+  claimOverridden?: boolean
+  claimFinalAmount?: number | null
   createdAt: string
 }
 
@@ -89,8 +76,5 @@ export const customersApi = {
   },
   update(id: number, data: CustomerRequest) {
     return api.patch<Customer>(`/api/v1/customers/${id}`, data)
-  },
-  creditStatus(id: number) {
-    return api.get<CreditStatus>(`/api/v1/customers/${id}/credit-status`)
   },
 }

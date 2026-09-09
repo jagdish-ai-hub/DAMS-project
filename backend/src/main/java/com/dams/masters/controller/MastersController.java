@@ -3,7 +3,6 @@ package com.dams.masters.controller;
 import com.dams.masters.MasterType;
 import com.dams.masters.dto.MasterRequest;
 import com.dams.masters.dto.MasterResponse;
-import com.dams.masters.dto.MasterUsageResponse;
 import com.dams.masters.service.MastersService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -45,12 +44,6 @@ public class MastersController {
     @Operation(summary = "Get one master row")
     public MasterResponse get(@PathVariable String type, @PathVariable Long id) {
         return mastersService.get(MasterType.fromSlug(type), id);
-    }
-
-    @GetMapping("/usage")
-    @Operation(summary = "Usage per row in the last 90 days — the deactivation guard")
-    public List<MasterUsageResponse> usage(@PathVariable String type) {
-        return mastersService.usage(MasterType.fromSlug(type));
     }
 
     @PostMapping

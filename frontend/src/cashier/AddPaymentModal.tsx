@@ -2,8 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { mastersApi, type MasterRow } from '../api/masters'
 import { receiptsApi, type ReceiveDocument } from '../api/receipts'
 import { Modal, Field, ErrorBanner, inputStyle, primaryBtn, ghostBtn, inr, istToday, Spinner } from '../shell/ui'
-import { QrCode } from 'lucide-react'
-import UpiQrModal from './UpiQrModal'
 
 /**
  * Add Payment (intial ui prototypes/cashier-home.html). Appends ONE settlement line to the
@@ -29,7 +27,6 @@ export default function AddPaymentModal(props: {
   const [file, setFile] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [showUpiQr, setShowUpiQr] = useState(false)
 
   useEffect(() => {
     Promise.all([mastersApi.list('settlement-modes'), mastersApi.list('banks')])
@@ -116,28 +113,7 @@ export default function AddPaymentModal(props: {
         </select>
       </Field>
       <Field label="Amount *">
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
-          {(mode?.name?.toLowerCase().includes('upi') || Number(amount) > 0) && (
-            <button
-              type="button"
-              onClick={() => setShowUpiQr(true)}
-              title="Show UPI QR Code"
-              style={{
-                ...ghostBtn,
-                padding: '6px 10px',
-                minHeight: 38,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                color: 'var(--navy)',
-              }}
-            >
-              <QrCode size={16} />
-              <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>UPI QR</span>
-            </button>
-          )}
-        </div>
+        <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} style={inputStyle} />
       </Field>
       {mode?.requiresBank && (
         <Field label="Bank">
@@ -168,15 +144,6 @@ export default function AddPaymentModal(props: {
           style={{ display: 'none' }}
         />
       </label>
-
-      {showUpiQr && (
-        <UpiQrModal
-          amount={Number(amount) || 0}
-          customerName={props.customerName}
-          docRef={props.documentNo ?? props.jobReference}
-          onClose={() => setShowUpiQr(false)}
-        />
-      )}
     </Modal>
   )
 }

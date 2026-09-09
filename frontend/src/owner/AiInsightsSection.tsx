@@ -51,10 +51,8 @@ export default function AiInsightsSection({ branchId, period, scopeLabel }: {
   useEffect(() => {
     let live = true
     setLoading(true)
-    setError('')
-    const briefPeriod = period === 'custom' ? 'mtd' : period
     Promise.allSettled([
-      aiApi.brief(briefPeriod, b),
+      aiApi.brief(period, b),
       aiApi.anomalies(b),
       aiApi.benchmark(),
       aiApi.cashAdvice(b),

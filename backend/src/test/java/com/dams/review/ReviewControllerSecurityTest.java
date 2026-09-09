@@ -5,11 +5,8 @@ import com.dams.config.JwtConfig;
 import com.dams.config.SecurityConfig;
 import com.dams.config.TenantFilter;
 import com.dams.expense.dto.ExpenseDocumentResponse;
-import com.dams.export.controller.ExportController;
-import com.dams.export.service.ExportService;
 import com.dams.jobcard.controller.JobCardController;
 import com.dams.jobcard.dto.JobCardResponse;
-import com.dams.jobcard.service.BoardService;
 import com.dams.jobcard.service.ClaimCloseService;
 import com.dams.jobcard.service.JobCardService;
 import com.dams.receive.dto.ReceiveDocumentResponse;
@@ -40,7 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Web-layer role gates mirror the service guards: the service would refuse anyway,
  * but the wrong role must never even reach it. One proof per gate family.
  */
-@WebMvcTest({ReviewController.class, JobCardController.class, ExportController.class})
+@WebMvcTest({ReviewController.class, JobCardController.class})
 @Import({SecurityConfig.class, JwtConfig.class, TenantFilter.class})
 class ReviewControllerSecurityTest {
 
@@ -53,10 +50,6 @@ class ReviewControllerSecurityTest {
     private JobCardService jobCardService;
     @MockBean
     private ClaimCloseService claimCloseService;
-    @MockBean
-    private BoardService boardService;
-    @MockBean
-    private ExportService exportService;
     @MockBean
     private JwtUtil jwtUtil;
 
@@ -141,13 +134,10 @@ class ReviewControllerSecurityTest {
     }
 
     @Test
-    void overrideAndBulk_forbiddenForOwner() throws Exception {
+    void override_forbiddenForOwner() throws Exception {
         stubToken("owner-token", 5L, 1L, Role.OWNER);
         mockMvc.perform(post("/api/v1/receipts/1/lines/1/override").header("Authorization", "Bearer owner-token")
                 .contentType(MediaType.APPLICATION_JSON).content("{\"amount\":10,\"reason\":\"r\"}"))
-            .andExpect(status().isForbidden());
-        mockMvc.perform(post("/api/v1/receipts/bulk-verify").header("Authorization", "Bearer owner-token")
-                .contentType(MediaType.APPLICATION_JSON).content("{\"ids\":[1]}"))
             .andExpect(status().isForbidden());
     }
 
@@ -173,18 +163,6 @@ class ReviewControllerSecurityTest {
         stubToken("acct-token", 6L, 1L, Role.ACCOUNTANT);
         mockMvc.perform(post("/api/v1/job-cards/9/close-claim").header("Authorization", "Bearer acct-token")
                 .contentType(MediaType.APPLICATION_JSON).content("{\"finalAmount\":100}"))
-            .andExpect(status().isForbidden());
-    }
-
-    @Test
-    void exportReceipts_okForOwner_forbiddenForCashier() throws Exception {
-        stubToken("owner-token", 5L, 1L, Role.OWNER);
-        when(exportService.exportReceiptsCsv(any(), any(), any())).thenReturn(new byte[0]);
-        mockMvc.perform(get("/api/v1/export/receipts").header("Authorization", "Bearer owner-token"))
-            .andExpect(status().isOk());
-
-        stubToken("cashier-token", 7L, 1L, Role.CASHIER);
-        mockMvc.perform(get("/api/v1/export/receipts").header("Authorization", "Bearer cashier-token"))
             .andExpect(status().isForbidden());
     }
 

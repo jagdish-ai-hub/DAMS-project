@@ -1,4 +1,5 @@
 import { type CSSProperties, type ReactNode, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 
 /** Small shared building blocks in the same inline-style idiom as the rest of the app. */
 
@@ -207,7 +208,15 @@ export function Modal(props: { title: string; subtitle?: string; onClose: () => 
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  return (
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [])
+
+  return createPortal(
     <div
       className="dams-anim-backdrop"
       role="dialog"
@@ -217,7 +226,7 @@ export function Modal(props: { title: string; subtitle?: string; onClose: () => 
       style={{
         position: 'fixed', inset: 0, background: 'rgba(16,24,40,.45)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 'clamp(12px, 3vh, 32px) clamp(10px, 3vw, 16px)', zIndex: 50, overflowY: 'auto',
+        padding: 'clamp(12px, 3vh, 32px) clamp(10px, 3vw, 16px)', zIndex: 100, overflowY: 'auto',
       }}
     >
       <div
@@ -265,7 +274,8 @@ export function Modal(props: { title: string; subtitle?: string; onClose: () => 
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

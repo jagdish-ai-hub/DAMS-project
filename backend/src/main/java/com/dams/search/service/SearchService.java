@@ -8,13 +8,11 @@ import com.dams.customer.entity.Customer;
 import com.dams.customer.repository.CustomerRepository;
 import com.dams.expense.entity.ExpenseDocument;
 import com.dams.expense.repository.ExpenseDocumentRepository;
-import com.dams.expense.repository.ExpenseLineRepository;
 import com.dams.jobcard.entity.JobCard;
 import com.dams.jobcard.repository.JobCardRepository;
 import com.dams.jobcard.service.PendingAmountCalculator;
 import com.dams.receive.entity.ReceiveDocument;
 import com.dams.receive.repository.ReceiveDocumentRepository;
-import com.dams.receive.repository.SettlementLineRepository;
 import com.dams.search.dto.SearchResponse;
 import com.dams.vehicle.entity.Vehicle;
 import com.dams.vehicle.repository.VehicleRepository;
@@ -44,10 +42,6 @@ import java.util.stream.Collectors;
  * that is their home branch unless the org's multi_branch_cashier_access toggle is on. Name /
  * phone / vehicle matches are org-wide because customers and vehicles are not branch-scoped.
  *
- * UTR / transaction-ref matches (min 4 characters, case-insensitive) resolve through the
- * parent document to the job card's customer, exactly like a document-number match — a
- * cashier tracing a bank statement line lands on the right customer.
- *
  * A standalone overhead expense (no job card) has no customer, so its number is not
  * reachable through this customer-centric result — those are found via the Accountant's
  * expense queue (Stage 7).
@@ -57,15 +51,12 @@ public class SearchService {
 
     private static final int MIN_QUERY_LENGTH = 2;
     private static final int MAX_HITS = 15;
-    private static final int MIN_UTR_LENGTH = 4;
 
     private final CustomerRepository customerRepo;
     private final VehicleRepository vehicleRepo;
     private final JobCardRepository jobCardRepo;
     private final ReceiveDocumentRepository receiveDocumentRepo;
     private final ExpenseDocumentRepository expenseDocumentRepo;
-    private final SettlementLineRepository settlementLineRepo;
-    private final ExpenseLineRepository expenseLineRepo;
     private final BranchScope branchScope;
     private final PendingAmountCalculator pendingAmountCalculator;
     private final BranchRepository branchRepo;
@@ -75,8 +66,6 @@ public class SearchService {
                          JobCardRepository jobCardRepo,
                          ReceiveDocumentRepository receiveDocumentRepo,
                          ExpenseDocumentRepository expenseDocumentRepo,
-                         SettlementLineRepository settlementLineRepo,
-                         ExpenseLineRepository expenseLineRepo,
                          BranchScope branchScope,
                          PendingAmountCalculator pendingAmountCalculator,
                          BranchRepository branchRepo) {
@@ -85,8 +74,6 @@ public class SearchService {
         this.jobCardRepo = jobCardRepo;
         this.receiveDocumentRepo = receiveDocumentRepo;
         this.expenseDocumentRepo = expenseDocumentRepo;
-        this.settlementLineRepo = settlementLineRepo;
-        this.expenseLineRepo = expenseLineRepo;
         this.branchScope = branchScope;
         this.pendingAmountCalculator = pendingAmountCalculator;
         this.branchRepo = branchRepo;
@@ -145,32 +132,6 @@ public class SearchService {
             }
             jobCardRepo.findByIdAndOrgId(d.getJobCardId(), orgId)
                 .ifPresent(j -> matchByCustomer.putIfAbsent(j.getCustomerId(), "Expense"));
-        }
-
-        // 5. UTR / transaction ref on settlement and expense lines (min 4 chars,
-        //    case-insensitive contains). Each line resolves through its parent document to
-        //    the job card's customer — the same customer-centric hit as a document number.
-        if (q.length() >= MIN_UTR_LENGTH) {
-            for (var line : settlementLineRepo.findByOrgIdAndTransactionRefContainingIgnoreCase(
-                    orgId, q, Limit.of(MAX_HITS * 2))) {
-                receiveDocumentRepo.findByIdAndOrgId(line.getReceiveDocumentId(), orgId).ifPresent(d -> {
-                    if (!branchAllowed(allowedBranches, d.getBranchId())) {
-                        return;
-                    }
-                    jobCardRepo.findByIdAndOrgId(d.getJobCardId(), orgId)
-                        .ifPresent(j -> matchByCustomer.putIfAbsent(j.getCustomerId(), "UTR"));
-                });
-            }
-            for (var line : expenseLineRepo.findByOrgIdAndTransactionRefContainingIgnoreCase(
-                    orgId, q, Limit.of(MAX_HITS * 2))) {
-                expenseDocumentRepo.findByIdAndOrgId(line.getExpenseDocumentId(), orgId).ifPresent(d -> {
-                    if (d.getJobCardId() == null || !branchAllowed(allowedBranches, d.getBranchId())) {
-                        return;
-                    }
-                    jobCardRepo.findByIdAndOrgId(d.getJobCardId(), orgId)
-                        .ifPresent(j -> matchByCustomer.putIfAbsent(j.getCustomerId(), "UTR"));
-                });
-            }
         }
 
         if (matchByCustomer.isEmpty()) {

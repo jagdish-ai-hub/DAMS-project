@@ -56,7 +56,4 @@ public class JobCardCreateRequest {
 
     @Size(max = 20, message = "GST number must be at most 20 characters")
     private String gstNo;
-
-    /** Next service/AMC due date (FEAT-39). Optional — null means no reminder. */
-    private java.time.LocalDate serviceDueDate;
 }

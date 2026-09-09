@@ -8,12 +8,8 @@ import {
   type DocumentHistoryEntry,
   type ExpenseDocument,
 } from '../api/expenses'
-import { card, ErrorBanner, inr, primaryBtn, ghostBtn, inputStyle, Spinner, istToday, fmtDateTime } from '../shell/ui'
+import { card, ErrorBanner, inr, primaryBtn, ghostBtn, inputStyle, Spinner, istToday } from '../shell/ui'
 import AttachmentsPanel, { type LineTarget } from './AttachmentsPanel'
-import { useDraftRecovery } from '../shared/useDraftRecovery'
-import { isOfflineError, outboxEnqueue } from '../shared/outbox'
-import OfflineBanner from '../shared/OfflineBanner'
-import { useAuth } from '../auth/useAuth'
 
 /** The most recent accountant question / rejection reason, for the fix-and-resubmit banner. */
 function queryNote(history: DocumentHistoryEntry[]): string | null {
@@ -61,7 +57,6 @@ type JobCardOpt = { id: number; reference: string; categoryName: string | null }
 export default function NewExpensePage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const { user } = useAuth()
   const editDocId = params.get('editDoc') ? Number(params.get('editDoc')) : null
   const prefillCustomerId = params.get('customerId') ? Number(params.get('customerId')) : null
   const prefillJobCardId = params.get('jobCardId') ? Number(params.get('jobCardId')) : null
@@ -85,25 +80,6 @@ export default function NewExpensePage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-
-  const draftData = useMemo(() => ({
-    receiverName,
-    jobCardId,
-    expenseCategoryId,
-    businessStatusId,
-    lines,
-  }), [receiverName, jobCardId, expenseCategoryId, businessStatusId, lines])
-
-  // Draft key is scoped to org+user — testers share machines and switch accounts constantly,
-  // so a global key would offer one cashier another's half-typed lines.
-  const draftStorageKey = `dams_${user?.orgId ?? 0}_${user?.userId ?? 0}_expense_draft`
-  const {
-    hasDraft,
-    draftTimestamp,
-    restoreDraft,
-    discardDraft,
-    clearDraft,
-  } = useDraftRecovery<typeof draftData>(draftStorageKey, draftData, !editDocId && !loadedDoc)
 
   // masters
   useEffect(() => {
@@ -324,13 +300,7 @@ export default function NewExpensePage() {
         navigate(`/app/new-expense?editDoc=${data.id}`, { replace: true })
       }
     } catch (e) {
-      if (isOfflineError(e)) {
-        // FEAT-49: the network dropped — queue as a draft, sync from the banner later.
-        outboxEnqueue('expense', `Expense (${lines.length} line${lines.length === 1 ? '' : 's'})`, buildBody(false))
-        setNotice('Offline — queued on this device. It becomes a draft when you sync.')
-      } else {
-        setError(apiError(e, 'Could not save the expense.'))
-      }
+      setError(apiError(e, 'Could not save the expense.'))
     } finally {
       setBusy(false)
     }
@@ -535,7 +505,6 @@ export default function NewExpensePage() {
   }
 
   function finish(submitted: boolean, doc: ExpenseDocument) {
-    clearDraft()
     const ref = doc.documentNo ?? `draft #${doc.id}`
     navigate(`/app?flash=${encodeURIComponent(submitted ? `${ref} submitted for checking` : `${ref} saved as draft`)}`)
   }
@@ -571,7 +540,6 @@ export default function NewExpensePage() {
           {notice}
         </div>
       )}
-      <OfflineBanner />
       <ErrorBanner message={error} />
 
       {readOnly && loadedDoc && (
@@ -584,43 +552,6 @@ export default function NewExpensePage() {
       {loadedDoc?.workflowStatus === 'QUERIED' && queryNote(loadedDoc.history) && (
         <div style={{ background: 'var(--amber-bg)', border: '1px solid #EAD3AE', color: 'var(--amber)', borderRadius: 8, padding: '10px 13px', fontSize: '0.82rem', marginBottom: 12 }}>
           <strong>Query from the accountant:</strong> {queryNote(loadedDoc.history)}
-        </div>
-      )}
-
-      {hasDraft && (
-        <div style={{
-          background: 'var(--amber-bg)', border: '1px solid #EAD3AE', color: 'var(--amber)',
-          borderRadius: 8, padding: '10px 14px', marginBottom: 12,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap',
-        }}>
-          <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>
-            📋 Unsaved expense draft found from {draftTimestamp ? fmtDateTime(draftTimestamp.toISOString()) : ''}. Would you like to restore it?
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              type="button"
-              onClick={() => {
-                const restored = restoreDraft()
-                if (restored) {
-                  if (restored.receiverName) setReceiverName(restored.receiverName)
-                  if (restored.jobCardId !== undefined) setJobCardId(restored.jobCardId)
-                  if (restored.expenseCategoryId) setExpenseCategoryId(restored.expenseCategoryId)
-                  if (restored.businessStatusId) setBusinessStatusId(restored.businessStatusId)
-                  if (restored.lines && restored.lines.length > 0) setLines(restored.lines)
-                }
-              }}
-              style={{ ...primaryBtn(false), padding: '4px 12px', minHeight: 30, fontSize: '0.78rem' }}
-            >
-              Restore Draft
-            </button>
-            <button
-              type="button"
-              onClick={discardDraft}
-              style={{ ...ghostBtn, padding: '4px 12px', minHeight: 30, fontSize: '0.78rem' }}
-            >
-              Discard
-            </button>
-          </div>
         </div>
       )}
 

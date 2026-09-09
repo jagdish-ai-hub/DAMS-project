@@ -20,7 +20,6 @@ export interface MasterRow {
   isClaim?: boolean
   requiresBank?: boolean
   requiresRef?: boolean
-  isCash?: boolean
   triggersClaim?: boolean
   expenseCategoryId?: number
   limitAmount?: number | null
@@ -33,17 +32,9 @@ export interface MasterRequest {
   isClaim?: boolean
   requiresBank?: boolean
   requiresRef?: boolean
-  isCash?: boolean
   triggersClaim?: boolean
   expenseCategoryId?: number
   limitAmount?: number | null
-}
-
-export interface MasterUsageRow {
-  id: number
-  name?: string
-  useCount: number
-  usedLast90d?: boolean
 }
 
 export const mastersApi = {
@@ -56,13 +47,5 @@ export const mastersApi = {
   },
   update(type: MasterTypeSlug, id: number, data: MasterRequest) {
     return api.patch<MasterRow>(`/api/v1/masters/${type}/${id}`, data)
-  },
-  /**
-   * 90-day usage counts per row, for the deactivate guard. The backend may not
-   * implement this yet — callers treat a 404 as "no usage data" and skip
-   * silently instead of erroring.
-   */
-  usage(type: MasterTypeSlug) {
-    return api.get<MasterUsageRow[]>(`/api/v1/masters/${type}/usage`)
   },
 }

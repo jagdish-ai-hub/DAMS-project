@@ -50,14 +50,6 @@ public class Attachment {
     @Column(name = "size_bytes", nullable = false)
     private long sizeBytes;
 
-    /**
-     * SHA-256 of the bytes at upload (FEAT-37). Same hash twice in one org =
-     * the same bill attached twice — warned, never blocked. NULL for rows
-     * uploaded before V27, which are simply never matched.
-     */
-    @Column(length = 64)
-    private String sha256;
-
     @Column(nullable = false)
     private boolean frozen = false;
 

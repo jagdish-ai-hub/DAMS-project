@@ -38,12 +38,6 @@ const SEGMENT: Record<ReviewType, string> = {
 const base = (t: ReviewType) => `/api/v1/${SEGMENT[t]}`
 const fmSegment = (t: ReviewType) => (t === 'expense' ? 'expenses' : t === 'cash' ? 'cash' : 'receipts')
 
-export interface BulkVerifyResponse {
-  verifiedCount: number
-  verifiedIds: number[]
-  skippedReasons: string[]
-}
-
 export const reviewApi = {
   receiptQueue() {
     return api.get<ReviewQueueItem[]>('/api/v1/review/receipts')
@@ -63,36 +57,6 @@ export const reviewApi = {
 
   verify(t: ReviewType, id: number) {
     return api.post<AnyReviewDoc>(`${base(t)}/${id}/verify`)
-  },
-  bulkVerify(t: 'receipt' | 'expense', ids: number[]) {
-    return api.post<BulkVerifyResponse>(`${base(t)}/bulk-verify`, { ids })
-  },
-  /**
-   * FM bulk approve — server bulk endpoint (VERIFIED → APPROVED, maker-checker
-   * skips server-side). Falls back to one-by-one approve if the server path
-   * is unavailable, keeping the same response shape for shared UI.
-   */
-  async bulkApprove(t: 'receipt' | 'expense', ids: number[]): Promise<{ data: BulkVerifyResponse }> {
-    try {
-      const res = await api.post<BulkVerifyResponse>(`${base(t)}/bulk-approve`, { ids })
-      return res
-    } catch (e) {
-      const status = (e as { response?: { status?: number } })?.response?.status
-      if (status !== 404 && status !== 405) throw e
-      const verifiedIds: number[] = []
-      const skippedReasons: string[] = []
-      for (const id of ids) {
-        try {
-          await api.post(`${base(t)}/${id}/approve`)
-          verifiedIds.push(id)
-        } catch (err) {
-          const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-            ?? `Document #${id} could not be approved.`
-          skippedReasons.push(`#${id}: ${msg}`)
-        }
-      }
-      return { data: { verifiedCount: verifiedIds.length, verifiedIds, skippedReasons } }
-    }
   },
   approve(t: ReviewType, id: number) {
     return api.post<AnyReviewDoc>(`${base(t)}/${id}/approve`)

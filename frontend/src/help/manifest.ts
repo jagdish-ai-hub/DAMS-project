@@ -21,7 +21,6 @@ export const HELP_MANIFEST: Record<HelpRole, HelpEntry[]> = {
     { slug: 'cash-in-and-out', title: 'Cash in and out' },
     { slug: 'closing-the-day', title: 'Closing the day' },
     { slug: 'fixing-a-queried-entry', title: 'Fixing a queried entry' },
-    { slug: 'quoting-a-job', title: 'Quoting a job' },
   ],
   accountant: [
     { slug: 'your-role-in-dams', title: 'Your role in DAMS' },
@@ -29,27 +28,19 @@ export const HELP_MANIFEST: Record<HelpRole, HelpEntry[]> = {
     { slug: 'reviewing-cash', title: 'Reviewing cash movements' },
     { slug: 'overriding-an-amount', title: 'Overriding an amount' },
     { slug: 'closing-an-expense', title: 'Closing an expense' },
-    { slug: 'reconciling-the-bank', title: 'Reconciling the bank' },
-    { slug: 'awaiting-bills', title: 'Awaiting bills' },
   ],
   'finance-manager': [
     { slug: 'your-role-in-dams', title: 'Your role in DAMS' },
     { slug: 'approving-entries', title: 'Approving entries' },
     { slug: 'closing-a-claim', title: 'Closing a claim' },
-    { slug: 'chasing-claims', title: 'Chasing claims' },
     { slug: 'override-audit', title: 'Override audit' },
   ],
   owner: [
     { slug: 'your-role-in-dams', title: 'Your role in DAMS' },
     { slug: 'reading-the-dashboard', title: 'Reading the dashboard' },
     { slug: 'comparing-branches', title: 'Comparing branches' },
-    { slug: 'chasing-dues', title: 'Chasing dues' },
-    { slug: 'floor-and-renewals', title: 'Floor and renewals' },
-    { slug: 'sending-messages', title: 'Sending messages' },
-    { slug: 'staff-advances', title: 'Staff advances' },
     { slug: 'team-and-branches', title: 'Team & branches' },
     { slug: 'masters', title: 'Masters' },
-    { slug: 'override-audit', title: 'Override audit' },
   ],
   'super-admin': [
     { slug: 'your-role-in-dams', title: 'Your role in DAMS' },
@@ -63,8 +54,6 @@ export const ROLE_TO_HELP: Record<Role, HelpRole> = {
   FINANCE_MANAGER: 'finance-manager',
   OWNER: 'owner',
   SUPER_ADMIN: 'super-admin',
-  // Auditors read — they reuse the owner's reading guides, never the how-to-write ones.
-  AUDITOR: 'owner',
 }
 
 // Every article body, bundled as a raw string at build time.

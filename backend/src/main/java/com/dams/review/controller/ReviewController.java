@@ -3,8 +3,6 @@ package com.dams.review.controller;
 import com.dams.cash.dto.CashDocumentResponse;
 import com.dams.expense.dto.ExpenseDocumentResponse;
 import com.dams.receive.dto.ReceiveDocumentResponse;
-import com.dams.review.dto.BulkVerifyRequest;
-import com.dams.review.dto.BulkVerifyResponse;
 import com.dams.review.dto.FmQueue;
 import com.dams.review.dto.LineOverrideRequest;
 import com.dams.review.dto.QueryRequest;
@@ -92,13 +90,6 @@ public class ReviewController {
         return reviewService.verifyReceipt(id);
     }
 
-    @PostMapping("/receipts/bulk-verify")
-    @Operation(summary = "Bulk-verify submitted receipts — moves them to Finance Manager approval")
-    @PreAuthorize("hasAuthority('ACCOUNTANT')")
-    public BulkVerifyResponse bulkVerifyReceipts(@Valid @RequestBody BulkVerifyRequest request) {
-        return reviewService.bulkVerifyReceipts(request.ids());
-    }
-
     @PostMapping("/receipts/{id}/query")
     @Operation(summary = "Query a receipt back to the cashier — Accountant (submitted) or FM (verified)")
     @PreAuthorize("hasAnyAuthority('ACCOUNTANT','FINANCE_MANAGER')")
@@ -128,13 +119,6 @@ public class ReviewController {
         return reviewService.approveReceipt(id);
     }
 
-    @PostMapping("/receipts/bulk-approve")
-    @Operation(summary = "Finance Manager: bulk-approve verified receipts — skips anything not VERIFIED")
-    @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
-    public BulkVerifyResponse bulkApproveReceipts(@Valid @RequestBody BulkVerifyRequest request) {
-        return reviewService.bulkApproveReceipts(request.ids());
-    }
-
     // ---- expense actions ----
 
     @PostMapping("/expenses/{id}/verify")
@@ -142,13 +126,6 @@ public class ReviewController {
     @PreAuthorize("hasAuthority('ACCOUNTANT')")
     public ExpenseDocumentResponse verifyExpense(@PathVariable Long id) {
         return reviewService.verifyExpense(id);
-    }
-
-    @PostMapping("/expenses/bulk-verify")
-    @Operation(summary = "Bulk-verify submitted expenses — moves them to Finance Manager approval")
-    @PreAuthorize("hasAuthority('ACCOUNTANT')")
-    public BulkVerifyResponse bulkVerifyExpenses(@Valid @RequestBody BulkVerifyRequest request) {
-        return reviewService.bulkVerifyExpenses(request.ids());
     }
 
     @PostMapping("/expenses/{id}/query")
@@ -185,13 +162,6 @@ public class ReviewController {
     @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
     public ExpenseDocumentResponse approveExpense(@PathVariable Long id) {
         return reviewService.approveExpense(id);
-    }
-
-    @PostMapping("/expenses/bulk-approve")
-    @Operation(summary = "Finance Manager: bulk-approve verified expenses — skips anything not VERIFIED")
-    @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
-    public BulkVerifyResponse bulkApproveExpenses(@Valid @RequestBody BulkVerifyRequest request) {
-        return reviewService.bulkApproveExpenses(request.ids());
     }
 
     // ---- cash actions ----
