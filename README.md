@@ -10,7 +10,6 @@ window into branch operations.
 
 > **Spec:** `AGENT.md` is the rulebook (roles, tenancy, ID scheme, closing rules).
 > **Build log:** `plan.md` is the chronological changelog (rev 1 → rev 28+).
-> **Value-adds:** `docs/VALUE_ADDITIONS.md` details FEAT-01 → FEAT-21.
 > **Deploy:** `docs/deployment-guide.md` + `compose.prod.yml` + `deploy/`.
 > This README explains **how everything works, end to end, with flow diagrams**.
 
@@ -32,7 +31,7 @@ window into branch operations.
 12. [Universal search, My Entries & fix-and-resubmit](#12-universal-search-my-entries--fix-and-resubmit)
 13. [Owner dashboard (what counts, what doesn't)](#13-owner-dashboard-what-counts-what-doesnt)
 14. [Attachments (R2 / local)](#14-attachments-r2--local)
-15. [Exports (Tally / CSV)](#15-exports-tally--csv)
+15. [Accounting boundary & Tally](#15-accounting-boundary--tally)
 16. [AI assistant module (read-only)](#16-ai-assistant-module-read-only)
 17. [Help Center](#17-help-center)
 18. [Full API map](#18-full-api-map)
@@ -407,10 +406,9 @@ UPI/Bank-mode lines never enter this math, wherever they appear.
 The Close Day box includes a **denomination grid** (₹500 down to ₹1): type how many
 notes/coins of each you counted and it totals the counted amount for you.
 
-A closed day is locked, but a miscount can still be fixed: the cashier files a
-**reopen request** with a mandatory reason (`POST /cash/reopen-requests`); a Finance
-Manager approves (the close row is removed so the day can be re-closed) or rejects
-with a reason. Every step is audited — there is deliberately no silent reopen.
+A closed day is locked against new cash entries. Cash-mode receipt and expense
+lines cannot be backdated into a closed day, protecting cash drawer integrity and
+ensuring audit compliance.
 
 ```mermaid
 stateDiagram-v2
@@ -450,8 +448,6 @@ Cash In/Out sub-categories under expenses are removed — fully replaced by this
 | `POST …/query` (note) / `/reject` (reason) | Accountant (from SUBMITTED), FM (from VERIFIED) | → QUERIED / REJECTED |
 | `POST …/lines/{lineNo}/override` | Accountant (provisional) / FM | `{amount, reason}` → stamps `original_amount`, `overridden_by/at`, writes `OVERRIDE` audit row, recomputes `over_limit` / re-runs auto-settle |
 | `POST /expenses/{id}/close` | Accountant | Explicit expense close |
-| `POST /receipts|expenses/bulk-verify` | Accountant | Multi-select bulk verify (skips maker-checker violations) |
-| `POST /receipts|expenses/bulk-approve` | FM | Multi-select bulk approve of VERIFIED docs (same skips) |
 
 Querying uses **reason templates** (missing/blurry bill, wrong category, missing DBM
 ref, amount mismatch, missing UTR) plus free text, so query reasons stay consistent
@@ -514,14 +510,9 @@ OEM aging buckets (FM queue + Owner outstanding): `0–30d` Normal, `31–60d` F
 ## 11. Masters, receivers, org settings
 
 - `GET /masters/{type}`, `GET /masters/{type}/{id}` — any signed-in org user.
-- `GET /masters/{type}/usage` — 90-day use count per row (the deactivation guard:
-  the UI shows "used Nx in 90 days" and asks for explicit confirmation).
 - `POST /masters/{type}`, `PATCH /masters/{type}/{id}` — Owner only.
 - Deactivate, never delete (`active` flag). New orgs are auto-provisioned with the
   full catalogue (57 rows) so dropdowns work on day one.
-- Monthly **expense budgets** (`GET|PUT /budgets?month=YYYYMM`, Owner upsert of
-  `{categoryId, monthKey, capAmount}`): caps per expense category per month. They
-  inform only — amber at ≥80% of cap, red when over — and never block a submission.
 - `expense_sub_category.limit_amount` drives the `over_limit` flag; `settlement_mode`
   / `expense_mode` flags (`is_cash`, `requires_bank/ref`) drive drawer math and form
   validation — the app asks the mode, never matches its name.
@@ -558,8 +549,7 @@ Accountant closes.
 and an optional `branchId`.
 
 - `summary`: KPI cards (collections / expenses / net / cash-in-hand / pending-review),
-  14-day trend, collections-by-mode, expenses-by-category (with budget bars when the
-  Owner set monthly caps), per-branch comparison (click a row to filter to that branch).
+  14-day trend, collections-by-mode, expenses-by-category, per-branch comparison (click a row to filter to that branch).
 - **Money counts APPROVED docs only. Cash In/Out never counts as collections or
   expenses** — drawer only.
 - `outstanding`: open job-card attention items + CLAIM items (open claims deduped per
@@ -596,15 +586,16 @@ zoom/rotate/fullscreen) — not inline thumbnails. Multi-file drag-and-drop on u
 
 ---
 
-## 15. Exports (Tally / CSV)
+## 15. Accounting boundary & Tally
 
-`GET /api/v1/export/receipts|expenses` (Owner/FM/Accountant, branch-scoped) streams
-RFC-4180 CSV with UTF-8 BOM for Excel/Tally bridges: customer phone, vehicle no,
-canonical job-card ref, DBM ID, mode, bank, transaction ref, amounts. Frontend:
-`ExportModal` (7d/30d/90d/custom + branch filter) on the Accountant queue and Owner
-dashboard. (Note: AGENT.md decision #5 says no Tally export in v1 — the export
-endpoints exist as FEAT-04; keep this section aligned with AGENT.md if that decision
-is re-affirmed.)
+Tally remains the accounting system of record. DAMS is not accounting software — it is
+the clean, verified, ledger-tagged pipe that feeds accountants, plus the owner's live
+window into branch operations.
+
+Per **AGENT.md Decision #5**, Tally exports and ledger reports are explicitly
+deferred beyond v1. V1 focuses on capturing clean operational entries, enforcing
+maker-checker review queues, tracking job-card settlement and claims, maintaining
+daily cash drawer integrity, and providing AI-assisted operational insights.
 
 ---
 
@@ -622,7 +613,6 @@ swappable `InsightService` interface, so every endpoint works offline and in tes
   trace row (`org_id, user_id, question, doc_ids_cited, request_id`).
 - Frontend: `AskDamsPanel` (dashboard dock + `Ctrl/⌘+K`), `AiInsightsSection` hub,
   `AiMastersStrip`, `AiClaimBanner`, `AiRiskBadge` pills, smart-search fallback.
-- See `docs/VALUE_ADDITIONS.md` §3 (FEAT-09 → FEAT-21) for per-feature why/where.
 
 ---
 
@@ -652,8 +642,7 @@ check Swagger UI when in doubt.
 | Branches | `branch/controller/BranchController` | `GET /branches`, `GET /branches/{id}`, `POST /branches`, `PATCH /branches/{id}` |
 | Users | `user/controller/UserController` | `GET /users`, `GET /users/{id}`, `POST /users`, `PATCH /users/{id}` |
 | Org settings | `organization/controller/OrgSettingsController` | `GET /organization`, `PATCH /organization` |
-| Masters | `masters/controller/MastersController` | `GET /masters/{type}`, `GET /masters/{type}/{id}`, `GET /masters/{type}/usage` (90-day use counts, deactivation guard), `POST /masters/{type}` (Owner), `PATCH /masters/{type}/{id}` (Owner) |
-| Budgets | `budget/controller/BudgetController` | `GET /budgets?month=YYYYMM`, `PUT /budgets` (Owner upsert `{categoryId, monthKey, capAmount}`; caps inform, never block) |
+| Masters | `masters/controller/MastersController` | `GET /masters/{type}`, `GET /masters/{type}/{id}`, `POST /masters/{type}` (Owner), `PATCH /masters/{type}/{id}` (Owner) |
 | Receivers | `receiver/controller/ReceiverController` | `GET /receivers`, `GET /receivers/{id}`, `POST /receivers`, `PATCH /receivers/{id}` |
 | Customers | `customer/controller/CustomerController` | `GET /customers`, `GET /customers/{id}`, `GET /customers/{id}/history`, `POST /customers`, `PATCH /customers/{id}` |
 | Vehicles | `vehicle/controller/VehicleController` | `GET /vehicles`, `POST /vehicles` (lookup + deduped create; number normalised) |
@@ -662,15 +651,13 @@ check Swagger UI when in doubt.
 | Expenses | `expense/controller/ExpenseDocumentController` | `POST /expenses`, `GET /expenses/{id}`, `PATCH /expenses/{id}`, `POST /expenses/{id}/submit`, `POST /expenses/{id}/resubmit`, `POST /expenses/{id}/transfer-to-claim`, `POST /expenses/{id}/lines`, `PATCH /expenses/{id}/lines/{lineNo}`, `DELETE /expenses/{id}/lines/{lineNo}`, `POST\|GET /expenses/{id}/attachments`, `POST\|GET /expenses/{id}/lines/{lineNo}/attachments` |
 | Cash docs | `cash/controller/CashDocumentController` | `POST /cash-documents`, `GET /cash-documents`, `GET /cash-documents/{id}`, `PATCH /cash-documents/{id}`, `POST /cash-documents/{id}/submit`, `POST /cash-documents/{id}/resubmit`, `DELETE /cash-documents/{id}` |
 | Cash day | `cash/controller/CashController` | `GET /cash/drawer`, `POST /cash/opening`, `POST\|GET /cash/close-day` |
-| Cash reopen | `cash/controller/CashReopenController` | `POST /cash/reopen-requests` (Cashier, reason required), `GET /cash/reopen-requests` (Acct/FM/Owner), `POST /cash/reopen-requests/{id}/approve\|reject` (FM) |
-| Review | `review/controller/ReviewController` | `GET /review/receipts\|expenses\|cash`, `GET /review/fm/receipts\|expenses\|cash`, `POST /receipts/{id}/verify\|query\|reject`, `POST /receipts/bulk-verify`, `POST /receipts/bulk-approve` (FM), `POST /receipts/{id}/lines/{lineNo}/override`, `POST /receipts/{id}/approve`, `POST /expenses/{id}/verify\|bulk-verify\|query\|reject`, `POST /expenses/bulk-approve` (FM), `POST /expenses/{id}/lines/{lineNo}/override`, `POST /expenses/{id}/close`, `POST /expenses/{id}/approve`, `POST /cash-documents/{id}/verify\|approve\|query\|reject` |
+| Review | `review/controller/ReviewController` | `GET /review/receipts\|expenses\|cash`, `GET /review/fm/receipts\|expenses\|cash`, `POST /receipts/{id}/verify\|query\|reject`, `POST /receipts/{id}/lines/{lineNo}/override`, `POST /receipts/{id}/approve`, `POST /expenses/{id}/verify\|query\|reject`, `POST /expenses/{id}/lines/{lineNo}/override`, `POST /expenses/{id}/close`, `POST /expenses/{id}/approve`, `POST /cash-documents/{id}/verify\|approve\|query\|reject` |
 | Search | `search/controller/SearchController` | `GET /search?q=` (also matches UTR/transaction-ref last-4, doc numbers, vehicle/customer/job-card) |
 | AI assistant | `ai/controller/AiController` | `POST /ai/ask`, `GET /ai/brief`, `GET /ai/benchmark`, `GET /ai/anomalies`, `GET /ai/risk`, `GET /ai/queries/roots`, `GET /ai/claims/insights`, `GET /ai/cash/advice`, `GET /ai/close/checklist`, `GET /ai/receivers/duplicates`, `GET /ai/masters/health`, `GET /ai/limits/advice`, `GET /ai/search` (all read-only; only write is `ai_query_log` trace row) |
 | My Entries | `myentries/controller/MyEntriesController` | `GET /my-entries` |
 | Dashboard | `dashboard/controller/DashboardController` | `GET /dashboard/summary` (`period=today\|mtd\|custom`, `?from=&to=` custom range), `GET /dashboard/outstanding`, `GET /dashboard/activity` |
 | Override audit | `audit/controller/OverrideAuditController` | `GET /override-audit` (Owner+FM, filterable user/branch/date) |
 | Attachments | `attachment/controller/AttachmentController` | `GET /attachments/{id}`, `DELETE /attachments/{id}`, `GET /attachments/raw` (public w/ signature) |
-| Export | `export/controller/ExportController` | `GET /export/receipts`, `GET /export/expenses` |
 
 ---
 
@@ -688,26 +675,24 @@ Top routes (`src/App.tsx`): `/login`, `/accept-invite`, `/app/*` (guarded →
 | `/` (index) | Cashier home / Review Queue / Approvals & Claims / Dashboard (by JWT role; Super Admin → orgs) | all |
 | `organizations` | Super Admin panel (org table, onboard + copyable invite link, activate/deactivate, type-name-to-confirm delete) | SUPER_ADMIN |
 | `team`, `masters` | Team & Branches (add branch/user, role-conditional assignment, cashier toggle) · Masters CRUD + receivers + AI strips | OWNER |
-| `new-receipt`, `new-expense` | New Receipt / New Expense (draft auto-recovery, limit warnings, attachments panel with camera capture + compress, print with amount-in-words + WhatsApp share + UPI QR) + `?customerId= / ?jobCardId= / ?editDoc=` | CASHIER |
-| `cash` | Cash page (drawer card, movements, Cash In/Out + Close Day modals with denomination grid, reopen-request box on locked days, `?editDoc=`) | CASHIER |
+| `new-receipt`, `new-expense` | New Receipt / New Expense (limit warnings, attachments panel) + `?customerId= / ?jobCardId= / ?editDoc=` | CASHIER |
+| `cash` | Cash page (drawer card, movements, Cash In/Out + Close Day modals with denomination grid, `?editDoc=`) | CASHIER |
 | `my-entries` | My Entries (today+recent, queried highlighted, resubmit) | CASHIER |
 | `override-audit` | Override Audit (filter by date/branch/user, merged accountant+FM overrides) | OWNER, FM |
 | `settings` | Account summary + change password (+ org settings for Owner) | all |
 
 Key components: `cashier/AddPaymentModal` (appends a line, never a second doc),
-`ViewReceiptsModal` + `AttachmentLightbox`, `AttachmentsPanel` (drag-and-drop,
-camera capture, client compress), `PrintReceiptModal` (80mm/A4, amount-in-words,
-WhatsApp share), `UpiQrModal`, `shared/GlobalSearch`,
-`shared/useDraftRecovery` (48h localStorage), `review/reviewShared` (shared record
-view, query-reason templates, claim-pack buttons), `owner/AskDamsPanel` +
-`AiInsightsSection` (collapsible), `owner/MastersPage` (usage guard, budgets),
-`finance/FmQueuePage` (bulk approve, reopen requests), `help/HelpDrawer` + `HelpButton`.
+`ViewReceiptsModal`, `AttachmentsPanel` (receipt upload), `shared/GlobalSearch`,
+`review/reviewShared` (shared record view, query-reason templates),
+`owner/AskDamsPanel` + `AiInsightsSection` (collapsible), `owner/AiMastersStrip`,
+`finance/AiClaimBanner`, `review/AiRiskBadge`, `owner/MastersPage`,
+`finance/FmQueuePage`, `help/HelpDrawer` + `HelpButton`.
 
 API clients (`src/api/`): `axios` (base + Bearer + 401 + request-ID), `auth`,
-`admin`, `branches`, `users`, `orgSettings`, `masters`, `budgets`, `receivers`,
-`customers`, `vehicles`, `jobCards`, `receipts`, `expenses`, `cash` (+ reopen),
-`review` (+ bulk approve), `search`, `myEntries`, `dashboard` (custom range),
-`overrideAudit`, `ai`, `export`. Nav badges in `shell/AppShell` (queried/pending
+`admin`, `branches`, `users`, `orgSettings`, `masters`, `receivers`,
+`customers`, `vehicles`, `jobCards`, `receipts`, `expenses`, `cash`,
+`review`, `search`, `myEntries`, `dashboard` (custom range),
+`overrideAudit`, `ai`. Nav badges in `shell/AppShell` (queried/pending
 counts, 5-min poll).
 
 ---
@@ -721,17 +706,16 @@ backend/src/main/java/com/dams/
   branch/       branches + DocumentSequence (gap-free numbering)
   user/         users + branch access
   organization/ org settings (incl. cashier toggle)
-  masters/      8 configurable lists + provisioning + purge order + usage counts
-  budget/       monthly expense caps (inform-only)
+  masters/      8 configurable lists + provisioning + purge order
   receiver/     vendor/payee master
   customer/ vehicle/ jobcard/   customer history, vehicle normalisation, job cards + ClaimCloseService
-  receive/ expense/ cash/       documents + lines + posting guards + drawer/close-day + reopen requests
-  review/       ReviewGuard + ReviewService (verify/query/reject/override/approve/close/bulk-verify/bulk-approve)
+  receive/ expense/ cash/       documents + lines + posting guards + drawer/close-day
+  review/       ReviewGuard + ReviewService (verify/query/reject/override/approve/close)
   search/       universal search (incl. UTR/transaction-ref)      myentries/  own entries feed
   dashboard/    summary (today/mtd/custom range)/outstanding/activity (batched aggregates)
   audit/        override-audit feed   attachment/ StorageService (local/R2) + signed URLs
   ai/           read-only assistant (ask/brief/benchmark/anomalies/risk/claims/cash/close/...)
-  export/       CSV streams           common/     TenantFilter, BranchScope, audit, filters
+  email/        invite email service  common/     TenantFilter, BranchScope, audit, filters
   config/       Security, JWT, OpenAPI (bearerAuth), Tenant wiring
 ```
 
@@ -752,8 +736,6 @@ Flyway (`backend/src/main/resources/db/migration`) — never edit an applied mig
 | V20 | `ai_query_log` (ask trace rows only) |
 | V21 | one-open-doc index excludes REJECTED (new doc after rejection) |
 | V22 | monotonic `line_no_seq` (voided line IDs never reused) |
-| V23 | `expense_budget` (org, category, monthKey YYYYMM, cap; caps inform, never block) |
-| V24 | `cash_close_reopen_request` (branch, date, reason, PENDING/APPROVED/REJECTED; one pending per branch/date) |
 
 Hibernate `ddl-auto: validate` — schema changes only via Flyway. HikariCP is tuned
 for Neon (fixed pool 8/8, keepalive 60s, max-lifetime 25min) plus Hibernate batching
@@ -1040,7 +1022,7 @@ backend/    Spring Boot (Java 21, Maven, Flyway) — see §20
 frontend/   React 18 + Vite + TypeScript — see §19
 .github/    CI: build + test on PR; build & push images to GHCR on merge to main; deploy + auto-rollback
 deploy/     bootstrap-vps.sh, dams.env.example, nginx-dams.conf
-docs/       deployment-guide.md, VALUE_ADDITIONS.md (FEAT-01→21), RESPONSIVE_OVERHAUL_PLAN.md
+docs/       deployment-guide.md, RESPONSIVE_OVERHAUL_PLAN.md
 scripts/    seed-demo.mjs (repeatable API-driven demo seed + SEED_TOPUP mode)
 intial ui prototypes/  cashier-home.html, review-close.html, owner-dashboard.html (UI source of truth)
 docker-compose.yml      local: backend + frontend vs Neon
