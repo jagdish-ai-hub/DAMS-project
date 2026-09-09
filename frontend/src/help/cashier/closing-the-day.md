@@ -29,10 +29,3 @@ Count the drawer properly first — all of it. You'll type the counted figure in
 - You can't close a day that a later close already covers.
 - Everything else about a closed day — its receipts, expenses, non-cash lines — stays visible and unchanged. Closing only locks *cash* for that date.
 
-## Fixing a miscounted close
-
-A closed day can't be edited — but it can be reopened on request:
-
-1. On the locked day, press **Mistake in this close? Request reopen**.
-2. Write what was miscounted (e.g. "counted 56,700 but typed 57,600"). The reason is required.
-3. Your finance manager **approves** (the day unlocks so you can re-close it) or **rejects** with a reason. Every step is recorded.

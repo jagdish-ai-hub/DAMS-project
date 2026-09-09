@@ -41,6 +41,3 @@ Keep an eye on **Pending** at the bottom: it's the invoice amount minus what you
 - After you submit, the accountant may **query** it — that just means they have a question. It comes back to your **My Entries** highlighted; fix it and resubmit.
 - Attach the bill and payment proof in the **Documents** panel below the header — it saves everyone a phone call later. On a phone you can photograph the bill directly; big photos are shrunk automatically before upload.
 
-## After submitting
-
-- Press **Print Receipt** for the 80mm slip or A4 copy. The slip spells the amount out in words, and **Share on WhatsApp** sends the receipt text to the driver or fleet owner instantly.

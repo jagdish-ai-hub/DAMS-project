@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { HELP_MANIFEST, articleBody, type HelpRole } from './manifest'
@@ -35,6 +36,16 @@ export default function HelpDrawer({ role, open, onClose, initialSlug }: {
     return () => clearTimeout(t)
   }, [open, initialSlug])
 
+  // Lock background scroll while drawer is open
+  useEffect(() => {
+    if (!open) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [open])
+
   // Re-point when opened with a specific article (contextual "?").
   useEffect(() => {
     if (open && initialSlug) {
@@ -64,13 +75,13 @@ export default function HelpDrawer({ role, open, onClose, initialSlug }: {
 
   const body = articleBody(role, slug)
 
-  return (
+  return createPortal(
     <div
       className={closing ? 'dams-anim-backdrop-out' : 'dams-anim-backdrop'}
       onMouseDown={onClose}
       style={{
         position: 'fixed', inset: 0, background: 'rgba(16,24,40,.45)',
-        display: 'flex', justifyContent: 'flex-end', zIndex: 60, overflow: 'hidden',
+        display: 'flex', justifyContent: 'flex-end', zIndex: 100, overflow: 'hidden',
       }}
     >
       <div
@@ -91,13 +102,7 @@ export default function HelpDrawer({ role, open, onClose, initialSlug }: {
             <button
               type="button"
               onClick={() => setMobileView('list')}
-              className="sm:hidden"
-              style={{
-                display: mobileView === 'reader' ? 'flex' : 'none',
-                alignItems: 'center', gap: 4, background: 'none', border: 'none',
-                color: 'var(--navy)', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer',
-                padding: '6px 8px', borderRadius: 6,
-              }}
+              className={`${mobileView === 'reader' ? 'flex' : 'hidden'} sm:!hidden items-center gap-1 text-[var(--navy)] text-xs font-semibold p-1.5 rounded cursor-pointer bg-transparent border-none`}
             >
               ← Back
             </button>
@@ -188,6 +193,7 @@ export default function HelpDrawer({ role, open, onClose, initialSlug }: {
           </article>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

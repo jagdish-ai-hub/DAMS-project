@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Routes, Route, Navigate, NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import type { Role } from '../auth/AuthContext'
@@ -67,6 +68,30 @@ export default function AppShell() {
   const [askOpen, setAskOpen] = useState(false)
   const location = useLocation()
 
+  // Auto-close mobile drawer on route change
+  useEffect(() => {
+    setNavOpen(false)
+  }, [location.pathname])
+
+  // Auto-close mobile drawer when window expands to desktop size
+  useEffect(() => {
+    function onResize() {
+      if (window.innerWidth >= 1024) setNavOpen(false)
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  // Lock body scroll when mobile navigation drawer is open
+  useEffect(() => {
+    if (!navOpen) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [navOpen])
+
   // Hooks must run before the early return below (rules-of-hooks) — so the
   // role gate is computed here from the nullable user, not after the return.
   // Ask DAMS answers from org aggregates the Accountant/Cashier roles must not
@@ -119,13 +144,9 @@ export default function AppShell() {
         <button
           type="button"
           onClick={() => setNavOpen(!navOpen)}
-          className="flex lg:hidden"
+          className="flex lg:!hidden items-center justify-center p-1.5 min-w-[40px] min-h-[40px] text-white bg-transparent border-none cursor-pointer"
           aria-label="Toggle navigation"
           aria-expanded={navOpen}
-          style={{
-            background: 'none', border: 'none', color: '#fff', cursor: 'pointer',
-            padding: 6, minWidth: 40, minHeight: 40, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
         >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             {navOpen ? (
@@ -172,7 +193,7 @@ export default function AppShell() {
           ))}
         </nav>
 
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 'clamp(6px, 1.5vw, 10px)' }}>
           {canAsk && (
             <button
               type="button"
@@ -180,23 +201,26 @@ export default function AppShell() {
               title="Ask DAMS (Ctrl+K)"
               style={{
                 background: 'rgba(255,255,255,.14)', color: '#fff', border: 'none', borderRadius: 7,
-                padding: '6px 12px', fontSize: '0.83rem', fontWeight: 600, cursor: 'pointer',
-                minHeight: 32, display: 'flex', alignItems: 'center',
+                padding: '6px clamp(8px, 1.2vw, 12px)', fontSize: '0.83rem', fontWeight: 600, cursor: 'pointer',
+                minHeight: 32, display: 'flex', alignItems: 'center', gap: 5,
               }}
             >
-              ✦ Ask DAMS
+              <span>✦</span>
+              <span className="hidden sm:inline">Ask DAMS</span>
             </button>
           )}
           <button
             type="button"
             onClick={() => setHelpOpen(true)}
+            title="Help Center"
             style={{
               background: 'rgba(255,255,255,.14)', color: '#fff', border: 'none', borderRadius: 7,
-              padding: '6px 12px', fontSize: '0.83rem', fontWeight: 600, cursor: 'pointer',
-              minHeight: 32, display: 'flex', alignItems: 'center',
+              padding: '6px clamp(8px, 1.2vw, 12px)', fontSize: '0.83rem', fontWeight: 600, cursor: 'pointer',
+              minHeight: 32, display: 'flex', alignItems: 'center', gap: 5,
             }}
           >
-            ? Help
+            <span>?</span>
+            <span className="hidden sm:inline">Help</span>
           </button>
 
           <AccountMenu />
@@ -204,25 +228,35 @@ export default function AppShell() {
       </header>
 
       {/* Mobile navigation slide-out drawer (< 1024px) */}
-      {navOpen && (
+      {navOpen && createPortal(
         <div
-          className="dams-anim-backdrop lg:hidden"
+          className="dams-anim-backdrop lg:!hidden"
           onClick={() => setNavOpen(false)}
           style={{
-            position: 'fixed', inset: 0, background: 'rgba(16,24,40,.45)', zIndex: 45,
+            position: 'fixed', inset: 0, background: 'rgba(16,24,40,.45)', zIndex: 90,
           }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              position: 'absolute', top: 52, left: 0, bottom: 0, width: 'min(280px, 80vw)',
+              position: 'absolute', top: 0, left: 0, bottom: 0, width: 'min(280px, 80vw)',
               background: 'var(--navy)', color: '#fff', padding: '16px 12px',
               display: 'flex', flexDirection: 'column', gap: 6, boxShadow: 'var(--shadow-lift)',
               overflowY: 'auto',
             }}
           >
-            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'rgba(255,255,255,.5)', padding: '4px 10px', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              Navigation
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 10px 8px' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'rgba(255,255,255,.5)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Navigation
+              </span>
+              <button
+                type="button"
+                onClick={() => setNavOpen(false)}
+                aria-label="Close navigation"
+                style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: '1.1rem', padding: '2px 6px' }}
+              >
+                ✕
+              </button>
             </div>
             {navItems.map((item) => (
               <NavLink
@@ -241,7 +275,8 @@ export default function AppShell() {
               </NavLink>
             ))}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       <HelpDrawer
