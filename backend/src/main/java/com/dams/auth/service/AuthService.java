@@ -53,8 +53,11 @@ public class AuthService {
         // Emails are stored lowercased (see UserService/AdminOrgService) — normalise here so
         // mixed-case login attempts resolve to the same account.
         String email = request.getEmail().trim().toLowerCase();
+        // Unknown email and wrong password both answer 401 with the same message —
+        // a 404 here would let anyone enumerate registered emails, and the
+        // CI api-smoke probe requires 401 (never 404/500) for a bad login.
         AppUser user = userRepo.findByEmailIgnoreCase(email)
-            .orElseThrow(() -> DamsException.notFound("AppUser", "email", email));
+            .orElseThrow(() -> DamsException.unauthorized("Invalid email or password"));
 
         if (!user.isActive()) {
             throw DamsException.forbidden("AppUser " + user.getId() + " is deactivated");
@@ -63,7 +66,7 @@ public class AuthService {
         if (user.getPasswordHash() == null
                 || !passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             // Do not reveal which of the two was wrong
-            throw DamsException.badRequest("Invalid email or password");
+            throw DamsException.unauthorized("Invalid email or password");
         }
 
         log.info("Login success: userId={} role={} orgId={}",

@@ -36,6 +36,10 @@ public class DamsException extends RuntimeException {
         return new DamsException(HttpStatus.BAD_REQUEST, message);
     }
 
+    public static DamsException unauthorized(String message) {
+        return new DamsException(HttpStatus.UNAUTHORIZED, message);
+    }
+
     public static DamsException forbidden(String message) {
         return new DamsException(HttpStatus.FORBIDDEN, message);
     }

@@ -73,12 +73,12 @@ class AuthControllerTest {
         req.setPassword("wrongpassword");
 
         when(authService.login(any(LoginRequest.class)))
-            .thenThrow(DamsException.badRequest("Invalid email or password"));
+            .thenThrow(DamsException.unauthorized("Invalid email or password"));
 
         mockMvc.perform(post("/api/v1/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
-            .andExpect(status().isBadRequest())
+            .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.message").value("Invalid email or password"));
     }
 
