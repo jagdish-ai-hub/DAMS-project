@@ -32,6 +32,8 @@ public interface CashDocumentRepository extends JpaRepository<CashDocument, Long
     List<CashDocument> findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(
         Long orgId, CashWorkflowStatus workflowStatus);
 
+    Optional<CashDocument> findByOrgIdAndDocumentNoIgnoreCase(Long orgId, String documentNo);
+
     boolean existsByOrgIdAndDocumentNo(Long orgId, String documentNo);
 
     boolean existsByOrgId(Long orgId);

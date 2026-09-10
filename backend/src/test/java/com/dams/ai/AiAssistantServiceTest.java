@@ -22,6 +22,10 @@ import com.dams.expense.repository.ExpenseDocumentRepository;
 import com.dams.expense.repository.ExpenseLineRepository;
 import com.dams.branch.entity.Branch;
 import com.dams.branch.repository.BranchRepository;
+import com.dams.cash.entity.CashDocument;
+import com.dams.cash.entity.CashDirection;
+import com.dams.cash.entity.CashWorkflowStatus;
+import com.dams.jobcard.entity.JobCard;
 import com.dams.receive.entity.ReceiveDocument;
 import com.dams.receive.entity.SettlementLine;
 import com.dams.receive.entity.WorkflowStatus;
@@ -64,6 +68,13 @@ class AiAssistantServiceTest {
     @Mock private SettlementLineRepository settlementLineRepo;
     @Mock private ExpenseLineRepository expenseLineRepo;
     @Mock private BranchRepository branchRepo;
+    @Mock private com.dams.jobcard.repository.JobCardRepository jobCardRepo;
+    @Mock private com.dams.customer.repository.CustomerRepository customerRepo;
+    @Mock private com.dams.vehicle.repository.VehicleRepository vehicleRepo;
+    @Mock private com.dams.masters.repository.ReceiveCategoryRepository receiveCategoryRepo;
+    @Mock private com.dams.jobcard.repository.ClaimCloseRepository claimCloseRepo;
+    @Mock private com.dams.cash.repository.CashDocumentRepository cashDocumentRepo;
+    @Mock private com.dams.ai.service.AiWatchdogService watchdogService;
 
     private AiAssistantService service;
 
@@ -73,7 +84,9 @@ class AiAssistantServiceTest {
         service = new AiAssistantService(dashboardService,
             branchScope, queryLogRepo, new DeterministicInsightService(), opsService,
             receiveDocumentRepo, expenseDocumentRepo, settlementLineRepo,
-            expenseLineRepo, branchRepo);
+            expenseLineRepo, branchRepo,
+            jobCardRepo, customerRepo, vehicleRepo, receiveCategoryRepo,
+            claimCloseRepo, cashDocumentRepo, watchdogService);
         when(branchScope.canSeeBranch(any())).thenReturn(true);
     }
 
@@ -199,22 +212,66 @@ class AiAssistantServiceTest {
     }
 
     @Test
-    void ask_honoursBranchFilter_forNamedDocument() {
-        ReceiveDocument doc = new ReceiveDocument();
-        doc.setId(21L);
-        doc.setBranchId(99L);
-        doc.setJobCardId(9L);
-        doc.setDocumentNo("OOR-JUL26-R-021");
-        doc.setWorkflowStatus(WorkflowStatus.SUBMITTED);
-        doc.setCreatedBy(5L);
-        when(receiveDocumentRepo.findByOrgIdAndDocumentNoContainingIgnoreCase(ORG, "OOR-JUL26-R-021"))
-            .thenReturn(List.of(doc));
+    void ask_resolvesJobCard_toRealDatabaseFacts() {
+        JobCard jc = new JobCard();
+        jc.setId(7L);
+        jc.setBranchId(10L);
+        jc.setCustomerId(50L);
+        jc.setCategoryId(2L);
+        jc.setInvoiceNo("INV-777");
+        jc.setInvoiceAmount(new BigDecimal("25000"));
+        when(jobCardRepo.findByIdAndOrgId(7L, ORG)).thenReturn(java.util.Optional.of(jc));
+
+        Branch branch = new Branch();
+        branch.setId(10L);
+        branch.setCode("OOJ");
+        when(branchRepo.findByIdAndOrgId(10L, ORG)).thenReturn(java.util.Optional.of(branch));
+
+        com.dams.customer.entity.Customer cust = new com.dams.customer.entity.Customer();
+        cust.setId(50L);
+        cust.setName("Aravind Traders");
+        when(customerRepo.findByIdAndOrgId(50L, ORG)).thenReturn(java.util.Optional.of(cust));
+
+        com.dams.masters.entity.ReceiveCategory cat = new com.dams.masters.entity.ReceiveCategory();
+        cat.setId(2L);
+        cat.setName("Workshop");
+        cat.setClaim(false);
+        when(receiveCategoryRepo.findByIdAndOrgId(2L, ORG)).thenReturn(java.util.Optional.of(cat));
+
+        when(receiveDocumentRepo.findByOrgIdAndJobCardIdOrderByCreatedAtDesc(ORG, 7L)).thenReturn(List.of());
         when(branchScope.currentUserId()).thenReturn(7L);
         when(queryLogRepo.save(any(AiQueryLog.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        AiAnswer answer = service.ask("tell me about OOR-JUL26-R-021", 10L);
+        AiAnswer answer = service.ask("Tell me about OOJ-JC-7", null);
 
-        assertThat(answer.answer()).contains("Check the number or your branch filter");
-        assertThat(answer.citedDocs()).isEmpty();
+        assertThat(answer.answer()).contains("Job Card OOJ-JC-7").contains("Aravind Traders").contains("INV-777");
+        assertThat(answer.citedDocs()).containsExactly("OOJ-JC-7");
+    }
+
+    @Test
+    void ask_resolvesCashDocument_toRealDatabaseFacts() {
+        CashDocument cash = new CashDocument();
+        cash.setId(5L);
+        cash.setBranchId(10L);
+        cash.setDocumentNo("OOR-JUL26-C-005");
+        cash.setDirection(CashDirection.OUT);
+        cash.setAmount(new BigDecimal("15000"));
+        cash.setTransactionDate(java.time.LocalDate.now());
+        cash.setWorkflowStatus(CashWorkflowStatus.APPROVED);
+        cash.setTransactionRef("HDFC-REF-001");
+        when(cashDocumentRepo.findByOrgIdAndDocumentNoIgnoreCase(ORG, "OOR-JUL26-C-005"))
+            .thenReturn(java.util.Optional.of(cash));
+
+        Branch branch = new Branch();
+        branch.setId(10L);
+        branch.setCode("OOR");
+        when(branchRepo.findByIdAndOrgId(10L, ORG)).thenReturn(java.util.Optional.of(branch));
+        when(branchScope.currentUserId()).thenReturn(7L);
+        when(queryLogRepo.save(any(AiQueryLog.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        AiAnswer answer = service.ask("What is OOR-JUL26-C-005?", null);
+
+        assertThat(answer.answer()).contains("Cash movement OOR-JUL26-C-005").contains("15000").contains("HDFC-REF-001");
+        assertThat(answer.citedDocs()).containsExactly("OOR-JUL26-C-005");
     }
 }
