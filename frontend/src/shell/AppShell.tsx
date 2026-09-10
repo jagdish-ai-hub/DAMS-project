@@ -263,9 +263,9 @@ export default function AppShell() {
             {isSuperAdmin && <Route path="organizations" element={<OrganizationsPage />} />}
             {isOwner && <Route path="team" element={<TeamAndBranchesPage />} />}
             {isOwner && <Route path="masters" element={<MastersPage />} />}
-            {isCashier && <Route path="new-receipt" element={<NewReceiptPage />} />}
-            {isCashier && <Route path="new-expense" element={<NewExpensePage />} />}
-            {isCashier && <Route path="cash" element={<CashPage />} />}
+            {(isCashier || isOwner || isFinanceManager) && <Route path="new-receipt" element={<NewReceiptPage />} />}
+            {(isCashier || isOwner || isFinanceManager) && <Route path="new-expense" element={<NewExpensePage />} />}
+            {(isCashier || isOwner || isFinanceManager) && <Route path="cash" element={<CashPage />} />}
             {isCashier && <Route path="my-entries" element={<MyEntriesPage />} />}
             {(isOwner || isFinanceManager) && <Route path="override-audit" element={<OverrideAuditPage />} />}
             <Route path="settings" element={<SettingsPage />} />

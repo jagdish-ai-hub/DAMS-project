@@ -35,7 +35,7 @@ public class CashController {
 
     @GetMapping("/drawer")
     @Operation(summary = "Live drawer position + breakdown + today's movements for a branch/date")
-    @PreAuthorize("hasAnyAuthority('CASHIER','ACCOUNTANT')")
+    @PreAuthorize("hasAnyAuthority('CASHIER','ACCOUNTANT','OWNER','FINANCE_MANAGER')")
     public CashDrawerResponse drawer(
         @RequestParam(name = "branchId", required = false) Long branchId,
         @RequestParam(name = "date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {

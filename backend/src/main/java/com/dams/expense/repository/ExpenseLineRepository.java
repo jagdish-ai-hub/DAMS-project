@@ -146,6 +146,47 @@ public interface ExpenseLineRepository extends JpaRepository<ExpenseLine, Long> 
         @Param("from") LocalDate from,
         @Param("to") LocalDate to);
 
+    /**
+     * Line-level detail behind {@link #dashboardExpenses} — same APPROVED-or-CLOSED filter,
+     * so a reconciliation breakdown always sums to exactly the KPI it explains.
+     */
+    @Query("""
+        select l, d
+        from ExpenseLine l, ExpenseDocument d
+        where l.expenseDocumentId = d.id
+          and d.orgId = :orgId
+          and d.workflowStatus in (com.dams.expense.entity.ExpenseWorkflowStatus.APPROVED,
+                                   com.dams.expense.entity.ExpenseWorkflowStatus.CLOSED)
+          and l.transactionDate between :from and :to
+          and (:branchId is null or d.branchId = :branchId)
+        order by l.transactionDate desc, l.id desc
+        """)
+    List<Object[]> findApprovedForBreakdown(@Param("orgId") Long orgId,
+                                            @Param("from") LocalDate from,
+                                            @Param("to") LocalDate to,
+                                            @Param("branchId") Long branchId);
+
+    /**
+     * Line-level detail behind the Cash-page drawer's "cash expenses" subtotal — same filter
+     * as {@link #sumCashModeForBranchDate}.
+     */
+    @Query("""
+        select l, d
+        from ExpenseLine l, ExpenseDocument d
+        where l.expenseDocumentId = d.id
+          and d.orgId = :orgId
+          and d.branchId = :branchId
+          and l.transactionDate = :date
+          and l.expenseModeId in :cashModeIds
+          and d.workflowStatus <> com.dams.expense.entity.ExpenseWorkflowStatus.DRAFT
+          and d.workflowStatus <> com.dams.expense.entity.ExpenseWorkflowStatus.REJECTED
+        order by l.id desc
+        """)
+    List<Object[]> findCashModeForBranchDate(@Param("orgId") Long orgId,
+                                             @Param("branchId") Long branchId,
+                                             @Param("date") LocalDate date,
+                                             @Param("cashModeIds") Collection<Long> cashModeIds);
+
     /** Super Admin org-purge only. */
     long deleteByOrgId(Long orgId);
 }

@@ -8,13 +8,16 @@ import {
   dashboardApi,
   type DashboardPeriod, type DashboardSummary, type OutstandingItem, type ActivityItem,
 } from '../api/dashboard'
-import { card, ErrorBanner, Skeleton, inr, fmtDate, fmtDateTime, primaryBtn, ghostBtn } from '../shell/ui'
+import { cashApi } from '../api/cash'
+import { card, ErrorBanner, Skeleton, inr, fmtDate, fmtDateTime, primaryBtn, ghostBtn, istToday } from '../shell/ui'
 import GlobalSearch from '../shared/GlobalSearch'
 import AskDamsPanel from './AskDamsPanel'
 import AiInsightsSection from './AiInsightsSection'
 import HelpButton from '../help/HelpButton'
 import { Download, AlertTriangle } from 'lucide-react'
 import ExportModal from '../shared/ExportModal'
+import MoneyBreakdownModal, { type BreakdownRow, moneyMovementsToRows, cashMovementsToRows } from '../shell/MoneyBreakdownModal'
+import { useNavigate } from 'react-router-dom'
 
 /**
  * Owner dashboard (intial ui prototypes/owner-dashboard.html, dashboard tab). Read-only
@@ -29,6 +32,7 @@ function apiError(err: unknown, fallback: string) {
 const DONUT_COLORS = ['#2E5395', '#1E7F4F', '#B45309', '#6B3FA0', '#0E7490', '#B91C1C', '#5B6470']
 
 export default function DashboardPage() {
+  const navigate = useNavigate()
   const [branchId, setBranchId] = useState<number | ''>('')
   const [period, setPeriod] = useState<DashboardPeriod>('mtd')
   const [branches, setBranches] = useState<Branch[]>([])
@@ -38,6 +42,7 @@ export default function DashboardPage() {
   const [error, setError] = useState('')
   const [askOpen, setAskOpen] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
+  const [breakdown, setBreakdown] = useState<{ title: string; subtitle: string; rows: BreakdownRow[] | null; error?: string } | null>(null)
 
   useEffect(() => {
     branchesApi.list().then(({ data }) => setBranches(data.filter((b) => b.active))).catch(() => {})
@@ -98,6 +103,51 @@ export default function DashboardPage() {
     }
     return list
   }, [summary])
+
+  const scopeSubtitle = `${scopeLabel} · ${period === 'today' ? 'today' : 'month to date'}`
+
+  function openBreakdownRow(row: BreakdownRow) {
+    setBreakdown(null)
+    const path = row.kind === 'expense' ? '/app/new-expense' : row.kind === 'receipt' ? '/app/new-receipt' : '/app/cash'
+    navigate(`${path}?editDoc=${row.documentId}`)
+  }
+
+  function openCollectionsBreakdown() {
+    setBreakdown({ title: 'Collections', subtitle: scopeSubtitle, rows: null })
+    const b = branchId === '' ? undefined : branchId
+    dashboardApi.collectionsBreakdown(period, b)
+      .then(({ data }) => setBreakdown({ title: 'Collections', subtitle: scopeSubtitle, rows: moneyMovementsToRows(data) }))
+      .catch((e) => setBreakdown({ title: 'Collections', subtitle: scopeSubtitle, rows: [], error: apiError(e, 'Could not load the breakdown.') }))
+  }
+
+  function openExpensesBreakdown() {
+    setBreakdown({ title: 'Expenses', subtitle: scopeSubtitle, rows: null })
+    const b = branchId === '' ? undefined : branchId
+    dashboardApi.expensesBreakdown(period, b)
+      .then(({ data }) => setBreakdown({ title: 'Expenses', subtitle: scopeSubtitle, rows: moneyMovementsToRows(data) }))
+      .catch((e) => setBreakdown({ title: 'Expenses', subtitle: scopeSubtitle, rows: [], error: apiError(e, 'Could not load the breakdown.') }))
+  }
+
+  function openCashBreakdown() {
+    const subtitle = `${scopeLabel} · today`
+    setBreakdown({ title: 'Cash in hand', subtitle, rows: null })
+    const targets = branchId === '' ? branches.map((b) => b.id) : [branchId]
+    if (targets.length === 0) {
+      setBreakdown({ title: 'Cash in hand', subtitle, rows: [] })
+      return
+    }
+    Promise.all(targets.map((id) => cashApi.drawer(istToday(), id)))
+      .then((responses) => {
+        const rows: BreakdownRow[] = []
+        for (const { data } of responses) {
+          rows.push(...moneyMovementsToRows(data.cashReceiptLines))
+          rows.push(...moneyMovementsToRows(data.cashExpenseLines))
+          rows.push(...cashMovementsToRows(data.movements))
+        }
+        setBreakdown({ title: 'Cash in hand', subtitle, rows })
+      })
+      .catch((e) => setBreakdown({ title: 'Cash in hand', subtitle, rows: [], error: apiError(e, 'Could not load the breakdown.') }))
+  }
 
   return (
     <div style={{ maxWidth: 1180, margin: '0 auto' }}>
@@ -215,11 +265,11 @@ export default function DashboardPage() {
       {summary && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 14, marginBottom: 18 }}>
-            <Kpi label="Collections" value={inr(summary.kpis.collections)} tone="var(--green)" />
-            <Kpi label="Expenses" value={inr(summary.kpis.expenses)} tone="var(--red)" />
+            <Kpi label="Collections" value={inr(summary.kpis.collections)} tone="var(--green)" onClick={openCollectionsBreakdown} />
+            <Kpi label="Expenses" value={inr(summary.kpis.expenses)} tone="var(--red)" onClick={openExpensesBreakdown} />
             <Kpi label="Net" value={inr(summary.kpis.net)} tone="var(--navy2)" />
             <Kpi label="Cash in hand" value={inr(summary.kpis.cashInHand)} tone="var(--amber)"
-              sub={`${summary.kpis.pendingReview} pending review`} />
+              sub={`${summary.kpis.pendingReview} pending review`} onClick={openCashBreakdown} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4 mb-4">
@@ -361,16 +411,28 @@ export default function DashboardPage() {
         </>
       )}
       {showExportModal && <ExportModal onClose={() => setShowExportModal(false)} />}
+      {breakdown && (
+        <MoneyBreakdownModal
+          title={breakdown.title}
+          subtitle={breakdown.subtitle}
+          rows={breakdown.rows}
+          error={breakdown.error}
+          onRowClick={openBreakdownRow}
+          onClose={() => setBreakdown(null)}
+        />
+      )}
     </div>
   )
 }
 
 const bcCell = { padding: '7px 8px', borderTop: '1px solid var(--line)', verticalAlign: 'middle' as const }
 
-function Kpi({ label, value, tone, sub }: { label: string; value: string; tone: string; sub?: string }) {
+function Kpi({ label, value, tone, sub, onClick }: { label: string; value: string; tone: string; sub?: string; onClick?: () => void }) {
   return (
-    <div style={{ ...card, borderTop: `3px solid ${tone}` }}>
-      <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', fontWeight: 600 }}>{label}</div>
+    <div onClick={onClick} style={{ ...card, borderTop: `3px solid ${tone}`, cursor: onClick ? 'pointer' : undefined }}>
+      <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', fontWeight: 600 }}>
+        {label}{onClick && <span style={{ color: 'var(--navy2)' }}> ⓘ</span>}
+      </div>
       <div style={{ fontSize: '1.5rem', fontWeight: 800, marginTop: 5, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
       <div style={{ fontSize: '0.74rem', color: 'var(--faint)', marginTop: 2 }}>{sub ?? ' '}</div>
     </div>

@@ -4,12 +4,24 @@ import com.dams.cash.entity.CashDirection;
 import com.dams.cash.repository.BranchCashOpeningRepository;
 import com.dams.cash.repository.CashDayCloseRepository;
 import com.dams.cash.repository.CashDocumentRepository;
+import com.dams.customer.entity.Customer;
+import com.dams.customer.repository.CustomerRepository;
+import com.dams.dashboard.dto.MoneyMovementItem;
+import com.dams.expense.entity.ExpenseDocument;
+import com.dams.expense.entity.ExpenseLine;
 import com.dams.expense.repository.ExpenseLineRepository;
+import com.dams.jobcard.entity.JobCard;
+import com.dams.masters.entity.ExpenseCategory;
 import com.dams.masters.entity.ExpenseMode;
 import com.dams.masters.entity.SettlementMode;
+import com.dams.masters.repository.ExpenseCategoryRepository;
 import com.dams.masters.repository.ExpenseModeRepository;
 import com.dams.masters.repository.SettlementModeRepository;
+import com.dams.receive.entity.ReceiveDocument;
+import com.dams.receive.entity.SettlementLine;
 import com.dams.receive.repository.SettlementLineRepository;
+import com.dams.receiver.entity.Receiver;
+import com.dams.receiver.repository.ReceiverRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +30,7 @@ import com.dams.cash.entity.CashDayClose;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -44,6 +57,9 @@ import java.util.Map;
  * date; if the branch has never closed, its one-time {@code branch_cash_opening.amount}
  * (when its {@code opening_date} is on or before the date); otherwise zero, with
  * {@code openingSet = false} so the UI can prompt the Accountant to set it.
+ *
+ * {@link #lineBreakdown} returns the actual settlement/expense lines behind the cash-mode
+ * subtotals — the reconciliation drill-down the Cash page's drawer lines open into.
  */
 @Service
 public class DrawerService {
@@ -55,6 +71,9 @@ public class DrawerService {
     private final ExpenseLineRepository expenseLineRepo;
     private final SettlementModeRepository settlementModeRepo;
     private final ExpenseModeRepository expenseModeRepo;
+    private final ExpenseCategoryRepository expenseCategoryRepo;
+    private final CustomerRepository customerRepo;
+    private final ReceiverRepository receiverRepo;
 
     public DrawerService(BranchCashOpeningRepository branchCashOpeningRepo,
                          CashDayCloseRepository cashDayCloseRepo,
@@ -62,7 +81,10 @@ public class DrawerService {
                          SettlementLineRepository settlementLineRepo,
                          ExpenseLineRepository expenseLineRepo,
                          SettlementModeRepository settlementModeRepo,
-                         ExpenseModeRepository expenseModeRepo) {
+                         ExpenseModeRepository expenseModeRepo,
+                         ExpenseCategoryRepository expenseCategoryRepo,
+                         CustomerRepository customerRepo,
+                         ReceiverRepository receiverRepo) {
         this.branchCashOpeningRepo = branchCashOpeningRepo;
         this.cashDayCloseRepo = cashDayCloseRepo;
         this.cashDocumentRepo = cashDocumentRepo;
@@ -70,6 +92,9 @@ public class DrawerService {
         this.expenseLineRepo = expenseLineRepo;
         this.settlementModeRepo = settlementModeRepo;
         this.expenseModeRepo = expenseModeRepo;
+        this.expenseCategoryRepo = expenseCategoryRepo;
+        this.customerRepo = customerRepo;
+        this.receiverRepo = receiverRepo;
     }
 
     /** The full breakdown behind the drawer position for one branch/date. */
@@ -105,6 +130,66 @@ public class DrawerService {
 
         return new DrawerPosition(opening.amount(), opening.set(),
             cashReceipts, cashIn, cashExpenses, cashOut, computed);
+    }
+
+    /** The receipt lines and expense lines behind {@link DrawerPosition#cashReceipts()} / {@link DrawerPosition#cashExpenses()}. */
+    public record DrawerLines(List<MoneyMovementItem> cashReceiptLines, List<MoneyMovementItem> cashExpenseLines) {
+    }
+
+    /**
+     * Line-level detail behind the drawer's "cash receipts" / "cash expenses" subtotals for
+     * one branch/date — same cash-mode + non-DRAFT/non-REJECTED filter as {@link #position}.
+     */
+    @Transactional(readOnly = true)
+    public DrawerLines lineBreakdown(Long orgId, Long branchId, LocalDate date, String branchCode) {
+        List<Long> cashSettlementModeIds = settlementModeRepo.findByOrgIdAndCashTrue(orgId)
+            .stream().map(SettlementMode::getId).toList();
+        List<Long> cashExpenseModeIds = expenseModeRepo.findByOrgIdAndCashTrue(orgId)
+            .stream().map(ExpenseMode::getId).toList();
+
+        List<MoneyMovementItem> receiptLines = new ArrayList<>();
+        if (!cashSettlementModeIds.isEmpty()) {
+            List<Object[]> rows = settlementLineRepo.findCashModeForBranchDate(orgId, branchId, date, cashSettlementModeIds);
+            Map<Long, String> modeNames = settlementModeRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId).stream()
+                .collect(java.util.stream.Collectors.toMap(SettlementMode::getId, SettlementMode::getName));
+            Map<Long, String> customerNames = customerRepo.findByOrgIdAndIdInOrderByNameAsc(orgId, rows.stream()
+                    .map(r -> ((JobCard) r[2]).getCustomerId()).distinct().toList())
+                .stream().collect(java.util.stream.Collectors.toMap(Customer::getId, Customer::getName));
+            for (Object[] r : rows) {
+                SettlementLine l = (SettlementLine) r[0];
+                ReceiveDocument d = (ReceiveDocument) r[1];
+                JobCard jc = (JobCard) r[2];
+                receiptLines.add(new MoneyMovementItem("receipt", d.getId(), d.getDocumentNo(), d.getWorkflowStatus().name(),
+                    l.getTransactionDate(), l.getCreatedAt(), branchCode,
+                    customerNames.getOrDefault(jc.getCustomerId(), "—"),
+                    branchCode + "-JC-" + jc.getId(),
+                    modeNames.getOrDefault(l.getSettlementModeId(), "—"),
+                    l.getAmount()));
+            }
+        }
+
+        List<MoneyMovementItem> expenseLines = new ArrayList<>();
+        if (!cashExpenseModeIds.isEmpty()) {
+            List<Object[]> rows = expenseLineRepo.findCashModeForBranchDate(orgId, branchId, date, cashExpenseModeIds);
+            Map<Long, String> modeNames = expenseModeRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId).stream()
+                .collect(java.util.stream.Collectors.toMap(ExpenseMode::getId, ExpenseMode::getName));
+            Map<Long, String> categoryNames = expenseCategoryRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId).stream()
+                .collect(java.util.stream.Collectors.toMap(ExpenseCategory::getId, ExpenseCategory::getName));
+            Map<Long, String> receiverNames = receiverRepo.findByOrgIdAndIdIn(orgId, rows.stream()
+                    .map(r -> ((ExpenseDocument) r[1]).getReceiverId()).distinct().toList())
+                .stream().collect(java.util.stream.Collectors.toMap(Receiver::getId, Receiver::getName));
+            for (Object[] r : rows) {
+                ExpenseLine l = (ExpenseLine) r[0];
+                ExpenseDocument d = (ExpenseDocument) r[1];
+                expenseLines.add(new MoneyMovementItem("expense", d.getId(), d.getDocumentNo(), d.getWorkflowStatus().name(),
+                    l.getTransactionDate(), l.getCreatedAt(), branchCode,
+                    receiverNames.getOrDefault(d.getReceiverId(), "—"),
+                    categoryNames.getOrDefault(d.getExpenseCategoryId(), "—"),
+                    modeNames.getOrDefault(l.getExpenseModeId(), "—"),
+                    l.getAmount()));
+            }
+        }
+        return new DrawerLines(receiptLines, expenseLines);
     }
 
     /**

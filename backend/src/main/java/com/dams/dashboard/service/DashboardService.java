@@ -17,11 +17,18 @@ import com.dams.dashboard.dto.ActivityItem;
 import com.dams.dashboard.dto.BranchComparisonRow;
 import com.dams.dashboard.dto.DashboardKpis;
 import com.dams.dashboard.dto.DashboardSummary;
+import com.dams.dashboard.dto.MoneyMovementItem;
 import com.dams.dashboard.dto.NamedAmount;
 import com.dams.dashboard.dto.OutstandingItem;
 import com.dams.dashboard.dto.TrendPoint;
+import com.dams.expense.entity.ExpenseDocument;
+import com.dams.expense.entity.ExpenseLine;
 import com.dams.expense.repository.ExpenseDocumentRepository;
 import com.dams.expense.repository.ExpenseLineRepository;
+import com.dams.receive.entity.ReceiveDocument;
+import com.dams.receive.entity.SettlementLine;
+import com.dams.receiver.entity.Receiver;
+import com.dams.receiver.repository.ReceiverRepository;
 import com.dams.jobcard.entity.ClaimClose;
 import com.dams.jobcard.entity.JobCard;
 import com.dams.jobcard.repository.ClaimCloseRepository;
@@ -32,6 +39,7 @@ import com.dams.masters.entity.ExpenseCategory;
 import com.dams.masters.entity.SettlementMode;
 import com.dams.masters.repository.ClaimTypeRepository;
 import com.dams.masters.repository.ExpenseCategoryRepository;
+import com.dams.masters.repository.ExpenseModeRepository;
 import com.dams.masters.repository.SettlementModeRepository;
 import com.dams.receive.repository.ReceiveDocumentRepository;
 import com.dams.receive.repository.SettlementLineRepository;
@@ -75,7 +83,9 @@ public class DashboardService {
     private final CashDocumentRepository cashDocumentRepo;
     private final SettlementModeRepository settlementModeRepo;
     private final ExpenseCategoryRepository expenseCategoryRepo;
+    private final ExpenseModeRepository expenseModeRepo;
     private final ClaimTypeRepository claimTypeRepo;
+    private final ReceiverRepository receiverRepo;
     private final BranchRepository branchRepo;
     private final CashDayCloseRepository cashDayCloseRepo;
     private final DrawerService drawerService;
@@ -95,7 +105,9 @@ public class DashboardService {
                             CashDocumentRepository cashDocumentRepo,
                             SettlementModeRepository settlementModeRepo,
                             ExpenseCategoryRepository expenseCategoryRepo,
+                            ExpenseModeRepository expenseModeRepo,
                             ClaimTypeRepository claimTypeRepo,
+                            ReceiverRepository receiverRepo,
                             BranchRepository branchRepo,
                             CashDayCloseRepository cashDayCloseRepo,
                             DrawerService drawerService,
@@ -114,7 +126,9 @@ public class DashboardService {
         this.cashDocumentRepo = cashDocumentRepo;
         this.settlementModeRepo = settlementModeRepo;
         this.expenseCategoryRepo = expenseCategoryRepo;
+        this.expenseModeRepo = expenseModeRepo;
         this.claimTypeRepo = claimTypeRepo;
+        this.receiverRepo = receiverRepo;
         this.branchRepo = branchRepo;
         this.cashDayCloseRepo = cashDayCloseRepo;
         this.drawerService = drawerService;
@@ -227,6 +241,101 @@ public class DashboardService {
             for (Object[] r : rows) {
                 m.merge(((Number) r[0]).longValue(), ((Number) r[1]).longValue(), Long::sum);
             }
+        }
+        return m;
+    }
+
+    // ==================================================================== reconciliation breakdown
+
+    /**
+     * The receipt lines behind the Collections KPI for a period/branch — same APPROVED-only
+     * filter {@link com.dams.receive.repository.SettlementLineRepository#dashboardCollections}
+     * uses, so this always sums to exactly what the card shows.
+     */
+    @Transactional(readOnly = true)
+    public List<MoneyMovementItem> collectionsBreakdown(Long branchId, String period) {
+        Long orgId = TenantContext.requireOrgId();
+        resolveBranch(orgId, branchId);
+        LocalDate today = OrgTime.today();
+        LocalDate from = "today".equals(period) ? today : today.withDayOfMonth(1);
+
+        List<Object[]> rows = settlementLineRepo.findApprovedForBreakdown(orgId, from, today, branchId);
+        Map<Long, String> branchCodes = branchCodeMap(orgId);
+        Map<Long, String> modeNames = settlementModeNames(orgId);
+        Map<Long, String> customerNames = customerNamesFor(orgId, rows.stream()
+            .map(r -> ((com.dams.jobcard.entity.JobCard) r[2]).getCustomerId()).toList());
+
+        List<MoneyMovementItem> out = new ArrayList<>();
+        for (Object[] r : rows) {
+            SettlementLine l = (SettlementLine) r[0];
+            ReceiveDocument d = (ReceiveDocument) r[1];
+            com.dams.jobcard.entity.JobCard jc = (com.dams.jobcard.entity.JobCard) r[2];
+            String branchCode = branchCodes.getOrDefault(d.getBranchId(), "?");
+            out.add(new MoneyMovementItem("receipt", d.getId(), d.getDocumentNo(), d.getWorkflowStatus().name(),
+                l.getTransactionDate(), l.getCreatedAt(), branchCode,
+                customerNames.getOrDefault(jc.getCustomerId(), "—"),
+                branchCode + "-JC-" + jc.getId(),
+                modeNames.getOrDefault(l.getSettlementModeId(), "—"),
+                l.getAmount()));
+        }
+        return out;
+    }
+
+    /**
+     * The expense lines behind the Expenses KPI for a period/branch — same APPROVED-or-CLOSED
+     * filter {@link com.dams.expense.repository.ExpenseLineRepository#dashboardExpenses} uses.
+     */
+    @Transactional(readOnly = true)
+    public List<MoneyMovementItem> expensesBreakdown(Long branchId, String period) {
+        Long orgId = TenantContext.requireOrgId();
+        resolveBranch(orgId, branchId);
+        LocalDate today = OrgTime.today();
+        LocalDate from = "today".equals(period) ? today : today.withDayOfMonth(1);
+
+        List<Object[]> rows = expenseLineRepo.findApprovedForBreakdown(orgId, from, today, branchId);
+        Map<Long, String> branchCodes = branchCodeMap(orgId);
+        Map<Long, String> modeNames = expenseModeNames(orgId);
+        Map<Long, String> categoryNames = expenseCategoryNames(orgId);
+        Map<Long, String> receiverNames = receiverNamesFor(orgId, rows.stream()
+            .map(r -> ((ExpenseDocument) r[1]).getReceiverId()).toList());
+
+        List<MoneyMovementItem> out = new ArrayList<>();
+        for (Object[] r : rows) {
+            ExpenseLine l = (ExpenseLine) r[0];
+            ExpenseDocument d = (ExpenseDocument) r[1];
+            String branchCode = branchCodes.getOrDefault(d.getBranchId(), "?");
+            out.add(new MoneyMovementItem("expense", d.getId(), d.getDocumentNo(), d.getWorkflowStatus().name(),
+                l.getTransactionDate(), l.getCreatedAt(), branchCode,
+                receiverNames.getOrDefault(d.getReceiverId(), "—"),
+                categoryNames.getOrDefault(d.getExpenseCategoryId(), "—"),
+                modeNames.getOrDefault(l.getExpenseModeId(), "—"),
+                l.getAmount()));
+        }
+        return out;
+    }
+
+    private Map<Long, String> customerNamesFor(Long orgId, List<Long> customerIds) {
+        List<Long> distinct = customerIds.stream().distinct().toList();
+        if (distinct.isEmpty()) {
+            return Map.of();
+        }
+        return customerRepo.findByOrgIdAndIdInOrderByNameAsc(orgId, distinct).stream()
+            .collect(Collectors.toMap(com.dams.customer.entity.Customer::getId, com.dams.customer.entity.Customer::getName));
+    }
+
+    private Map<Long, String> receiverNamesFor(Long orgId, List<Long> receiverIds) {
+        List<Long> distinct = receiverIds.stream().distinct().toList();
+        if (distinct.isEmpty()) {
+            return Map.of();
+        }
+        return receiverRepo.findByOrgIdAndIdIn(orgId, distinct).stream()
+            .collect(Collectors.toMap(Receiver::getId, Receiver::getName));
+    }
+
+    private Map<Long, String> expenseModeNames(Long orgId) {
+        Map<Long, String> m = new HashMap<>();
+        for (var mode : expenseModeRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId)) {
+            m.put(mode.getId(), mode.getName());
         }
         return m;
     }
