@@ -216,6 +216,40 @@ class ExpenseDocumentServiceTest {
     }
 
     @Test
+    void addLine_onAVerifiedDocument_reopensToSubmitted_withAnAuditEvent() {
+        ExpenseDocument doc = submittedDoc(JC_PLAIN);
+        doc.setWorkflowStatus(ExpenseWorkflowStatus.VERIFIED);
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(doc));
+
+        service.addLine(DOC_ID, lineInput(new BigDecimal("100")));
+
+        assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.SUBMITTED);
+        verify(auditService).recordUserEvent(eq("ExpenseDocument"), eq(DOC_ID), any(), eq(EventType.SUBMITTED),
+            eq(CASHIER_ID), any());
+    }
+
+    @Test
+    void addLine_onAnApprovedDocument_reopensToSubmitted() {
+        ExpenseDocument doc = submittedDoc(JC_PLAIN);
+        doc.setWorkflowStatus(ExpenseWorkflowStatus.APPROVED);
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(doc));
+
+        service.addLine(DOC_ID, lineInput(new BigDecimal("100")));
+
+        assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.SUBMITTED);
+    }
+
+    @Test
+    void addLine_onADraftDocument_isNotReopened_sinceItWasNeverSubmitted() {
+        ExpenseDocument draft = draftDoc();
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(draft));
+
+        service.addLine(DOC_ID, lineInput(new BigDecimal("100")));
+
+        assertThat(draft.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.DRAFT);
+    }
+
+    @Test
     void submit_refusesCashLineInLockedDay_withoutConsumingNumber() {
         ExpenseDocument draft = draftDoc();
         when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(draft));
