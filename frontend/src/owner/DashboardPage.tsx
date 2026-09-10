@@ -199,46 +199,6 @@ export default function DashboardPage() {
 
       <ErrorBanner message={error} />
 
-      {cashAlerts.length > 0 && (
-        <div style={{
-          background: 'var(--amber-bg, #FEF3C7)',
-          border: '1px solid #F59E0B',
-          borderRadius: 8,
-          padding: '10px 14px',
-          marginBottom: 14,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 6,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: '0.82rem', color: '#92400E' }}>
-            <AlertTriangle size={16} color="#B45309" />
-            <span>Cash Drawer Early-Warning Alerts ({cashAlerts.length})</span>
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {cashAlerts.map((a, i) => (
-              <span
-                key={i}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  padding: '3px 8px',
-                  borderRadius: 5,
-                  background: a.severity === 'critical' ? '#FEE2E2' : '#FFFBEB',
-                  color: a.severity === 'critical' ? '#991B1B' : '#92400E',
-                  border: `1px solid ${a.severity === 'critical' ? '#FCA5A5' : '#FDE68A'}`,
-                }}
-              >
-                <strong>{a.branchCode}:</strong> {a.message}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <AiInsightsSection branchId={branchId} period={period} scopeLabel={scopeLabel} />
       {askOpen && (
         <AskDamsPanel
           branchId={branchId === '' ? undefined : branchId}
@@ -318,6 +278,47 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
+
+          {cashAlerts.length > 0 && (
+            <div style={{
+              background: 'var(--amber-bg, #FEF3C7)',
+              border: '1px solid #F59E0B',
+              borderRadius: 8,
+              padding: '10px 14px',
+              marginBottom: 14,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: '0.82rem', color: '#92400E' }}>
+                <AlertTriangle size={16} color="#B45309" />
+                <span>Cash Drawer Early-Warning Alerts ({cashAlerts.length})</span>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {cashAlerts.map((a, i) => (
+                  <span
+                    key={i}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      padding: '3px 8px',
+                      borderRadius: 5,
+                      background: a.severity === 'critical' ? '#FEE2E2' : '#FFFBEB',
+                      color: a.severity === 'critical' ? '#991B1B' : '#92400E',
+                      border: `1px solid ${a.severity === 'critical' ? '#FCA5A5' : '#FDE68A'}`,
+                    }}
+                  >
+                    <strong>{a.branchCode}:</strong> {a.message}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <AiInsightsSection branchId={branchId} period={period} scopeLabel={scopeLabel} />
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
             <div style={{ ...card }}>
