@@ -113,8 +113,9 @@ public class ExpenseDocumentController {
     @Operation(summary = "Attach a PDF/image receipt to the whole document")
     @PreAuthorize("hasAnyAuthority('CASHIER','ACCOUNTANT','FINANCE_MANAGER')")
     public ResponseEntity<AttachmentResponse> attachToDocument(@PathVariable Long id,
-                                                               @RequestParam("file") MultipartFile file) {
-        AttachmentResponse saved = attachmentService.upload(ParentType.EXPENSE_DOCUMENT, id, file);
+                                                               @RequestParam("file") MultipartFile file,
+                                                               @RequestParam(value = "comment", required = false) String comment) {
+        AttachmentResponse saved = attachmentService.upload(ParentType.EXPENSE_DOCUMENT, id, file, comment);
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
     }
 
@@ -129,9 +130,10 @@ public class ExpenseDocumentController {
     @Operation(summary = "Attach a PDF/image receipt to one expense line")
     @PreAuthorize("hasAnyAuthority('CASHIER','ACCOUNTANT','FINANCE_MANAGER')")
     public ResponseEntity<AttachmentResponse> attachToLine(@PathVariable Long id, @PathVariable Integer lineNo,
-                                                           @RequestParam("file") MultipartFile file) {
+                                                           @RequestParam("file") MultipartFile file,
+                                                           @RequestParam(value = "comment", required = false) String comment) {
         Long expenseLineId = expenseDocumentService.expenseLineId(id, lineNo);
-        AttachmentResponse saved = attachmentService.upload(ParentType.EXPENSE_LINE, expenseLineId, file);
+        AttachmentResponse saved = attachmentService.upload(ParentType.EXPENSE_LINE, expenseLineId, file, comment);
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
     }
 

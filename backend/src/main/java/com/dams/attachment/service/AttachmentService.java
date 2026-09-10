@@ -72,7 +72,7 @@ public class AttachmentService {
     }
 
     @Transactional
-    public AttachmentResponse upload(ParentType parentType, Long parentId, MultipartFile file) {
+    public AttachmentResponse upload(ParentType parentType, Long parentId, MultipartFile file, String comment) {
         Long orgId = TenantContext.requireOrgId();
         OwningDoc owner = resolveOwner(orgId, parentType, parentId);
         requireVisibleBranch(owner);
@@ -95,11 +95,28 @@ public class AttachmentService {
         a.setFilename(safeFilename(file.getOriginalFilename()));
         a.setContentType(file.getContentType());
         a.setSizeBytes(content.length);
+        a.setComment(blankToNull(comment));
         a.setUploadedBy(branchScope.currentUserId());
         a = attachmentRepo.save(a);
 
         log.info("Attachment uploaded: orgId={} {} #{} attachmentId={} bytes={}",
             orgId, parentType, parentId, a.getId(), content.length);
+        return AttachmentResponse.of(a);
+    }
+
+    /**
+     * Edit an attachment's note. Allowed even once the owning document is frozen — a
+     * comment is metadata, not a financial change — but never across branches.
+     */
+    @Transactional
+    public AttachmentResponse updateComment(Long attachmentId, String comment) {
+        Long orgId = TenantContext.requireOrgId();
+        Attachment a = attachmentRepo.findByIdAndOrgId(attachmentId, orgId)
+            .orElseThrow(() -> DamsException.notFound("Attachment", attachmentId));
+        requireVisibleBranch(resolveOwner(orgId, a.getParentType(), a.getParentId()));
+        a.setComment(blankToNull(comment));
+        a = attachmentRepo.save(a);
+        log.info("Attachment comment updated: orgId={} attachmentId={}", orgId, attachmentId);
         return AttachmentResponse.of(a);
     }
 
@@ -264,5 +281,9 @@ public class AttachmentService {
         }
         String base = original.substring(original.replace('\\', '/').lastIndexOf('/') + 1);
         return base.length() > 200 ? base.substring(base.length() - 200) : base;
+    }
+
+    private static String blankToNull(String s) {
+        return (s == null || s.isBlank()) ? null : s.trim();
     }
 }

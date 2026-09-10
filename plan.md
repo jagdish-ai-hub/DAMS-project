@@ -7,6 +7,22 @@
 
 ## Revision log
 
+- **rev 29 (2026-09-11)** — Cashier feedback batch (dealership testing on Ooriba Motors):
+  removed `useDraftRecovery` entirely (`NewReceiptPage.tsx` / `NewExpensePage.tsx`) — it
+  auto-saved form state under one fixed, unscoped `localStorage` key
+  (`dams_receipt_draft` / `dams_expense_draft`), so on a shared terminal any cashier's
+  half-filled form resurfaced as an unexplained "restore a draft?" prompt for the next
+  person, regardless of who they were; never part of the original design. Reverted
+  `AttachmentsPanel.tsx`'s upload control from the drag-and-drop dropzone back to the
+  original simple "📎 Add documents" button; kept the in-app preview popup
+  (`AttachmentLightbox`) on View, since that one was judged a genuine improvement.
+  Added an optional per-attachment comment (`V23__attachment_comment.sql`,
+  `attachment.comment`): settable while staging a file for upload, and editable any time
+  after via `PATCH /api/v1/attachments/{id}` — including once the owning document is
+  frozen, since a comment is a note, not a financial change. `AttachmentResponse` now
+  carries `comment`; both receipt and expense attach endpoints accept an optional
+  `comment` form field. Verified: `mvn test` 171 green, `tsc`/`eslint`/`vitest` clean.
+
 - **rev 28 (2026-09-07)** — Full rulebook audit batch (AGENT.md/plan.md compliance).
   Backend: submit/resubmit re-checks the cash-day lock per line before numbering
   (V21 narrows the one-open index past REJECTED; V22 adds a monotonic `line_no_seq`

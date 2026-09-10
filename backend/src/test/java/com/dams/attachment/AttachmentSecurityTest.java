@@ -76,7 +76,7 @@ class AttachmentSecurityTest {
             .thenReturn(Optional.of(receiveDoc(WorkflowStatus.SUBMITTED, false, OTHER_BRANCH)));
         MockMultipartFile file = new MockMultipartFile("file", "bill.pdf", "application/pdf", new byte[] {1});
 
-        assertThatThrownBy(() -> service.upload(ParentType.RECEIVE_DOCUMENT, DOC_ID, file))
+        assertThatThrownBy(() -> service.upload(ParentType.RECEIVE_DOCUMENT, DOC_ID, file, null))
             .isInstanceOf(DamsException.class)
             .hasMessageContaining("outside your access");
     }
@@ -88,7 +88,7 @@ class AttachmentSecurityTest {
             .thenReturn(Optional.of(receiveDoc(WorkflowStatus.APPROVED, true, HOME_BRANCH)));
         MockMultipartFile file = new MockMultipartFile("file", "bill.pdf", "application/pdf", new byte[] {1});
 
-        assertThatThrownBy(() -> service.upload(ParentType.RECEIVE_DOCUMENT, DOC_ID, file))
+        assertThatThrownBy(() -> service.upload(ParentType.RECEIVE_DOCUMENT, DOC_ID, file, null))
             .isInstanceOf(DamsException.class)
             .hasMessageContaining("frozen");
     }
@@ -100,7 +100,7 @@ class AttachmentSecurityTest {
             .thenReturn(Optional.of(expenseDoc(ExpenseWorkflowStatus.APPROVED)));
         MockMultipartFile file = new MockMultipartFile("file", "bill.pdf", "application/pdf", new byte[] {1});
 
-        assertThatThrownBy(() -> service.upload(ParentType.EXPENSE_DOCUMENT, DOC_ID, file))
+        assertThatThrownBy(() -> service.upload(ParentType.EXPENSE_DOCUMENT, DOC_ID, file, null))
             .isInstanceOf(DamsException.class)
             .hasMessageContaining("frozen");
     }

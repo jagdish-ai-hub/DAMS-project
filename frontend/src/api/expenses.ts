@@ -135,22 +135,27 @@ export const expensesApi = {
   lineAttachments(id: number, lineNo: number) {
     return api.get<Attachment[]>(`/api/v1/expenses/${id}/lines/${lineNo}/attachments`)
   },
-  attachToDocument(id: number, file: File) {
+  attachToDocument(id: number, file: File, comment?: string) {
     const form = new FormData()
     form.append('file', file)
+    if (comment) form.append('comment', comment)
     return api.post<Attachment>(`/api/v1/expenses/${id}/attachments`, form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
-  attachToLine(id: number, lineNo: number, file: File) {
+  attachToLine(id: number, lineNo: number, file: File, comment?: string) {
     const form = new FormData()
     form.append('file', file)
+    if (comment) form.append('comment', comment)
     return api.post<Attachment>(`/api/v1/expenses/${id}/lines/${lineNo}/attachments`, form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
   signedUrl(attachmentId: number) {
     return api.get<SignedUrl>(`/api/v1/attachments/${attachmentId}`)
+  },
+  updateAttachmentComment(attachmentId: number, comment: string) {
+    return api.patch<Attachment>(`/api/v1/attachments/${attachmentId}`, { comment })
   },
   deleteAttachment(attachmentId: number) {
     return api.delete(`/api/v1/attachments/${attachmentId}`)

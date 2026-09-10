@@ -1,5 +1,7 @@
 package com.dams.attachment.controller;
 
+import com.dams.attachment.dto.AttachmentCommentRequest;
+import com.dams.attachment.dto.AttachmentResponse;
 import com.dams.attachment.dto.SignedUrlResponse;
 import com.dams.attachment.service.AttachmentService;
 import com.dams.attachment.storage.LocalFilesystemStorageService;
@@ -8,6 +10,7 @@ import com.dams.common.exception.DamsException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -51,6 +54,13 @@ public class AttachmentController {
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         attachmentService.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{id}")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "Set or edit an attachment's comment — allowed even once its document is frozen")
+    public AttachmentResponse updateComment(@PathVariable Long id, @Valid @RequestBody AttachmentCommentRequest request) {
+        return attachmentService.updateComment(id, request.comment());
     }
 
     /**
