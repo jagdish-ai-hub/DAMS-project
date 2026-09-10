@@ -36,6 +36,8 @@ public record ReceiveDocumentResponse(
 
     Long categoryId,
     String categoryName,
+    Long claimTypeId,
+    String claimTypeName,
     boolean isClaim,
     Long businessStatusId,
     String businessStatusName,

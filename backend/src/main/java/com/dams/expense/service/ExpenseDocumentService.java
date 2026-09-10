@@ -33,13 +33,11 @@ import com.dams.masters.entity.ExpenseBusinessStatus;
 import com.dams.masters.entity.ExpenseCategory;
 import com.dams.masters.entity.ExpenseMode;
 import com.dams.masters.entity.ExpenseSubCategory;
-import com.dams.masters.entity.ReceiveCategory;
 import com.dams.masters.repository.BankRepository;
 import com.dams.masters.repository.ExpenseBusinessStatusRepository;
 import com.dams.masters.repository.ExpenseCategoryRepository;
 import com.dams.masters.repository.ExpenseModeRepository;
 import com.dams.masters.repository.ExpenseSubCategoryRepository;
-import com.dams.masters.repository.ReceiveCategoryRepository;
 import com.dams.receiver.entity.Receiver;
 import com.dams.receiver.repository.ReceiverRepository;
 import com.dams.user.entity.AppUser;
@@ -76,8 +74,8 @@ import java.util.stream.Collectors;
  *  - Lines stay addable until the Accountant closes the document (Stage 7) — Add Expense is
  *    refused only once the document is CLOSED or REJECTED.
  *  - "Transfer to Claim" (business status) is allowed only when the expense sits on a job
- *    card whose category is a claim category ({@code receive_category.is_claim}). Enforced
- *    on the create/patch path and on the dedicated endpoint.
+ *    card that carries a Claim Type ({@code job_card.claim_type_id}). Enforced on the
+ *    create/patch path and on the dedicated endpoint.
  */
 @Service
 public class ExpenseDocumentService {
@@ -96,7 +94,6 @@ public class ExpenseDocumentService {
     private final ExpenseSubCategoryRepository subCategoryRepo;
     private final ExpenseModeRepository expenseModeRepo;
     private final ExpenseBusinessStatusRepository statusRepo;
-    private final ReceiveCategoryRepository receiveCategoryRepo;
     private final BankRepository bankRepo;
     private final AppUserRepository userRepo;
     private final AttachmentRepository attachmentRepo;
@@ -118,7 +115,6 @@ public class ExpenseDocumentService {
                                   ExpenseSubCategoryRepository subCategoryRepo,
                                   ExpenseModeRepository expenseModeRepo,
                                   ExpenseBusinessStatusRepository statusRepo,
-                                  ReceiveCategoryRepository receiveCategoryRepo,
                                   BankRepository bankRepo,
                                   AppUserRepository userRepo,
                                   AttachmentRepository attachmentRepo,
@@ -139,7 +135,6 @@ public class ExpenseDocumentService {
         this.subCategoryRepo = subCategoryRepo;
         this.expenseModeRepo = expenseModeRepo;
         this.statusRepo = statusRepo;
-        this.receiveCategoryRepo = receiveCategoryRepo;
         this.bankRepo = bankRepo;
         this.userRepo = userRepo;
         this.attachmentRepo = attachmentRepo;
@@ -568,12 +563,9 @@ public class ExpenseDocumentService {
             throw DamsException.badRequest(
                 "\"Transfer to Claim\" needs the expense to be tagged to a job card");
         }
-        ReceiveCategory category = receiveCategoryRepo.findByIdAndOrgId(jobCard.getCategoryId(), orgId).orElse(null);
-        if (category == null || !category.isClaim()) {
+        if (jobCard.getClaimTypeId() == null) {
             throw DamsException.badRequest("Job card " + referenceOf(orgId, jobCard)
-                + " is not a claim job card (its category is "
-                + (category != null ? "'" + category.getName() + "'" : "unknown")
-                + ") — its expenses cannot be transferred to a claim");
+                + " is not a claim job card — its expenses cannot be transferred to a claim");
         }
     }
 
@@ -621,9 +613,7 @@ public class ExpenseDocumentService {
             : customerRepo.findByIdAndOrgId(jc.getCustomerId(), orgId).orElse(null);
         Vehicle vehicle = (jc == null || jc.getVehicleId() == null) ? null
             : vehicleRepo.findByIdAndOrgId(jc.getVehicleId(), orgId).orElse(null);
-        ReceiveCategory jobCategory = jc == null ? null
-            : receiveCategoryRepo.findByIdAndOrgId(jc.getCategoryId(), orgId).orElse(null);
-        boolean claimEligible = jobCategory != null && jobCategory.isClaim();
+        boolean claimEligible = jc != null && jc.getClaimTypeId() != null;
 
         String branchCode = branch != null ? branch.getCode() : "?";
         List<ExpenseLine> lines = expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(orgId, doc.getId());

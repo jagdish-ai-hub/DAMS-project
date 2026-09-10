@@ -19,8 +19,6 @@ import com.dams.dashboard.service.DashboardService;
 import com.dams.jobcard.entity.JobCard;
 import com.dams.jobcard.repository.ClaimCloseRepository;
 import com.dams.jobcard.repository.JobCardRepository;
-import com.dams.masters.entity.ReceiveCategory;
-import com.dams.masters.repository.ReceiveCategoryRepository;
 import com.dams.receive.entity.ReceiveDocument;
 import com.dams.receive.entity.WorkflowStatus;
 import com.dams.receive.repository.ReceiveDocumentRepository;
@@ -56,7 +54,6 @@ class AiOpsServiceTest {
     @Mock private ReceiveDocumentRepository receiveDocumentRepo;
     @Mock private JobCardRepository jobCardRepo;
     @Mock private ClaimCloseRepository claimCloseRepo;
-    @Mock private ReceiveCategoryRepository receiveCategoryRepo;
     @Mock private CustomerRepository customerRepo;
     @Mock private BranchRepository branchRepo;
     @Mock private DashboardService dashboardService;
@@ -68,7 +65,7 @@ class AiOpsServiceTest {
     void setUp() {
         TenantContext.setOrgId(ORG);
         service = new AiOpsService(receiveDocumentRepo, jobCardRepo, claimCloseRepo,
-            receiveCategoryRepo, customerRepo, branchRepo, dashboardService, branchScope);
+            customerRepo, branchRepo, dashboardService, branchScope);
         when(branchScope.canSeeBranch(any())).thenReturn(true);
     }
 
@@ -79,12 +76,6 @@ class AiOpsServiceTest {
 
     @Test
     void claimInsights_marks100DayOpenClaim_criticalWithDraft() {
-        ReceiveCategory warranty = new ReceiveCategory();
-        warranty.setId(5L);
-        warranty.setName("Warranty");
-        warranty.setClaim(true);
-        when(receiveCategoryRepo.findByOrgIdOrderBySortOrderAscIdAsc(ORG))
-            .thenReturn(List.of(warranty));
         when(claimCloseRepo.findJobCardIdsByOrgId(ORG)).thenReturn(List.of());
 
         ReceiveDocument doc = new ReceiveDocument();
@@ -101,7 +92,8 @@ class AiOpsServiceTest {
         jc.setId(9L);
         jc.setBranchId(10L);
         jc.setCustomerId(3L);
-        jc.setCategoryId(5L);
+        jc.setCategoryId(1L);
+        jc.setClaimTypeId(5L);
         jc.setBusinessStatusId(6L);
         jc.setInvoiceAmount(new BigDecimal("12000"));
         jc.setDbmId("DBM-77");

@@ -11,10 +11,13 @@ import java.math.BigDecimal;
  * Partial update of a job card. Only the fields you send are changed; a null field is left
  * as-is. To clear a text reference send an empty string.
  *
- *   invoiceNo / invoiceAmount / dbmId  — editable at any time
- *   categoryId / businessStatusId      — editable only while the job card has no
+ *   invoiceNo / invoiceAmount / dbmId          — editable at any time
+ *   categoryId / businessStatusId / claimTypeId — editable only while the job card has no
  *                                        ClaimClose (Stage 8); a categoryId change writes
- *                                        a CATEGORY_CHANGED audit event
+ *                                        a CATEGORY_CHANGED audit event, a claimTypeId
+ *                                        change a CLAIM_TYPE_CHANGED one. Send claimTypeId
+ *                                        as 0 to clear it back to "not a claim" — 0 is not
+ *                                        a valid id so it's unambiguous with "leave as-is".
  */
 @Getter
 @Setter
@@ -36,6 +39,9 @@ public class JobCardPatchRequest {
     private String gstNo;
 
     private Long categoryId;
+
+    /** 0 clears it (job card is no longer a claim); null leaves it unchanged. */
+    private Long claimTypeId;
 
     private Long businessStatusId;
 

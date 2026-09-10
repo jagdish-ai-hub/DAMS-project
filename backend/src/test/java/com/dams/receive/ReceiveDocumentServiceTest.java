@@ -20,6 +20,7 @@ import com.dams.jobcard.service.JobCardService;
 import com.dams.jobcard.service.PendingAmountCalculator;
 import com.dams.masters.entity.SettlementMode;
 import com.dams.masters.repository.BankRepository;
+import com.dams.masters.repository.ClaimTypeRepository;
 import com.dams.masters.repository.ReceiveBusinessStatusRepository;
 import com.dams.masters.repository.ReceiveCategoryRepository;
 import com.dams.masters.repository.SettlementModeRepository;
@@ -82,6 +83,7 @@ class ReceiveDocumentServiceTest {
     @Mock private BranchRepository branchRepo;
     @Mock private ReceiveCategoryRepository categoryRepo;
     @Mock private ReceiveBusinessStatusRepository statusRepo;
+    @Mock private ClaimTypeRepository claimTypeRepo;
     @Mock private SettlementModeRepository settlementModeRepo;
     @Mock private BankRepository bankRepo;
     @Mock private AppUserRepository userRepo;
@@ -101,7 +103,7 @@ class ReceiveDocumentServiceTest {
     @BeforeEach
     void setUp() {
         service = new ReceiveDocumentService(receiveDocumentRepo, settlementLineRepo, jobCardRepo,
-            jobCardService, customerRepo, vehicleRepo, branchRepo, categoryRepo, statusRepo,
+            jobCardService, customerRepo, vehicleRepo, branchRepo, categoryRepo, statusRepo, claimTypeRepo,
             settlementModeRepo, bankRepo, userRepo, claimCloseRepo, attachmentRepo,
             documentNumberService, pendingAmountCalculator, paymentGuard, cashDateLock, auditService,
             attachmentService, documentHistoryService, branchScope);
@@ -160,6 +162,42 @@ class ReceiveDocumentServiceTest {
         ArgumentCaptor<ReceiveDocument> docs = ArgumentCaptor.forClass(ReceiveDocument.class);
         verify(receiveDocumentRepo).save(docs.capture());
         assertThat(docs.getValue().getId()).isEqualTo(500L);
+    }
+
+    @Test
+    void addPayment_onAnApprovedDocument_reopensToSubmitted_withAnAuditEvent() {
+        ReceiveDocument approved = openDoc(); // APPROVED by default
+        when(receiveDocumentRepo.findByIdAndOrgId(500L, ORG)).thenReturn(Optional.of(approved));
+
+        service.addLine(500L, lineInput(new BigDecimal("500")));
+
+        assertThat(approved.getWorkflowStatus()).isEqualTo(WorkflowStatus.SUBMITTED);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<java.util.Map<String, Object>> detail = ArgumentCaptor.forClass(java.util.Map.class);
+        verify(auditService, org.mockito.Mockito.times(2)).recordUserEvent(
+            eq("ReceiveDocument"), eq(500L), any(), any(), eq(CASHIER_ID), detail.capture());
+        assertThat(detail.getAllValues()).anySatisfy(d -> assertThat(d).containsEntry("reopenedFrom", "APPROVED"));
+    }
+
+    @Test
+    void addPayment_onAVerifiedDocument_reopensToSubmitted() {
+        ReceiveDocument verified = openDoc();
+        verified.setWorkflowStatus(WorkflowStatus.VERIFIED);
+        when(receiveDocumentRepo.findByIdAndOrgId(500L, ORG)).thenReturn(Optional.of(verified));
+
+        service.addLine(500L, lineInput(new BigDecimal("500")));
+
+        assertThat(verified.getWorkflowStatus()).isEqualTo(WorkflowStatus.SUBMITTED);
+    }
+
+    @Test
+    void addPayment_onADraftDocument_isNotReopened_sinceItWasNeverSubmitted() {
+        ReceiveDocument draft = draftDoc();
+        when(receiveDocumentRepo.findByIdAndOrgId(500L, ORG)).thenReturn(Optional.of(draft));
+
+        service.addLine(500L, lineInput(new BigDecimal("500")));
+
+        assertThat(draft.getWorkflowStatus()).isEqualTo(WorkflowStatus.DRAFT);
     }
 
     @Test

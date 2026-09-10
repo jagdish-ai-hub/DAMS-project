@@ -18,7 +18,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 /**
  * Job cards (cases). Any signed-in org user can create and read; a CASHIER's job card
  * always posts under their home branch. PATCH edits the invoice / dbm references freely and
- * the category / business status while the claim is still open.
+ * the category / claim type / business status while the claim is still open.
  */
 @RestController
 @RequestMapping("/api/v1/job-cards")
@@ -49,7 +49,7 @@ public class JobCardController {
     }
 
     @PatchMapping("/{id}")
-    @Operation(summary = "Update invoice / dbm references, or category / business status while the claim is open")
+    @Operation(summary = "Update invoice / dbm references, or category / claim type / business status while the claim is open")
     @PreAuthorize("hasAnyAuthority('CASHIER','ACCOUNTANT','FINANCE_MANAGER')")
     public JobCardResponse patch(@PathVariable Long id, @Valid @RequestBody JobCardPatchRequest request) {
         return jobCardService.patch(id, request);

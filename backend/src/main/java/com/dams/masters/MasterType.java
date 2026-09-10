@@ -5,10 +5,13 @@ import com.dams.common.exception.DamsException;
 import java.util.Arrays;
 
 /**
- * The eight Owner-editable master lists, addressed by URL slug:
+ * The nine Owner-editable master lists, addressed by URL slug:
  *   /api/v1/masters/{slug}
- * Each maps to one table/entity. `hasClaimFlag` / `hasModeFlags` /
- * `hasClaimTriggerFlag` / `isExpenseSubCategory` tell the service which request fields apply.
+ * Each maps to one table/entity. `hasModeFlags` / `hasClaimTriggerFlag` /
+ * `isExpenseSubCategory` tell the service which request fields apply.
+ *
+ * RECEIVE_CATEGORIES no longer carries claim-ness (see CLAIM_TYPES) — a job card's claim
+ * status is its own field now, not read off its transaction category.
  */
 public enum MasterType {
 
@@ -19,7 +22,8 @@ public enum MasterType {
     EXPENSE_SUB_CATEGORIES("expense-sub-categories"),
     EXPENSE_MODES("expense-modes"),
     EXPENSE_STATUSES("expense-statuses"),
-    BANKS("banks");
+    BANKS("banks"),
+    CLAIM_TYPES("claim-types");
 
     private final String slug;
 
@@ -29,10 +33,6 @@ public enum MasterType {
 
     public String slug() {
         return slug;
-    }
-
-    public boolean hasClaimFlag() {
-        return this == RECEIVE_CATEGORIES;
     }
 
     /** requires_bank / requires_ref — carried by both settlement and expense modes. */

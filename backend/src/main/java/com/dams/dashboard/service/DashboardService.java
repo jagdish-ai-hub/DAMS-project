@@ -27,11 +27,11 @@ import com.dams.jobcard.entity.JobCard;
 import com.dams.jobcard.repository.ClaimCloseRepository;
 import com.dams.jobcard.repository.JobCardRepository;
 import com.dams.jobcard.service.PendingAmountCalculator;
+import com.dams.masters.entity.ClaimType;
 import com.dams.masters.entity.ExpenseCategory;
-import com.dams.masters.entity.ReceiveCategory;
 import com.dams.masters.entity.SettlementMode;
+import com.dams.masters.repository.ClaimTypeRepository;
 import com.dams.masters.repository.ExpenseCategoryRepository;
-import com.dams.masters.repository.ReceiveCategoryRepository;
 import com.dams.masters.repository.SettlementModeRepository;
 import com.dams.receive.repository.ReceiveDocumentRepository;
 import com.dams.receive.repository.SettlementLineRepository;
@@ -75,7 +75,7 @@ public class DashboardService {
     private final CashDocumentRepository cashDocumentRepo;
     private final SettlementModeRepository settlementModeRepo;
     private final ExpenseCategoryRepository expenseCategoryRepo;
-    private final ReceiveCategoryRepository receiveCategoryRepo;
+    private final ClaimTypeRepository claimTypeRepo;
     private final BranchRepository branchRepo;
     private final CashDayCloseRepository cashDayCloseRepo;
     private final DrawerService drawerService;
@@ -95,7 +95,7 @@ public class DashboardService {
                             CashDocumentRepository cashDocumentRepo,
                             SettlementModeRepository settlementModeRepo,
                             ExpenseCategoryRepository expenseCategoryRepo,
-                            ReceiveCategoryRepository receiveCategoryRepo,
+                            ClaimTypeRepository claimTypeRepo,
                             BranchRepository branchRepo,
                             CashDayCloseRepository cashDayCloseRepo,
                             DrawerService drawerService,
@@ -114,7 +114,7 @@ public class DashboardService {
         this.cashDocumentRepo = cashDocumentRepo;
         this.settlementModeRepo = settlementModeRepo;
         this.expenseCategoryRepo = expenseCategoryRepo;
-        this.receiveCategoryRepo = receiveCategoryRepo;
+        this.claimTypeRepo = claimTypeRepo;
         this.branchRepo = branchRepo;
         this.cashDayCloseRepo = cashDayCloseRepo;
         this.drawerService = drawerService;
@@ -246,8 +246,8 @@ public class DashboardService {
         java.util.Set<Long> closedJcIds = new java.util.HashSet<>(claimCloseRepo.findJobCardIdsByOrgId(orgId));
         Map<Long, BigDecimal> receivedByJc = idAmountMap(settlementLineRepo.sumAmountByJobCard(orgId));
         Map<Long, String> branchCodes = branchCodeMap(orgId);
-        Map<Long, ReceiveCategory> categoriesById = receiveCategoryRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId)
-            .stream().collect(Collectors.toMap(ReceiveCategory::getId, c -> c, (a, b) -> a));
+        Map<Long, ClaimType> claimTypesById = claimTypeRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId)
+            .stream().collect(Collectors.toMap(ClaimType::getId, c -> c, (a, b) -> a));
 
         List<Long> customerIds = jobCards.stream().map(JobCard::getCustomerId).distinct().toList();
         Map<Long, Customer> customersById = customerRepo.findByOrgIdAndIdInOrderByNameAsc(orgId, customerIds)
@@ -265,8 +265,7 @@ public class DashboardService {
             if (closedJcIds.contains(jc.getId())) {
                 continue;
             }
-            ReceiveCategory cat = categoriesById.get(jc.getCategoryId());
-            if (cat != null && cat.isClaim()) {
+            if (jc.getClaimTypeId() != null) {
                 continue;
             }
             BigDecimal pending = pendingFor(jc, receivedByJc);
@@ -294,13 +293,10 @@ public class DashboardService {
                 continue;
             }
             JobCard jc = jobCardsById.get(d.getJobCardId());
-            if (jc == null) {
+            if (jc == null || jc.getClaimTypeId() == null) {
                 continue;
             }
-            ReceiveCategory cat = categoriesById.get(jc.getCategoryId());
-            if (cat == null || !cat.isClaim()) {
-                continue;
-            }
+            ClaimType claimType = claimTypesById.get(jc.getClaimTypeId());
             BigDecimal invoice = jc.getInvoiceAmount() != null ? jc.getInvoiceAmount() : BigDecimal.ZERO;
             BigDecimal received = receivedByJc.getOrDefault(jc.getId(), BigDecimal.ZERO);
             BigDecimal owed = invoice.subtract(received).max(BigDecimal.ZERO);
@@ -308,7 +304,7 @@ public class DashboardService {
             String code = branchCodes.getOrDefault(d.getBranchId(), "?");
             out.add(new OutstandingItem("claim",
                 c != null ? c.getName() : "Warranty / AMC claim",
-                code + " · " + cat.getName() + " · awaiting Eicher settlement",
+                code + " · " + (claimType != null ? claimType.getName() : "Claim") + " · awaiting Eicher settlement",
                 owed.signum() > 0 ? owed : invoice, d.getDocumentNo(), code));
         }
         out.sort(Comparator.comparing(OutstandingItem::amount).reversed());

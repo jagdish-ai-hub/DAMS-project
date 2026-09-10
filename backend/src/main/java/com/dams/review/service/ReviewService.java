@@ -186,8 +186,6 @@ public class ReviewService {
             .findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(orgId, WorkflowStatus.APPROVED);
         Map<Long, JobCard> jcById = jobCardsById(orgId, approved.stream().map(ReceiveDocument::getJobCardId).toList());
         Set<Long> closedJcIds = new java.util.HashSet<>(claimCloseRepo.findJobCardIdsByOrgId(orgId));
-        Set<Long> claimCategoryIds = receiveCategoryRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId).stream()
-            .filter(ReceiveCategory::isClaim).map(ReceiveCategory::getId).collect(java.util.stream.Collectors.toSet());
         Set<Long> seenJobCards = new LinkedHashSet<>();
         List<ReceiveDocument> openClaimDocs = new ArrayList<>();
         for (ReceiveDocument d : approved) {
@@ -195,7 +193,7 @@ public class ReviewService {
                 continue;
             }
             JobCard jc = jcById.get(d.getJobCardId());
-            if (jc != null && claimCategoryIds.contains(jc.getCategoryId())) {
+            if (jc != null && jc.getClaimTypeId() != null) {
                 openClaimDocs.add(d);
             }
         }

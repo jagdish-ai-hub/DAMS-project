@@ -57,6 +57,8 @@ export interface ReceiveDocument {
   gstNo: string | null
   categoryId: number
   categoryName: string | null
+  claimTypeId: number | null
+  claimTypeName: string | null
   isClaim: boolean
   businessStatusId: number
   businessStatusName: string | null
@@ -100,6 +102,7 @@ export interface CreateReceiptRequest {
   b2b?: boolean
   gstNo?: string
   categoryId?: number
+  claimTypeId?: number
   businessStatusId?: number
   lines: SettlementLineInput[]
   submit?: boolean

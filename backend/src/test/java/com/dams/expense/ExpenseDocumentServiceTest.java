@@ -26,13 +26,11 @@ import com.dams.masters.entity.ExpenseBusinessStatus;
 import com.dams.masters.entity.ExpenseCategory;
 import com.dams.masters.entity.ExpenseMode;
 import com.dams.masters.entity.ExpenseSubCategory;
-import com.dams.masters.entity.ReceiveCategory;
 import com.dams.masters.repository.BankRepository;
 import com.dams.masters.repository.ExpenseBusinessStatusRepository;
 import com.dams.masters.repository.ExpenseCategoryRepository;
 import com.dams.masters.repository.ExpenseModeRepository;
 import com.dams.masters.repository.ExpenseSubCategoryRepository;
-import com.dams.masters.repository.ReceiveCategoryRepository;
 import com.dams.receiver.entity.Receiver;
 import com.dams.receiver.repository.ReceiverRepository;
 import com.dams.user.entity.AppUser;
@@ -83,10 +81,9 @@ class ExpenseDocumentServiceTest {
     private static final long SUBCAT_ID = 40L;         // limit 1000, under CATEGORY_ID
     private static final long MODE_ID = 50L;           // Cash — no flags
     private static final long RECEIVER_ID = 60L;
-    private static final long JC_CLAIM = 70L;          // category is_claim = true
-    private static final long JC_PLAIN = 71L;          // category is_claim = false
-    private static final long RC_CLAIM = 80L;
-    private static final long RC_PLAIN = 81L;
+    private static final long JC_CLAIM = 70L;          // claimTypeId set
+    private static final long JC_PLAIN = 71L;          // claimTypeId null
+    private static final long CLAIM_TYPE = 80L;
 
     @Mock private ExpenseDocumentRepository expenseDocumentRepo;
     @Mock private ExpenseLineRepository expenseLineRepo;
@@ -99,7 +96,6 @@ class ExpenseDocumentServiceTest {
     @Mock private ExpenseSubCategoryRepository subCategoryRepo;
     @Mock private ExpenseModeRepository expenseModeRepo;
     @Mock private ExpenseBusinessStatusRepository statusRepo;
-    @Mock private ReceiveCategoryRepository receiveCategoryRepo;
     @Mock private BankRepository bankRepo;
     @Mock private AppUserRepository userRepo;
     @Mock private AttachmentRepository attachmentRepo;
@@ -116,7 +112,7 @@ class ExpenseDocumentServiceTest {
     void setUp() {
         service = new ExpenseDocumentService(expenseDocumentRepo, expenseLineRepo, receiverRepo, jobCardRepo,
             customerRepo, vehicleRepo, branchRepo, expenseCategoryRepo, subCategoryRepo, expenseModeRepo,
-            statusRepo, receiveCategoryRepo, bankRepo, userRepo, attachmentRepo, documentNumberService,
+            statusRepo, bankRepo, userRepo, attachmentRepo, documentNumberService,
             postingGuard, cashDateLock, auditService, documentHistoryService, branchScope);
         TenantContext.setOrgId(ORG);
         lenient().when(branchScope.canSeeBranch(anyLong())).thenReturn(true);
@@ -150,10 +146,8 @@ class ExpenseDocumentServiceTest {
             if (d.getId() == null) ReflectionTestUtils.setField(d, "id", DOC_ID);
             return d;
         });
-        lenient().when(jobCardRepo.findByIdAndOrgId(JC_CLAIM, ORG)).thenReturn(Optional.of(jobCard(JC_CLAIM, RC_CLAIM)));
-        lenient().when(jobCardRepo.findByIdAndOrgId(JC_PLAIN, ORG)).thenReturn(Optional.of(jobCard(JC_PLAIN, RC_PLAIN)));
-        lenient().when(receiveCategoryRepo.findByIdAndOrgId(RC_CLAIM, ORG)).thenReturn(Optional.of(receiveCat(true)));
-        lenient().when(receiveCategoryRepo.findByIdAndOrgId(RC_PLAIN, ORG)).thenReturn(Optional.of(receiveCat(false)));
+        lenient().when(jobCardRepo.findByIdAndOrgId(JC_CLAIM, ORG)).thenReturn(Optional.of(jobCard(JC_CLAIM, CLAIM_TYPE)));
+        lenient().when(jobCardRepo.findByIdAndOrgId(JC_PLAIN, ORG)).thenReturn(Optional.of(jobCard(JC_PLAIN, null)));
     }
 
     @AfterEach
@@ -410,24 +404,15 @@ class ExpenseDocumentServiceTest {
         return b;
     }
 
-    private static JobCard jobCard(long id, long categoryId) {
+    private static JobCard jobCard(long id, Long claimTypeId) {
         JobCard jc = new JobCard();
         ReflectionTestUtils.setField(jc, "id", id);
         jc.setOrgId(ORG);
         jc.setBranchId(HOME_BRANCH);
         jc.setCustomerId(42L);
-        jc.setCategoryId(categoryId);
+        jc.setCategoryId(1L);
+        jc.setClaimTypeId(claimTypeId);
         jc.setBusinessStatusId(1L);
         return jc;
-    }
-
-    private static ReceiveCategory receiveCat(boolean claim) {
-        ReceiveCategory c = new ReceiveCategory();
-        ReflectionTestUtils.setField(c, "id", claim ? RC_CLAIM : RC_PLAIN);
-        c.setOrgId(ORG);
-        c.setName(claim ? "Warranty" : "Workshop");
-        c.setClaim(claim);
-        c.setActive(true);
-        return c;
     }
 }

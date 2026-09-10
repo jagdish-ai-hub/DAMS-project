@@ -56,6 +56,7 @@ export default function NewReceiptPage() {
   const [statuses, setStatuses] = useState<MasterRow[]>([])
   const [modes, setModes] = useState<MasterRow[]>([])
   const [banks, setBanks] = useState<MasterRow[]>([])
+  const [claimTypes, setClaimTypes] = useState<MasterRow[]>([])
 
   // header
   const [customerId, setCustomerId] = useState<number | null>(prefillCustomerId)
@@ -65,6 +66,7 @@ export default function NewReceiptPage() {
   const [invoiceNo, setInvoiceNo] = useState('')
   const [invoiceAmount, setInvoiceAmount] = useState('')
   const [categoryId, setCategoryId] = useState<number | ''>('')
+  const [claimTypeId, setClaimTypeId] = useState<number | ''>('')
   const [businessStatusId, setBusinessStatusId] = useState<number | ''>('')
   const [b2b, setB2b] = useState(false)
   const [gstNo, setGstNo] = useState('')
@@ -86,11 +88,12 @@ export default function NewReceiptPage() {
     invoiceNo,
     invoiceAmount,
     categoryId,
+    claimTypeId,
     businessStatusId,
     b2b,
     gstNo,
     lines,
-  }), [customerId, customerName, vehicleNo, dbmId, invoiceNo, invoiceAmount, categoryId, businessStatusId, b2b, gstNo, lines])
+  }), [customerId, customerName, vehicleNo, dbmId, invoiceNo, invoiceAmount, categoryId, claimTypeId, businessStatusId, b2b, gstNo, lines])
 
   const {
     hasDraft,
@@ -108,13 +111,15 @@ export default function NewReceiptPage() {
       mastersApi.list('receive-statuses'),
       mastersApi.list('settlement-modes'),
       mastersApi.list('banks'),
+      mastersApi.list('claim-types'),
     ])
-      .then(([c, s, m, bk]) => {
+      .then(([c, s, m, bk, ct]) => {
         if (!live) return
         setCategories(c.data.filter((x) => x.active))
         setStatuses(s.data.filter((x) => x.active))
         setModes(m.data.filter((x) => x.active))
         setBanks(bk.data.filter((x) => x.active))
+        setClaimTypes(ct.data.filter((x) => x.active))
         const firstMode = m.data.find((x) => x.active)?.id ?? ''
         setLines((prev) => prev.map((l) => (l.settlementModeId === '' ? { ...l, settlementModeId: firstMode } : l)))
         if (!editDocId) {
@@ -153,6 +158,7 @@ export default function NewReceiptPage() {
         setInvoiceNo(data.invoiceNo ?? '')
         setInvoiceAmount(data.invoiceAmount != null ? String(data.invoiceAmount) : '')
         setCategoryId(data.categoryId)
+        setClaimTypeId(data.claimTypeId ?? '')
         setBusinessStatusId(data.businessStatusId)
         setB2b(data.b2b)
         setGstNo(data.gstNo ?? '')
@@ -250,6 +256,7 @@ export default function NewReceiptPage() {
       b2b,
       gstNo: b2b ? gstNo.trim() : undefined,
       categoryId: Number(categoryId),
+      claimTypeId: claimTypeId === '' ? undefined : Number(claimTypeId),
       businessStatusId: Number(businessStatusId),
       lines: buildLines(),
       submit,
@@ -338,17 +345,27 @@ export default function NewReceiptPage() {
    * Reconcile the on-screen rows against the server for an already-saved document — by
    * lineNo, never by array position, so rows added or removed on this visit don't get
    * silently dropped or matched to the wrong existing line.
+   *
+   * Editing or removing an *existing* line is only allowed while the document is a draft
+   * or queried (the backend's requireEditableLines) — once it's VERIFIED/APPROVED those
+   * calls are guaranteed to fail, and doing so here would let a spurious "settlement
+   * lines can only be edited…" error mask a header patch that already succeeded (e.g. a
+   * Category change). So on a non-editable document we skip the update/delete calls
+   * entirely — nothing here was going to be a legal edit anyway. Adding a brand-new line
+   * ("Add Payment") stays allowed regardless of status; the server reopens the document
+   * for re-review when that happens.
    */
   async function syncLines(docId: number) {
     if (!loadedDoc) return
     const existingByLineNo = new Map(loadedDoc.lines.map((l) => [l.lineNo, l]))
     const keptLineNos = new Set<number>()
+    const linesEditable = loadedDoc.workflowStatus === 'DRAFT' || loadedDoc.workflowStatus === 'QUERIED'
 
     for (const current of lines) {
       if (current.lineNo != null) {
         keptLineNos.add(current.lineNo)
         const existing = existingByLineNo.get(current.lineNo)
-        if (existing && (
+        if (linesEditable && existing && (
           Number(current.amount) !== existing.amount ||
           Number(current.settlementModeId) !== existing.settlementModeId ||
           (current.bankId === '' ? null : Number(current.bankId)) !== existing.bankId ||
@@ -366,7 +383,8 @@ export default function NewReceiptPage() {
           })
         }
       } else if (Number(current.amount) > 0 && current.settlementModeId !== '') {
-        // A row added on this visit — never sent to the server before.
+        // A row added on this visit — never sent to the server before. Always allowed
+        // (this is "Add Payment"), even once the document is verified/approved.
         await receiptsApi.addLine(docId, {
           transactionDate: current.transactionDate,
           settlementModeId: Number(current.settlementModeId),
@@ -378,9 +396,11 @@ export default function NewReceiptPage() {
       }
     }
 
-    for (const existing of loadedDoc.lines) {
-      if (!keptLineNos.has(existing.lineNo)) {
-        await receiptsApi.deleteLine(docId, existing.lineNo)
+    if (linesEditable) {
+      for (const existing of loadedDoc.lines) {
+        if (!keptLineNos.has(existing.lineNo)) {
+          await receiptsApi.deleteLine(docId, existing.lineNo)
+        }
       }
     }
   }
@@ -396,6 +416,8 @@ export default function NewReceiptPage() {
       b2b,
       gstNo: b2b ? gstNo.trim() : '',
       categoryId: Number(categoryId),
+      // 0 clears the claim type; JobCardPatchRequest treats 0 as "not a claim".
+      claimTypeId: claimTypeId === '' ? 0 : Number(claimTypeId),
       businessStatusId: Number(businessStatusId),
     })
   }
@@ -534,6 +556,7 @@ export default function NewReceiptPage() {
                   if (restored.invoiceNo) setInvoiceNo(restored.invoiceNo)
                   if (restored.invoiceAmount) setInvoiceAmount(restored.invoiceAmount)
                   if (restored.categoryId) setCategoryId(restored.categoryId)
+                  if (restored.claimTypeId) setClaimTypeId(restored.claimTypeId)
                   if (restored.businessStatusId) setBusinessStatusId(restored.businessStatusId)
                   if (restored.b2b != null) setB2b(restored.b2b)
                   if (restored.gstNo) setGstNo(restored.gstNo)
@@ -605,13 +628,19 @@ export default function NewReceiptPage() {
               <Row label="Invoice #">
                 <input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="7731122600388" style={inputStyle} />
               </Row>
-              <Row label="Tran. Category">
+              <Row label="Transaction Type">
                 <select value={categoryId} onChange={(e) => setCategoryId(Number(e.target.value))} style={inputStyle}>
                   {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </Row>
               <Row label="Invoice Amount">
                 <input type="number" value={invoiceAmount} onChange={(e) => setInvoiceAmount(e.target.value)} placeholder="Total amount" style={inputStyle} />
+              </Row>
+              <Row label="Claim Type">
+                <select value={claimTypeId} onChange={(e) => setClaimTypeId(e.target.value === '' ? '' : Number(e.target.value))} style={inputStyle}>
+                  <option value="">— Not a claim —</option>
+                  {claimTypes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
               </Row>
             </div>
 
@@ -627,7 +656,7 @@ export default function NewReceiptPage() {
                   {statuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </Row>
-              <Row label="Transaction Type">
+              <Row label="Customer Type">
                 <div style={{ display: 'flex', border: '1.5px solid var(--line)', borderRadius: 7, overflow: 'hidden', width: 'fit-content' }}>
                   {(['B2C', 'B2B'] as const).map((t) => {
                     const on = (t === 'B2B') === b2b

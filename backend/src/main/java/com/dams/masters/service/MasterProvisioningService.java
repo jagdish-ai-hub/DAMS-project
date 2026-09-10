@@ -1,6 +1,7 @@
 package com.dams.masters.service;
 
 import com.dams.masters.entity.Bank;
+import com.dams.masters.entity.ClaimType;
 import com.dams.masters.entity.ExpenseBusinessStatus;
 import com.dams.masters.entity.ExpenseCategory;
 import com.dams.masters.entity.ExpenseMode;
@@ -9,6 +10,7 @@ import com.dams.masters.entity.ReceiveBusinessStatus;
 import com.dams.masters.entity.ReceiveCategory;
 import com.dams.masters.entity.SettlementMode;
 import com.dams.masters.repository.BankRepository;
+import com.dams.masters.repository.ClaimTypeRepository;
 import com.dams.masters.repository.ExpenseBusinessStatusRepository;
 import com.dams.masters.repository.ExpenseCategoryRepository;
 import com.dams.masters.repository.ExpenseModeRepository;
@@ -29,7 +31,7 @@ import java.util.Map;
  * Seeds a brand-new organization with the standard master catalogue — the same set the
  * demo dealership ships with (Flyway V5), flags and all: settlement / expense
  * {@code is_cash} (drives the Cash-page drawer), expense business-status
- * {@code triggers_claim}, receive-category {@code is_claim}.
+ * {@code triggers_claim}.
  *
  * Without this, a freshly-onboarded Owner signs in to empty dropdowns everywhere and can't
  * record a single receipt until every mode, category and status has been typed by hand.
@@ -48,6 +50,7 @@ public class MasterProvisioningService {
     private final ExpenseModeRepository expenseModeRepo;
     private final ExpenseBusinessStatusRepository expenseBusinessStatusRepo;
     private final BankRepository bankRepo;
+    private final ClaimTypeRepository claimTypeRepo;
 
     public MasterProvisioningService(ReceiveCategoryRepository receiveCategoryRepo,
                                      ReceiveBusinessStatusRepository receiveBusinessStatusRepo,
@@ -56,7 +59,8 @@ public class MasterProvisioningService {
                                      ExpenseSubCategoryRepository expenseSubCategoryRepo,
                                      ExpenseModeRepository expenseModeRepo,
                                      ExpenseBusinessStatusRepository expenseBusinessStatusRepo,
-                                     BankRepository bankRepo) {
+                                     BankRepository bankRepo,
+                                     ClaimTypeRepository claimTypeRepo) {
         this.receiveCategoryRepo = receiveCategoryRepo;
         this.receiveBusinessStatusRepo = receiveBusinessStatusRepo;
         this.settlementModeRepo = settlementModeRepo;
@@ -65,21 +69,24 @@ public class MasterProvisioningService {
         this.expenseModeRepo = expenseModeRepo;
         this.expenseBusinessStatusRepo = expenseBusinessStatusRepo;
         this.bankRepo = bankRepo;
+        this.claimTypeRepo = claimTypeRepo;
     }
 
     public void provisionDefaults(Long orgId) {
         receiveCategoryRepo.saveAll(List.of(
-            receiveCategory(orgId, "Workshop", false, 1),
-            receiveCategory(orgId, "Breakdown", false, 2),
-            receiveCategory(orgId, "Advance", false, 3),
-            receiveCategory(orgId, "Spare / Counter", false, 4),
-            receiveCategory(orgId, "AdBlue Bucket", false, 5),
-            receiveCategory(orgId, "AdBlue Barrel", false, 6),
-            receiveCategory(orgId, "AMC", true, 7),
-            receiveCategory(orgId, "Warranty", true, 8),
-            receiveCategory(orgId, "Goodwill", true, 9),
-            receiveCategory(orgId, "B2B Credit", false, 10),
-            receiveCategory(orgId, "Scrap / Used Lubes / Other", false, 11)));
+            receiveCategory(orgId, "Workshop", 1),
+            receiveCategory(orgId, "Breakdown", 2),
+            receiveCategory(orgId, "Advance", 3),
+            receiveCategory(orgId, "Spare / Counter", 4),
+            receiveCategory(orgId, "AdBlue Bucket", 5),
+            receiveCategory(orgId, "AdBlue Barrel", 6),
+            receiveCategory(orgId, "B2B Credit", 7),
+            receiveCategory(orgId, "Scrap / Used Lubes / Other", 8)));
+
+        claimTypeRepo.saveAll(List.of(
+            named(new ClaimType(), orgId, "AMC", 1),
+            named(new ClaimType(), orgId, "Warranty", 2),
+            named(new ClaimType(), orgId, "Goodwill", 3)));
 
         receiveBusinessStatusRepo.saveAll(List.of(
             named(new ReceiveBusinessStatus(), orgId, "Hold", 1),
@@ -159,10 +166,8 @@ public class MasterProvisioningService {
         return m;
     }
 
-    private static ReceiveCategory receiveCategory(Long orgId, String name, boolean claim, int sort) {
-        ReceiveCategory m = named(new ReceiveCategory(), orgId, name, sort);
-        m.setClaim(claim);
-        return m;
+    private static ReceiveCategory receiveCategory(Long orgId, String name, int sort) {
+        return named(new ReceiveCategory(), orgId, name, sort);
     }
 
     private static SettlementMode settlementMode(Long orgId, String name,

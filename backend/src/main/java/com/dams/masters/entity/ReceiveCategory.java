@@ -10,9 +10,12 @@ import lombok.Setter;
 import org.hibernate.annotations.Filter;
 
 /**
- * Category of a Receive document (Workshop, AMC, Warranty, …). {@code is_claim} marks the
- * ones the Finance Manager closes with a ClaimClose (Warranty / AMC / CG). A job card's
- * {@code is_claim} is read from its category via this flag — never stored separately.
+ * Category of a Receive document — its Transaction Type (Workshop, Breakdown, Advance, …).
+ *
+ * {@code is_claim} is legacy: before the Claim Type redesign (see {@link ClaimType}) a job
+ * card's claim status was read off this flag via its category. It is no longer read
+ * anywhere — active rows are never claim rows now — and is kept only so the old,
+ * deactivated Warranty / AMC / CGW category rows retain their original historical value.
  */
 @Entity
 @Table(name = "receive_category")

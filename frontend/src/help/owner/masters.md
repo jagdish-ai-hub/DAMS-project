@@ -13,7 +13,8 @@ A new organization starts with a sensible default set. Adjust from there.
 
 ## Options that matter
 
-- **Receipt categories** — tick **claim** for the categories the finance manager closes with a final settlement (Warranty, AMC, CG). This is what makes a job card behave as a claim.
+- **Transaction types** — the ordinary reasons for a receipt (Workshop, Breakdown, Advance, …). These no longer carry any claim meaning.
+- **Claim types** — Warranty, AMC, CG, or any other manufacturer-funded category the finance manager closes with a final settlement. Picking one on a job card is what makes it behave as a claim — there's no separate flag to tick elsewhere.
 - **Settlement modes** — tick **requires a bank name** and/or **requires a transaction reference** to make those fields mandatory on a settlement line for that mode.
 - **Expense sub-categories** — pick the parent **category** at the top, then add rows under it. Set a **per-line limit** if you want DAMS to *flag* (not block) any line above it — flagged lines need finance approval before they can be closed.
 
