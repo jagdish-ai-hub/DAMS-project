@@ -7,6 +7,31 @@
 
 ## Revision log
 
+- **rev 30 (2026-09-10)** — Cash-box reconciliation breakdown ("where is the money
+  coming from / going to"), on user request that Collections/Expenses/Cash-in-hand
+  were hard to reconcile by eye. New `MoneyMovementItem` DTO plus
+  `SettlementLineRepository`/`ExpenseLineRepository` `findApprovedForBreakdown` and
+  `findCashModeForBranchDate` queries, each an exact mirror of the existing sum
+  query's filter (APPROVED-only for collections, APPROVED-or-CLOSED for expenses,
+  non-DRAFT/non-REJECTED cash-mode-only for drawer subtotals) so a breakdown always
+  totals to the figure it explains. Two new read endpoints,
+  `GET /api/v1/dashboard/collections-breakdown` and `.../expenses-breakdown`
+  (`branchId`, `period=today|mtd`). `DrawerService.lineBreakdown()` adds
+  `cashReceiptLines`/`cashExpenseLines` to `CashDrawerResponse`. `GET /api/v1/cash/drawer`
+  widened to `OWNER`/`FINANCE_MANAGER` reads (POST endpoints unchanged — still
+  CASHIER/ACCOUNTANT-only, enforced by the existing service guards, which is what
+  makes the read-side widening safe).
+  Frontend: shared `MoneyBreakdownModal` (+ `moneyMovementsToRows`/`cashMovementsToRows`)
+  makes the Owner Dashboard's Collections/Expenses/Cash-in-hand KPI cards and all four
+  Cash-page drawer lines (cash receipts, cash In, cash expenses, cash Out) clickable,
+  Today and MTD. Per user instruction, a row opens the real editable document via the
+  same `?editDoc=` navigation `MyEntriesPage` already uses — not a separate read-only
+  viewer. `new-receipt`/`new-expense`/`cash` routes widened to Owner/FM so those roles
+  can open what they click; write actions on those pages still refuse for those roles
+  server-side.
+  Verified: `mvn test` 178 green (0 failures/errors, 4 pre-existing Docker-only skips);
+  `tsc`/`eslint`/`vitest` clean.
+
 - **rev 29 (2026-09-10)** — Claim Type redesign + two workflow bug fixes.
   Split the receipt's "Tran. Category" (which conflated ordinary transaction types with
   Warranty/AMC/CGW claim-ness) into two independent fields: Category is now a plain
