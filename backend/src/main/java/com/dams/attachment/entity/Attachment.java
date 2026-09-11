@@ -53,6 +53,9 @@ public class Attachment {
     @Column(nullable = false)
     private boolean frozen = false;
 
+    @Column(length = 500)
+    private String comment;
+
     @Column(name = "uploaded_by", nullable = false, updatable = false)
     private Long uploadedBy;
 

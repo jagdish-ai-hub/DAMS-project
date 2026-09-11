@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
-import { UploadCloud } from 'lucide-react'
 import type { Attachment } from '../api/receipts'
 import { ErrorBanner, ghostBtn, primaryBtn, Spinner } from '../shell/ui'
 import AttachmentLightbox from '../shared/AttachmentLightbox'
 
-/** The six attachment calls — identical shape on `receiptsApi` and `expensesApi`. */
+/** The seven attachment calls — identical shape on `receiptsApi` and `expensesApi`. */
 export type AttachmentApi = {
   documentAttachments: (id: number) => Promise<{ data: Attachment[] }>
   lineAttachments: (id: number, lineNo: number) => Promise<{ data: Attachment[] }>
-  attachToDocument: (id: number, file: File) => Promise<{ data: Attachment }>
-  attachToLine: (id: number, lineNo: number, file: File) => Promise<{ data: Attachment }>
+  attachToDocument: (id: number, file: File, comment?: string) => Promise<{ data: Attachment }>
+  attachToLine: (id: number, lineNo: number, file: File, comment?: string) => Promise<{ data: Attachment }>
   signedUrl: (attachmentId: number) => Promise<{ data: { url: string } }>
+  updateAttachmentComment: (attachmentId: number, comment: string) => Promise<{ data: Attachment }>
   deleteAttachment: (attachmentId: number) => Promise<unknown>
 }
 
@@ -20,7 +20,7 @@ export type LineTarget = { lineNo: number; label: string }
 const MAX_MB = 10
 
 type Loaded = Attachment & { where: string }
-type Staged = { id: string; file: File; target: 'doc' | number; tooBig: boolean }
+type Staged = { id: string; file: File; target: 'doc' | number; tooBig: boolean; comment: string }
 
 /**
  * "Documents" panel on the New Receipt / New Expense forms. Always visible. Lets the user
@@ -75,7 +75,6 @@ export default function AttachmentsPanel(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docId, lineKey])
 
-  const [isDragging, setIsDragging] = useState(false)
   const [lightbox, setLightbox] = useState<{ url: string; filename: string; contentType?: string } | null>(null)
 
   function addFiles(files: File[]) {
@@ -88,6 +87,7 @@ export default function AttachmentsPanel(props: {
         file,
         target: 'doc' as 'doc' | number,
         tooBig: file.size > MAX_MB * 1024 * 1024,
+        comment: '',
       })),
     ])
   }
@@ -100,6 +100,10 @@ export default function AttachmentsPanel(props: {
 
   function setTarget(id: string, target: 'doc' | number) {
     setStaged((prev) => prev.map((s) => (s.id === id ? { ...s, target } : s)))
+  }
+
+  function setStagedComment(id: string, comment: string) {
+    setStaged((prev) => prev.map((s) => (s.id === id ? { ...s, comment } : s)))
   }
 
   function removeStaged(id: string) {
@@ -121,8 +125,8 @@ export default function AttachmentsPanel(props: {
         }
       }
       for (const s of ready) {
-        if (s.target === 'doc') await api.attachToDocument(id, s.file)
-        else await api.attachToLine(id, s.target, s.file)
+        if (s.target === 'doc') await api.attachToDocument(id, s.file, s.comment)
+        else await api.attachToLine(id, s.target, s.file, s.comment)
       }
       setStaged((prev) => prev.filter((s) => s.tooBig))
       setLoaded(await fetchAll(id))
@@ -148,6 +152,23 @@ export default function AttachmentsPanel(props: {
     setError('')
     try {
       await api.deleteAttachment(attId)
+      setLoaded(await fetchAll(docId))
+    } catch (e) {
+      setError(errMsg(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const [editingComment, setEditingComment] = useState<{ id: number; text: string } | null>(null)
+
+  async function saveComment() {
+    if (!editingComment || docId == null) return
+    setBusy(true)
+    setError('')
+    try {
+      await api.updateAttachmentComment(editingComment.id, editingComment.text)
+      setEditingComment(null)
       setLoaded(await fetchAll(docId))
     } catch (e) {
       setError(errMsg(e))
@@ -182,40 +203,9 @@ export default function AttachmentsPanel(props: {
             style={{ display: 'none' }}
           />
 
-          <div
-            onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={(e) => {
-              e.preventDefault()
-              setIsDragging(false)
-              if (e.dataTransfer.files?.length) {
-                addFiles(Array.from(e.dataTransfer.files))
-              }
-            }}
-            onClick={() => fileRef.current?.click()}
-            style={{
-              border: isDragging ? '2px dashed var(--navy)' : '1.5px dashed var(--line)',
-              background: isDragging ? 'var(--navy3)' : 'var(--bg)',
-              borderRadius: 8,
-              padding: '16px 14px',
-              textAlign: 'center',
-              cursor: busy ? 'wait' : 'pointer',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 4,
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <UploadCloud size={22} style={{ color: isDragging ? 'var(--navy)' : 'var(--muted)' }} />
-            <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--navy)' }}>
-              Drag &amp; drop receipts here, or <span style={{ textDecoration: 'underline' }}>browse</span>
-            </div>
-            <div style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>
-              PDF or images up to {MAX_MB} MB each
-            </div>
-          </div>
+          <button type="button" onClick={() => fileRef.current?.click()} style={{ ...ghostBtn, minHeight: 36 }} disabled={busy}>
+            📎 Add documents
+          </button>
 
           {staged.length > 0 && (
             <div style={{
@@ -224,46 +214,59 @@ export default function AttachmentsPanel(props: {
             }}>
               {staged.map((s) => (
                 <div key={s.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+                  display: 'flex', flexDirection: 'column', gap: 6,
                   padding: '6px 0', borderBottom: '1px dashed var(--line)',
                 }}>
-                  <span style={{ fontSize: '0.82rem', fontWeight: 600, flex: '1 1 140px', minWidth: 0, wordBreak: 'break-all' }}>
-                    {s.file.name}
-                  </span>
-                  {s.tooBig ? (
-                    <span style={{ fontSize: '0.76rem', color: 'var(--red)', fontWeight: 700 }}>
-                      over {MAX_MB} MB — remove it
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 600, flex: '1 1 140px', minWidth: 0, wordBreak: 'break-all' }}>
+                      {s.file.name}
                     </span>
-                  ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '0.74rem', color: 'var(--faint)' }}>attach to</span>
-                      <select
-                        value={s.target === 'doc' ? 'doc' : String(s.target)}
-                        onChange={(e) => setTarget(s.id, e.target.value === 'doc' ? 'doc' : Number(e.target.value))}
-                        style={{
-                          border: '1.5px solid var(--line)', borderRadius: 7, padding: '5px 8px', fontSize: '0.78rem',
-                          minHeight: 36, maxWidth: '100%',
-                        }}
-                      >
-                        <option value="doc">Whole {noun} (top level)</option>
-                        {lineTargets.map((lt) => (
-                          <option key={lt.lineNo} value={lt.lineNo}>{lt.label}</option>
-                        ))}
-                      </select>
-                    </div>
+                    {s.tooBig ? (
+                      <span style={{ fontSize: '0.76rem', color: 'var(--red)', fontWeight: 700 }}>
+                        over {MAX_MB} MB — remove it
+                      </span>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '0.74rem', color: 'var(--faint)' }}>attach to</span>
+                        <select
+                          value={s.target === 'doc' ? 'doc' : String(s.target)}
+                          onChange={(e) => setTarget(s.id, e.target.value === 'doc' ? 'doc' : Number(e.target.value))}
+                          style={{
+                            border: '1.5px solid var(--line)', borderRadius: 7, padding: '5px 8px', fontSize: '0.78rem',
+                            minHeight: 36, maxWidth: '100%',
+                          }}
+                        >
+                          <option value="doc">Whole {noun} (top level)</option>
+                          {lineTargets.map((lt) => (
+                            <option key={lt.lineNo} value={lt.lineNo}>{lt.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeStaged(s.id)}
+                      style={{
+                        border: 'none', background: 'none', color: 'var(--red)', fontWeight: 700, cursor: 'pointer',
+                        width: 36, height: 36, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '1.2rem', padding: 0, marginLeft: 'auto',
+                      }}
+                      aria-label={`Remove staged file ${s.file.name}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                  {!s.tooBig && (
+                    <input
+                      value={s.comment}
+                      onChange={(e) => setStagedComment(s.id, e.target.value)}
+                      placeholder="Add a note (optional) — e.g. bill copy 2"
+                      style={{
+                        border: '1.5px solid var(--line)', borderRadius: 7, padding: '6px 8px', fontSize: '0.78rem',
+                        minHeight: 32,
+                      }}
+                    />
                   )}
-                  <button
-                    type="button"
-                    onClick={() => removeStaged(s.id)}
-                    style={{
-                      border: 'none', background: 'none', color: 'var(--red)', fontWeight: 700, cursor: 'pointer',
-                      width: 36, height: 36, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '1.2rem', padding: 0, marginLeft: 'auto',
-                    }}
-                    aria-label={`Remove staged file ${s.file.name}`}
-                  >
-                    ×
-                  </button>
                 </div>
               ))}
               <div>
@@ -286,40 +289,81 @@ export default function AttachmentsPanel(props: {
         {loaded != null && loaded.length === 0 && (
           <span style={{ fontSize: '0.8rem', color: 'var(--faint)' }}>No documents attached yet.</span>
         )}
-        {(loaded ?? []).map((a) => (
-          <div
-            key={a.id}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-              border: '1px solid var(--line)', borderRadius: 8, padding: '8px 10px',
-            }}
-          >
-            <span style={{ fontSize: '0.82rem', fontWeight: 600, wordBreak: 'break-all', flex: '1 1 140px', minWidth: 0 }}>
-              {a.filename}
-            </span>
-            <span style={{
-              fontSize: '0.68rem', fontWeight: 700, color: 'var(--navy)', background: 'var(--gray-bg)',
-              borderRadius: 999, padding: '2px 8px', whiteSpace: 'nowrap',
-            }}>
-              {a.where}
-            </span>
-            <span style={{ fontSize: '0.72rem', color: 'var(--faint)', whiteSpace: 'nowrap' }}>{fmtSize(a.sizeBytes)}</span>
-            <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-              <button type="button" onClick={() => view(a)} style={{ ...ghostBtn, minHeight: 36 }} aria-label={`View attachment ${a.filename}`}>View</button>
-              {!frozen && !a.frozen && (
-                <button
-                  type="button"
-                  onClick={() => remove(a.id)}
-                  disabled={busy}
-                  style={{ ...ghostBtn, color: 'var(--red)', borderColor: '#EBC2C2', minHeight: 36 }}
-                  aria-label={`Remove attachment ${a.filename}`}
-                >
-                  Remove
-                </button>
+        {(loaded ?? []).map((a) => {
+          const editing = editingComment?.id === a.id
+          return (
+            <div
+              key={a.id}
+              style={{
+                display: 'flex', flexDirection: 'column', gap: 6,
+                border: '1px solid var(--line)', borderRadius: 8, padding: '8px 10px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: 600, wordBreak: 'break-all', flex: '1 1 140px', minWidth: 0 }}>
+                  {a.filename}
+                </span>
+                <span style={{
+                  fontSize: '0.68rem', fontWeight: 700, color: 'var(--navy)', background: 'var(--gray-bg)',
+                  borderRadius: 999, padding: '2px 8px', whiteSpace: 'nowrap',
+                }}>
+                  {a.where}
+                </span>
+                <span style={{ fontSize: '0.72rem', color: 'var(--faint)', whiteSpace: 'nowrap' }}>{fmtSize(a.sizeBytes)}</span>
+                <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                  <button type="button" onClick={() => view(a)} style={{ ...ghostBtn, minHeight: 36 }} aria-label={`View attachment ${a.filename}`}>View</button>
+                  {!frozen && !a.frozen && (
+                    <button
+                      type="button"
+                      onClick={() => remove(a.id)}
+                      disabled={busy}
+                      style={{ ...ghostBtn, color: 'var(--red)', borderColor: '#EBC2C2', minHeight: 36 }}
+                      aria-label={`Remove attachment ${a.filename}`}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </span>
+              </div>
+
+              {editing ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <input
+                    autoFocus
+                    value={editingComment.text}
+                    onChange={(e) => setEditingComment({ id: a.id, text: e.target.value })}
+                    placeholder="Add a note — e.g. bill copy 2"
+                    style={{
+                      flex: '1 1 160px', minWidth: 0, border: '1.5px solid var(--line)', borderRadius: 7,
+                      padding: '5px 8px', fontSize: '0.78rem', minHeight: 32,
+                    }}
+                  />
+                  <button type="button" onClick={saveComment} disabled={busy} style={{ ...ghostBtn, minHeight: 32, padding: '4px 10px', fontSize: '0.76rem' }}>
+                    Save
+                  </button>
+                  <button type="button" onClick={() => setEditingComment(null)} style={{ ...ghostBtn, minHeight: 32, padding: '4px 10px', fontSize: '0.76rem' }}>
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  {a.comment && (
+                    <span style={{ fontSize: '0.78rem', color: 'var(--muted)', fontStyle: 'italic', wordBreak: 'break-word' }}>
+                      “{a.comment}”
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setEditingComment({ id: a.id, text: a.comment ?? '' })}
+                    style={{ border: 'none', background: 'none', color: 'var(--navy2)', fontSize: '0.74rem', fontWeight: 600, cursor: 'pointer', padding: 0 }}
+                  >
+                    {a.comment ? 'Edit note' : '+ Add note'}
+                  </button>
+                </div>
               )}
-            </span>
-          </div>
-        ))}
+            </div>
+          )
+        })}
       </div>
 
       {lightbox && (

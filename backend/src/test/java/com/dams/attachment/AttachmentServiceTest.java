@@ -78,7 +78,7 @@ class AttachmentServiceTest {
         when(receiveDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(doc(WorkflowStatus.SUBMITTED, false)));
         MockMultipartFile file = new MockMultipartFile("file", "receipt.pdf", "application/pdf", new byte[] {1, 2, 3});
 
-        var response = service.upload(ParentType.RECEIVE_DOCUMENT, DOC_ID, file);
+        var response = service.upload(ParentType.RECEIVE_DOCUMENT, DOC_ID, file, null);
 
         assertThat(response.filename()).isEqualTo("receipt.pdf");
         verify(storage).put(any(), any(), any());
@@ -90,7 +90,7 @@ class AttachmentServiceTest {
         when(receiveDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(doc(WorkflowStatus.SUBMITTED, false)));
         MockMultipartFile file = new MockMultipartFile("file", "notes.txt", "text/plain", new byte[] {1});
 
-        assertThatThrownBy(() -> service.upload(ParentType.RECEIVE_DOCUMENT, DOC_ID, file))
+        assertThatThrownBy(() -> service.upload(ParentType.RECEIVE_DOCUMENT, DOC_ID, file, null))
             .isInstanceOf(DamsException.class)
             .hasMessageContaining("PDF or image");
         verify(storage, never()).put(any(), any(), any());
@@ -101,7 +101,7 @@ class AttachmentServiceTest {
         when(receiveDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(doc(WorkflowStatus.APPROVED, true)));
         MockMultipartFile file = new MockMultipartFile("file", "receipt.pdf", "application/pdf", new byte[] {1});
 
-        assertThatThrownBy(() -> service.upload(ParentType.RECEIVE_DOCUMENT, DOC_ID, file))
+        assertThatThrownBy(() -> service.upload(ParentType.RECEIVE_DOCUMENT, DOC_ID, file, null))
             .isInstanceOf(DamsException.class)
             .hasMessageContaining("frozen");
     }
@@ -112,7 +112,7 @@ class AttachmentServiceTest {
             .thenReturn(Optional.of(expenseDoc(ExpenseWorkflowStatus.SUBMITTED)));
         MockMultipartFile file = new MockMultipartFile("file", "bill.pdf", "application/pdf", new byte[] {1, 2});
 
-        var response = service.upload(ParentType.EXPENSE_DOCUMENT, DOC_ID, file);
+        var response = service.upload(ParentType.EXPENSE_DOCUMENT, DOC_ID, file, null);
 
         assertThat(response.filename()).isEqualTo("bill.pdf");
         verify(attachmentRepo).save(any(Attachment.class));
@@ -124,7 +124,7 @@ class AttachmentServiceTest {
             .thenReturn(Optional.of(expenseDoc(ExpenseWorkflowStatus.CLOSED)));
         MockMultipartFile file = new MockMultipartFile("file", "bill.pdf", "application/pdf", new byte[] {1});
 
-        assertThatThrownBy(() -> service.upload(ParentType.EXPENSE_DOCUMENT, DOC_ID, file))
+        assertThatThrownBy(() -> service.upload(ParentType.EXPENSE_DOCUMENT, DOC_ID, file, null))
             .isInstanceOf(DamsException.class)
             .hasMessageContaining("frozen");
         verify(storage, never()).put(any(), any(), any());

@@ -7,6 +7,27 @@
 
 ## Revision log
 
+- **rev 31 (2026-09-11)** — Cashier feedback batch (dealership testing on Ooriba Motors),
+  merged in from a previously-unmerged PR that had drifted onto a stale base (the
+  designated branch had been restarted from `main` before this PR landed, so it sat
+  open and unmerged even though the work was done — folded in now rather than lost):
+  removed `useDraftRecovery` entirely (`NewReceiptPage.tsx` / `NewExpensePage.tsx`) — it
+  auto-saved form state under one fixed, unscoped `localStorage` key
+  (`dams_receipt_draft` / `dams_expense_draft`), so on a shared terminal any cashier's
+  half-filled form resurfaced as an unexplained "restore a draft?" prompt for the next
+  person, regardless of who they were; never part of the original design. Reverted
+  `AttachmentsPanel.tsx`'s upload control from the drag-and-drop dropzone back to the
+  original simple "📎 Add documents" button; kept the in-app preview popup
+  (`AttachmentLightbox`) on View, since that one was judged a genuine improvement.
+  Added an optional per-attachment comment (`V24__attachment_comment.sql`, renumbered
+  from this PR's original V23 to avoid colliding with rev 29's V23 claim-type migration;
+  `attachment.comment`): settable while staging a file for upload, and editable any time
+  after via `PATCH /api/v1/attachments/{id}` — including once the owning document is
+  frozen, since a comment is a note, not a financial change. `AttachmentResponse` now
+  carries `comment`; both receipt and expense attach endpoints accept an optional
+  `comment` form field. Verified (original PR): `mvn test` 171 green, `tsc`/`eslint`/
+  `vitest` clean; re-verified after the merge — see below.
+
 - **rev 30 (2026-09-10)** — Cash-box reconciliation breakdown ("where is the money
   coming from / going to"), on user request that Collections/Expenses/Cash-in-hand
   were hard to reconcile by eye. New `MoneyMovementItem` DTO plus
