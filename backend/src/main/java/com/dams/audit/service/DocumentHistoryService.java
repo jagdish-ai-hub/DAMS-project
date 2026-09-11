@@ -75,7 +75,12 @@ public class DocumentHistoryService {
         Map<String, Object> d = detail(e);
         return switch (e.getEventType()) {
             case CREATED -> "Created";
-            case SUBMITTED -> Boolean.TRUE.equals(d.get("resubmit")) ? "Resubmitted" : "Submitted";
+            case SUBMITTED -> {
+                if (d.get("reopenedFrom") != null) {
+                    yield "Reopened for review (new payment added after " + d.get("reopenedFrom") + ")";
+                }
+                yield Boolean.TRUE.equals(d.get("resubmit")) ? "Resubmitted" : "Submitted";
+            }
             case LINE_ADDED -> "Line added";
             case VERIFIED -> "Verified";
             case APPROVED -> "Approved";
@@ -85,6 +90,7 @@ public class DocumentHistoryService {
             case CLOSED -> "Closed";
             case SETTLED -> "Auto-settled — paid in full";
             case CATEGORY_CHANGED -> "Category changed";
+            case CLAIM_TYPE_CHANGED -> "Claim type changed";
             case TRANSFERRED_TO_CLAIM -> "Transferred to claim";
         };
     }

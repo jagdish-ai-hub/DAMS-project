@@ -15,11 +15,13 @@ import com.dams.expense.repository.ExpenseLineRepository;
 import com.dams.jobcard.repository.ClaimCloseRepository;
 import com.dams.jobcard.repository.JobCardRepository;
 import com.dams.jobcard.service.PendingAmountCalculator;
+import com.dams.masters.repository.ClaimTypeRepository;
 import com.dams.masters.repository.ExpenseCategoryRepository;
-import com.dams.masters.repository.ReceiveCategoryRepository;
+import com.dams.masters.repository.ExpenseModeRepository;
 import com.dams.masters.repository.SettlementModeRepository;
 import com.dams.receive.repository.ReceiveDocumentRepository;
 import com.dams.receive.repository.SettlementLineRepository;
+import com.dams.receiver.repository.ReceiverRepository;
 import com.dams.user.repository.AppUserRepository;
 import com.dams.vehicle.repository.VehicleRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -61,7 +63,9 @@ class DashboardServiceTest {
     @Mock private CashDocumentRepository cashDocumentRepo;
     @Mock private SettlementModeRepository settlementModeRepo;
     @Mock private ExpenseCategoryRepository expenseCategoryRepo;
-    @Mock private ReceiveCategoryRepository receiveCategoryRepo;
+    @Mock private ExpenseModeRepository expenseModeRepo;
+    @Mock private ClaimTypeRepository claimTypeRepo;
+    @Mock private ReceiverRepository receiverRepo;
     @Mock private BranchRepository branchRepo;
     @Mock private CashDayCloseRepository cashDayCloseRepo;
     @Mock private DrawerService drawerService;
@@ -78,7 +82,7 @@ class DashboardServiceTest {
     @BeforeEach
     void setUp() {
         service = new DashboardService(settlementLineRepo, expenseLineRepo, receiveDocumentRepo, expenseDocumentRepo,
-            cashDocumentRepo, settlementModeRepo, expenseCategoryRepo, receiveCategoryRepo, branchRepo,
+            cashDocumentRepo, settlementModeRepo, expenseCategoryRepo, expenseModeRepo, claimTypeRepo, receiverRepo, branchRepo,
             cashDayCloseRepo, drawerService, jobCardRepo, customerRepo, vehicleRepo, claimCloseRepo,
             pendingAmountCalculator, auditEventRepo, userRepo, new ObjectMapper());
         TenantContext.setOrgId(ORG);

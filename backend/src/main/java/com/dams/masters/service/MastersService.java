@@ -43,7 +43,8 @@ public class MastersService {
                           ExpenseSubCategoryRepository subCategoryRepo,
                           ExpenseModeRepository expenseModeRepo,
                           ExpenseBusinessStatusRepository expenseStatusRepo,
-                          BankRepository bankRepo) {
+                          BankRepository bankRepo,
+                          ClaimTypeRepository claimTypeRepo) {
         this.subCategoryRepo = subCategoryRepo;
         this.expenseCategoryRepo = expenseCategoryRepo;
 
@@ -55,6 +56,7 @@ public class MastersService {
         repos.put(MasterType.EXPENSE_MODES, expenseModeRepo);
         repos.put(MasterType.EXPENSE_STATUSES, expenseStatusRepo);
         repos.put(MasterType.BANKS, bankRepo);
+        repos.put(MasterType.CLAIM_TYPES, claimTypeRepo);
 
         factories.put(MasterType.RECEIVE_CATEGORIES, ReceiveCategory::new);
         factories.put(MasterType.RECEIVE_STATUSES, ReceiveBusinessStatus::new);
@@ -64,6 +66,7 @@ public class MastersService {
         factories.put(MasterType.EXPENSE_MODES, ExpenseMode::new);
         factories.put(MasterType.EXPENSE_STATUSES, ExpenseBusinessStatus::new);
         factories.put(MasterType.BANKS, Bank::new);
+        factories.put(MasterType.CLAIM_TYPES, ClaimType::new);
     }
 
     @Transactional(readOnly = true)
@@ -151,11 +154,7 @@ public class MastersService {
     }
 
     private void applyTypeSpecific(MasterType type, OrgMaster entity, MasterRequest req, boolean isCreate) {
-        if (type.hasClaimFlag() && entity instanceof ReceiveCategory rc) {
-            if (req.getIsClaim() != null) {
-                rc.setClaim(req.getIsClaim());
-            }
-        } else if (type.hasModeFlags() && entity instanceof SettlementMode sm) {
+        if (type.hasModeFlags() && entity instanceof SettlementMode sm) {
             if (req.getRequiresBank() != null) {
                 sm.setRequiresBank(req.getRequiresBank());
             }

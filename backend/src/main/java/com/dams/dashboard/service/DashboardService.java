@@ -17,21 +17,29 @@ import com.dams.dashboard.dto.ActivityItem;
 import com.dams.dashboard.dto.BranchComparisonRow;
 import com.dams.dashboard.dto.DashboardKpis;
 import com.dams.dashboard.dto.DashboardSummary;
+import com.dams.dashboard.dto.MoneyMovementItem;
 import com.dams.dashboard.dto.NamedAmount;
 import com.dams.dashboard.dto.OutstandingItem;
 import com.dams.dashboard.dto.TrendPoint;
+import com.dams.expense.entity.ExpenseDocument;
+import com.dams.expense.entity.ExpenseLine;
 import com.dams.expense.repository.ExpenseDocumentRepository;
 import com.dams.expense.repository.ExpenseLineRepository;
+import com.dams.receive.entity.ReceiveDocument;
+import com.dams.receive.entity.SettlementLine;
+import com.dams.receiver.entity.Receiver;
+import com.dams.receiver.repository.ReceiverRepository;
 import com.dams.jobcard.entity.ClaimClose;
 import com.dams.jobcard.entity.JobCard;
 import com.dams.jobcard.repository.ClaimCloseRepository;
 import com.dams.jobcard.repository.JobCardRepository;
 import com.dams.jobcard.service.PendingAmountCalculator;
+import com.dams.masters.entity.ClaimType;
 import com.dams.masters.entity.ExpenseCategory;
-import com.dams.masters.entity.ReceiveCategory;
 import com.dams.masters.entity.SettlementMode;
+import com.dams.masters.repository.ClaimTypeRepository;
 import com.dams.masters.repository.ExpenseCategoryRepository;
-import com.dams.masters.repository.ReceiveCategoryRepository;
+import com.dams.masters.repository.ExpenseModeRepository;
 import com.dams.masters.repository.SettlementModeRepository;
 import com.dams.receive.repository.ReceiveDocumentRepository;
 import com.dams.receive.repository.SettlementLineRepository;
@@ -75,7 +83,9 @@ public class DashboardService {
     private final CashDocumentRepository cashDocumentRepo;
     private final SettlementModeRepository settlementModeRepo;
     private final ExpenseCategoryRepository expenseCategoryRepo;
-    private final ReceiveCategoryRepository receiveCategoryRepo;
+    private final ExpenseModeRepository expenseModeRepo;
+    private final ClaimTypeRepository claimTypeRepo;
+    private final ReceiverRepository receiverRepo;
     private final BranchRepository branchRepo;
     private final CashDayCloseRepository cashDayCloseRepo;
     private final DrawerService drawerService;
@@ -95,7 +105,9 @@ public class DashboardService {
                             CashDocumentRepository cashDocumentRepo,
                             SettlementModeRepository settlementModeRepo,
                             ExpenseCategoryRepository expenseCategoryRepo,
-                            ReceiveCategoryRepository receiveCategoryRepo,
+                            ExpenseModeRepository expenseModeRepo,
+                            ClaimTypeRepository claimTypeRepo,
+                            ReceiverRepository receiverRepo,
                             BranchRepository branchRepo,
                             CashDayCloseRepository cashDayCloseRepo,
                             DrawerService drawerService,
@@ -114,7 +126,9 @@ public class DashboardService {
         this.cashDocumentRepo = cashDocumentRepo;
         this.settlementModeRepo = settlementModeRepo;
         this.expenseCategoryRepo = expenseCategoryRepo;
-        this.receiveCategoryRepo = receiveCategoryRepo;
+        this.expenseModeRepo = expenseModeRepo;
+        this.claimTypeRepo = claimTypeRepo;
+        this.receiverRepo = receiverRepo;
         this.branchRepo = branchRepo;
         this.cashDayCloseRepo = cashDayCloseRepo;
         this.drawerService = drawerService;
@@ -231,6 +245,101 @@ public class DashboardService {
         return m;
     }
 
+    // ==================================================================== reconciliation breakdown
+
+    /**
+     * The receipt lines behind the Collections KPI for a period/branch — same APPROVED-only
+     * filter {@link com.dams.receive.repository.SettlementLineRepository#dashboardCollections}
+     * uses, so this always sums to exactly what the card shows.
+     */
+    @Transactional(readOnly = true)
+    public List<MoneyMovementItem> collectionsBreakdown(Long branchId, String period) {
+        Long orgId = TenantContext.requireOrgId();
+        resolveBranch(orgId, branchId);
+        LocalDate today = OrgTime.today();
+        LocalDate from = "today".equals(period) ? today : today.withDayOfMonth(1);
+
+        List<Object[]> rows = settlementLineRepo.findApprovedForBreakdown(orgId, from, today, branchId);
+        Map<Long, String> branchCodes = branchCodeMap(orgId);
+        Map<Long, String> modeNames = settlementModeNames(orgId);
+        Map<Long, String> customerNames = customerNamesFor(orgId, rows.stream()
+            .map(r -> ((com.dams.jobcard.entity.JobCard) r[2]).getCustomerId()).toList());
+
+        List<MoneyMovementItem> out = new ArrayList<>();
+        for (Object[] r : rows) {
+            SettlementLine l = (SettlementLine) r[0];
+            ReceiveDocument d = (ReceiveDocument) r[1];
+            com.dams.jobcard.entity.JobCard jc = (com.dams.jobcard.entity.JobCard) r[2];
+            String branchCode = branchCodes.getOrDefault(d.getBranchId(), "?");
+            out.add(new MoneyMovementItem("receipt", d.getId(), d.getDocumentNo(), d.getWorkflowStatus().name(),
+                l.getTransactionDate(), l.getCreatedAt(), branchCode,
+                customerNames.getOrDefault(jc.getCustomerId(), "—"),
+                branchCode + "-JC-" + jc.getId(),
+                modeNames.getOrDefault(l.getSettlementModeId(), "—"),
+                l.getAmount()));
+        }
+        return out;
+    }
+
+    /**
+     * The expense lines behind the Expenses KPI for a period/branch — same APPROVED-or-CLOSED
+     * filter {@link com.dams.expense.repository.ExpenseLineRepository#dashboardExpenses} uses.
+     */
+    @Transactional(readOnly = true)
+    public List<MoneyMovementItem> expensesBreakdown(Long branchId, String period) {
+        Long orgId = TenantContext.requireOrgId();
+        resolveBranch(orgId, branchId);
+        LocalDate today = OrgTime.today();
+        LocalDate from = "today".equals(period) ? today : today.withDayOfMonth(1);
+
+        List<Object[]> rows = expenseLineRepo.findApprovedForBreakdown(orgId, from, today, branchId);
+        Map<Long, String> branchCodes = branchCodeMap(orgId);
+        Map<Long, String> modeNames = expenseModeNames(orgId);
+        Map<Long, String> categoryNames = expenseCategoryNames(orgId);
+        Map<Long, String> receiverNames = receiverNamesFor(orgId, rows.stream()
+            .map(r -> ((ExpenseDocument) r[1]).getReceiverId()).toList());
+
+        List<MoneyMovementItem> out = new ArrayList<>();
+        for (Object[] r : rows) {
+            ExpenseLine l = (ExpenseLine) r[0];
+            ExpenseDocument d = (ExpenseDocument) r[1];
+            String branchCode = branchCodes.getOrDefault(d.getBranchId(), "?");
+            out.add(new MoneyMovementItem("expense", d.getId(), d.getDocumentNo(), d.getWorkflowStatus().name(),
+                l.getTransactionDate(), l.getCreatedAt(), branchCode,
+                receiverNames.getOrDefault(d.getReceiverId(), "—"),
+                categoryNames.getOrDefault(d.getExpenseCategoryId(), "—"),
+                modeNames.getOrDefault(l.getExpenseModeId(), "—"),
+                l.getAmount()));
+        }
+        return out;
+    }
+
+    private Map<Long, String> customerNamesFor(Long orgId, List<Long> customerIds) {
+        List<Long> distinct = customerIds.stream().distinct().toList();
+        if (distinct.isEmpty()) {
+            return Map.of();
+        }
+        return customerRepo.findByOrgIdAndIdInOrderByNameAsc(orgId, distinct).stream()
+            .collect(Collectors.toMap(com.dams.customer.entity.Customer::getId, com.dams.customer.entity.Customer::getName));
+    }
+
+    private Map<Long, String> receiverNamesFor(Long orgId, List<Long> receiverIds) {
+        List<Long> distinct = receiverIds.stream().distinct().toList();
+        if (distinct.isEmpty()) {
+            return Map.of();
+        }
+        return receiverRepo.findByOrgIdAndIdIn(orgId, distinct).stream()
+            .collect(Collectors.toMap(Receiver::getId, Receiver::getName));
+    }
+
+    private Map<Long, String> expenseModeNames(Long orgId) {
+        Map<Long, String> m = new HashMap<>();
+        for (var mode : expenseModeRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId)) {
+            m.put(mode.getId(), mode.getName());
+        }
+        return m;
+    }
+
     // ==================================================================== outstanding
 
     @Transactional(readOnly = true)
@@ -246,8 +355,8 @@ public class DashboardService {
         java.util.Set<Long> closedJcIds = new java.util.HashSet<>(claimCloseRepo.findJobCardIdsByOrgId(orgId));
         Map<Long, BigDecimal> receivedByJc = idAmountMap(settlementLineRepo.sumAmountByJobCard(orgId));
         Map<Long, String> branchCodes = branchCodeMap(orgId);
-        Map<Long, ReceiveCategory> categoriesById = receiveCategoryRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId)
-            .stream().collect(Collectors.toMap(ReceiveCategory::getId, c -> c, (a, b) -> a));
+        Map<Long, ClaimType> claimTypesById = claimTypeRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId)
+            .stream().collect(Collectors.toMap(ClaimType::getId, c -> c, (a, b) -> a));
 
         List<Long> customerIds = jobCards.stream().map(JobCard::getCustomerId).distinct().toList();
         Map<Long, Customer> customersById = customerRepo.findByOrgIdAndIdInOrderByNameAsc(orgId, customerIds)
@@ -265,8 +374,7 @@ public class DashboardService {
             if (closedJcIds.contains(jc.getId())) {
                 continue;
             }
-            ReceiveCategory cat = categoriesById.get(jc.getCategoryId());
-            if (cat != null && cat.isClaim()) {
+            if (jc.getClaimTypeId() != null) {
                 continue;
             }
             BigDecimal pending = pendingFor(jc, receivedByJc);
@@ -294,13 +402,10 @@ public class DashboardService {
                 continue;
             }
             JobCard jc = jobCardsById.get(d.getJobCardId());
-            if (jc == null) {
+            if (jc == null || jc.getClaimTypeId() == null) {
                 continue;
             }
-            ReceiveCategory cat = categoriesById.get(jc.getCategoryId());
-            if (cat == null || !cat.isClaim()) {
-                continue;
-            }
+            ClaimType claimType = claimTypesById.get(jc.getClaimTypeId());
             BigDecimal invoice = jc.getInvoiceAmount() != null ? jc.getInvoiceAmount() : BigDecimal.ZERO;
             BigDecimal received = receivedByJc.getOrDefault(jc.getId(), BigDecimal.ZERO);
             BigDecimal owed = invoice.subtract(received).max(BigDecimal.ZERO);
@@ -308,7 +413,7 @@ public class DashboardService {
             String code = branchCodes.getOrDefault(d.getBranchId(), "?");
             out.add(new OutstandingItem("claim",
                 c != null ? c.getName() : "Warranty / AMC claim",
-                code + " · " + cat.getName() + " · awaiting Eicher settlement",
+                code + " · " + (claimType != null ? claimType.getName() : "Claim") + " · awaiting Eicher settlement",
                 owed.signum() > 0 ? owed : invoice, d.getDocumentNo(), code));
         }
         out.sort(Comparator.comparing(OutstandingItem::amount).reversed());

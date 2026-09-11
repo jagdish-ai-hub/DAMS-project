@@ -1,6 +1,7 @@
 package com.dams.masters;
 
 import com.dams.masters.repository.BankRepository;
+import com.dams.masters.repository.ClaimTypeRepository;
 import com.dams.masters.repository.ExpenseBusinessStatusRepository;
 import com.dams.masters.repository.ExpenseCategoryRepository;
 import com.dams.masters.repository.ExpenseModeRepository;
@@ -34,11 +35,12 @@ class MastersServicePurgeTest {
     @Mock private ExpenseModeRepository expenseModeRepo;
     @Mock private ExpenseBusinessStatusRepository expenseStatusRepo;
     @Mock private BankRepository bankRepo;
+    @Mock private ClaimTypeRepository claimTypeRepo;
 
     @Test
     void purgeOrg_deletesSubCategoriesBeforeTheirParentCategory() {
         MastersService service = new MastersService(receiveCategoryRepo, receiveStatusRepo, settlementModeRepo,
-            expenseCategoryRepo, subCategoryRepo, expenseModeRepo, expenseStatusRepo, bankRepo);
+            expenseCategoryRepo, subCategoryRepo, expenseModeRepo, expenseStatusRepo, bankRepo, claimTypeRepo);
 
         service.purgeOrg(99L);
 
@@ -50,12 +52,13 @@ class MastersServicePurgeTest {
     @Test
     void purgeOrg_deletesEverySubCategoryRowExactlyOnce() {
         MastersService service = new MastersService(receiveCategoryRepo, receiveStatusRepo, settlementModeRepo,
-            expenseCategoryRepo, subCategoryRepo, expenseModeRepo, expenseStatusRepo, bankRepo);
+            expenseCategoryRepo, subCategoryRepo, expenseModeRepo, expenseStatusRepo, bankRepo, claimTypeRepo);
 
         service.purgeOrg(99L);
 
         verify(subCategoryRepo).deleteByOrgId(99L);
         verify(bankRepo).deleteByOrgId(99L);
         verify(receiveCategoryRepo).deleteByOrgId(99L);
+        verify(claimTypeRepo).deleteByOrgId(99L);
     }
 }

@@ -18,6 +18,8 @@ export interface JobCard {
   gstNo: string | null
   categoryId: number
   categoryName: string | null
+  claimTypeId: number | null
+  claimTypeName: string | null
   isClaim: boolean
   businessStatusId: number
   businessStatusName: string | null
@@ -45,6 +47,8 @@ export interface JobCardCreateRequest {
   vehicleNo?: string
   branchId?: number
   categoryId: number
+  /** Warranty / AMC / CGW, etc. Set to make this job card a claim from the start. */
+  claimTypeId?: number
   businessStatusId: number
   dbmId?: string
   invoiceNo?: string
@@ -62,6 +66,8 @@ export interface JobCardPatchRequest {
   b2b?: boolean
   gstNo?: string
   categoryId?: number
+  /** 0 clears it (job card is no longer a claim); undefined leaves it unchanged. */
+  claimTypeId?: number
   businessStatusId?: number
 }
 

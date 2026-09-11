@@ -28,9 +28,6 @@ public class MasterRequest {
     @PositiveOrZero(message = "sortOrder must be zero or positive")
     private Integer sortOrder;
 
-    // receive-categories only
-    private Boolean isClaim;
-
     // settlement-modes / expense-modes only
     private Boolean requiresBank;
     private Boolean requiresRef;

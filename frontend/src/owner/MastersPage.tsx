@@ -8,10 +8,11 @@ import AiMastersStrip from './AiMastersStrip'
 import ReceiversSection from './ReceiversSection'
 import HelpButton from '../help/HelpButton'
 
-type Extra = 'claim' | 'mode' | 'sub' | undefined
+type Extra = 'mode' | 'sub' | undefined
 const TABS: { slug: MasterTypeSlug; label: string; extra: Extra }[] = [
-  { slug: 'receive-categories', label: 'Receipt categories', extra: 'claim' },
+  { slug: 'receive-categories', label: 'Transaction types', extra: undefined },
   { slug: 'receive-statuses', label: 'Receipt statuses', extra: undefined },
+  { slug: 'claim-types', label: 'Claim types', extra: undefined },
   { slug: 'settlement-modes', label: 'Settlement modes', extra: 'mode' },
   { slug: 'expense-categories', label: 'Expense departments', extra: undefined },
   { slug: 'expense-sub-categories', label: 'Expense sub-categories', extra: 'sub' },
@@ -127,7 +128,6 @@ export default function MastersPage() {
               <thead>
                 <tr>
                   <th style={th}>Name</th>
-                  {tab.extra === 'claim' && <th style={th}>Claim?</th>}
                   {tab.extra === 'mode' && <th style={th}>Requires</th>}
                   {tab.extra === 'sub' && <th style={th}>Limit</th>}
                   <th style={th}>Status</th><th style={th}></th>
@@ -137,7 +137,6 @@ export default function MastersPage() {
                 {rows.map((r) => (
                   <tr key={r.id}>
                     <td style={td}>{r.name}</td>
-                    {tab.extra === 'claim' && <td style={td}>{r.isClaim ? <Badge tone="amber">Claim</Badge> : '—'}</td>}
                     {tab.extra === 'mode' && (
                       <td style={td}>
                         {[r.requiresBank && 'bank', r.requiresRef && 'ref'].filter(Boolean).join(' + ') || '—'}
@@ -185,7 +184,6 @@ function MasterModal(props: {
   const [name, setName] = useState(editing?.name ?? '')
   const [sortOrder, setSortOrder] = useState(String(editing?.sortOrder ?? ''))
   const [active, setActive] = useState(editing?.active ?? true)
-  const [isClaim, setIsClaim] = useState(editing?.isClaim ?? false)
   const [requiresBank, setRequiresBank] = useState(editing?.requiresBank ?? false)
   const [requiresRef, setRequiresRef] = useState(editing?.requiresRef ?? false)
   const [limitAmount, setLimitAmount] = useState(editing?.limitAmount != null ? String(editing.limitAmount) : '')
@@ -200,7 +198,6 @@ function MasterModal(props: {
       const body: MasterRequest = { name }
       if (sortOrder !== '') body.sortOrder = Number(sortOrder)
       if (editing) body.active = active
-      if (tab.extra === 'claim') body.isClaim = isClaim
       if (tab.extra === 'mode') { body.requiresBank = requiresBank; body.requiresRef = requiresRef }
       if (tab.extra === 'sub') {
         body.expenseCategoryId = editing?.expenseCategoryId ?? props.parentId ?? undefined
@@ -224,12 +221,6 @@ function MasterModal(props: {
           <TextInput value={sortOrder} onChange={setSortOrder} type="number" placeholder="0" />
         </Field>
 
-        {tab.extra === 'claim' && (
-          <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.85rem' }}>
-            <input type="checkbox" checked={isClaim} onChange={(e) => setIsClaim(e.target.checked)} />
-            This is a claim category (Finance Manager closes it with a final override)
-          </label>
-        )}
         {tab.extra === 'mode' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.85rem' }}>

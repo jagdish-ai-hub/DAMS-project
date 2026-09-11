@@ -19,6 +19,7 @@ import com.dams.jobcard.service.PendingAmountCalculator;
 import com.dams.receive.service.ReceivePaymentGuard;
 import com.dams.masters.entity.ReceiveBusinessStatus;
 import com.dams.masters.entity.ReceiveCategory;
+import com.dams.masters.repository.ClaimTypeRepository;
 import com.dams.masters.repository.ReceiveBusinessStatusRepository;
 import com.dams.masters.repository.ReceiveCategoryRepository;
 import com.dams.user.entity.AppUser;
@@ -64,6 +65,7 @@ class JobCardServiceTest {
     @Mock private BranchRepository branchRepo;
     @Mock private ReceiveCategoryRepository categoryRepo;
     @Mock private ReceiveBusinessStatusRepository statusRepo;
+    @Mock private ClaimTypeRepository claimTypeRepo;
     @Mock private AppUserRepository userRepo;
     @Mock private BranchScope branchScope;
     @Mock private AuditService auditService;
@@ -76,7 +78,7 @@ class JobCardServiceTest {
     @BeforeEach
     void setUp() {
         service = new JobCardService(jobCardRepo, customerRepo, vehicleRepo, branchRepo,
-            categoryRepo, statusRepo, userRepo, branchScope, auditService,
+            categoryRepo, statusRepo, claimTypeRepo, userRepo, branchScope, auditService,
             pendingAmountCalculator, claimCloseRepo, paymentGuard);
         TenantContext.setOrgId(ORG);
         lenient().when(branchScope.currentUserId()).thenReturn(CASHIER_ID);

@@ -40,6 +40,9 @@ public class JobCardCreateRequest {
     @NotNull(message = "categoryId is required")
     private Long categoryId;
 
+    /** Optional. Set only when the job card is a Warranty / AMC / CGW claim from the start. */
+    private Long claimTypeId;
+
     @NotNull(message = "businessStatusId is required")
     private Long businessStatusId;
 

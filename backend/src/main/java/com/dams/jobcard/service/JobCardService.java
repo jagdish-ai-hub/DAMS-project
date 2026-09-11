@@ -17,8 +17,10 @@ import com.dams.jobcard.entity.JobCard;
 import com.dams.jobcard.repository.ClaimCloseRepository;
 import com.dams.jobcard.repository.JobCardRepository;
 import com.dams.receive.service.ReceivePaymentGuard;
+import com.dams.masters.entity.ClaimType;
 import com.dams.masters.entity.ReceiveBusinessStatus;
 import com.dams.masters.entity.ReceiveCategory;
+import com.dams.masters.repository.ClaimTypeRepository;
 import com.dams.masters.repository.ReceiveBusinessStatusRepository;
 import com.dams.masters.repository.ReceiveCategoryRepository;
 import com.dams.user.entity.AppUser;
@@ -57,6 +59,7 @@ public class JobCardService {
     private final BranchRepository branchRepo;
     private final ReceiveCategoryRepository categoryRepo;
     private final ReceiveBusinessStatusRepository statusRepo;
+    private final ClaimTypeRepository claimTypeRepo;
     private final AppUserRepository userRepo;
     private final BranchScope branchScope;
     private final AuditService auditService;
@@ -70,6 +73,7 @@ public class JobCardService {
                           BranchRepository branchRepo,
                           ReceiveCategoryRepository categoryRepo,
                           ReceiveBusinessStatusRepository statusRepo,
+                          ClaimTypeRepository claimTypeRepo,
                           AppUserRepository userRepo,
                           BranchScope branchScope,
                           AuditService auditService,
@@ -82,6 +86,7 @@ public class JobCardService {
         this.branchRepo = branchRepo;
         this.categoryRepo = categoryRepo;
         this.statusRepo = statusRepo;
+        this.claimTypeRepo = claimTypeRepo;
         this.userRepo = userRepo;
         this.branchScope = branchScope;
         this.auditService = auditService;
@@ -105,6 +110,8 @@ public class JobCardService {
 
         ReceiveCategory category = requireActiveCategory(orgId, request.getCategoryId());
         ReceiveBusinessStatus status = requireActiveStatus(orgId, request.getBusinessStatusId());
+        ClaimType claimType = request.getClaimTypeId() == null ? null
+            : requireActiveClaimType(orgId, request.getClaimTypeId());
 
         JobCard jc = new JobCard();
         jc.setOrgId(orgId);
@@ -119,6 +126,7 @@ public class JobCardService {
         jc.setGstNo(blankToNull(request.getGstNo()));
         requireGstWhenB2b(b2b, jc.getGstNo());
         jc.setCategoryId(category.getId());
+        jc.setClaimTypeId(claimType != null ? claimType.getId() : null);
         jc.setBusinessStatusId(status.getId());
         jc = jobCardRepo.save(jc);
 
@@ -176,10 +184,14 @@ public class JobCardService {
             && !request.getCategoryId().equals(jc.getCategoryId());
         boolean wantsStatusChange = request.getBusinessStatusId() != null
             && !request.getBusinessStatusId().equals(jc.getBusinessStatusId());
+        // 0 means "clear it"; any other non-null id is a real claim type. Either way, only
+        // an actual change against the current value counts.
+        boolean wantsClaimTypeChange = request.getClaimTypeId() != null
+            && !request.getClaimTypeId().equals(jc.getClaimTypeId() != null ? jc.getClaimTypeId() : 0L);
 
-        if ((wantsCategoryChange || wantsStatusChange) && hasClaimClose(jc.getId())) {
+        if ((wantsCategoryChange || wantsStatusChange || wantsClaimTypeChange) && hasClaimClose(jc.getId())) {
             throw DamsException.conflict(
-                "This job card's claim is closed — category and business status can no longer be changed");
+                "This job card's claim is closed — category, claim type and business status can no longer be changed");
         }
 
         if (wantsCategoryChange) {
@@ -190,14 +202,28 @@ public class JobCardService {
                 branchScope.currentUserId(),
                 orderedDetail("before", before, "after", next.getId()));
         }
+        if (wantsClaimTypeChange) {
+            Long before = jc.getClaimTypeId();
+            Long after;
+            if (request.getClaimTypeId() == 0L) {
+                after = null;
+            } else {
+                ClaimType next = requireActiveClaimType(orgId, request.getClaimTypeId());
+                after = next.getId();
+            }
+            jc.setClaimTypeId(after);
+            auditService.recordUserEvent(ENTITY, jc.getId(), jc.getBranchId(), EventType.CLAIM_TYPE_CHANGED,
+                branchScope.currentUserId(),
+                orderedDetail("before", before, "after", after));
+        }
         if (wantsStatusChange) {
             ReceiveBusinessStatus next = requireActiveStatus(orgId, request.getBusinessStatusId());
             jc.setBusinessStatusId(next.getId());
         }
 
         jc = jobCardRepo.save(jc);
-        log.info("JobCard patched: orgId={} jobCardId={} categoryChanged={} statusChanged={}",
-            orgId, jc.getId(), wantsCategoryChange, wantsStatusChange);
+        log.info("JobCard patched: orgId={} jobCardId={} categoryChanged={} claimTypeChanged={} statusChanged={}",
+            orgId, jc.getId(), wantsCategoryChange, wantsClaimTypeChange, wantsStatusChange);
         return toResponse(jc);
     }
 
@@ -288,6 +314,15 @@ public class JobCardService {
         return s;
     }
 
+    private ClaimType requireActiveClaimType(Long orgId, Long claimTypeId) {
+        ClaimType c = claimTypeRepo.findByIdAndOrgId(claimTypeId, orgId)
+            .orElseThrow(() -> DamsException.notFound("Claim type", claimTypeId));
+        if (!c.isActive()) {
+            throw DamsException.badRequest("Claim type '" + c.getName() + "' is inactive");
+        }
+        return c;
+    }
+
     /** Whether an immutable ClaimClose exists for this job card (freezes category / status). */
     private boolean hasClaimClose(Long jobCardId) {
         return claimCloseRepo.existsByOrgIdAndJobCardId(TenantContext.requireOrgId(), jobCardId);
@@ -326,6 +361,8 @@ public class JobCardService {
         Vehicle vehicle = jc.getVehicleId() == null ? null
             : vehicleRepo.findByIdAndOrgId(jc.getVehicleId(), orgId).orElse(null);
         ReceiveCategory category = categoryRepo.findByIdAndOrgId(jc.getCategoryId(), orgId).orElse(null);
+        ClaimType claimType = jc.getClaimTypeId() == null ? null
+            : claimTypeRepo.findByIdAndOrgId(jc.getClaimTypeId(), orgId).orElse(null);
         ReceiveBusinessStatus status = statusRepo.findByIdAndOrgId(jc.getBusinessStatusId(), orgId).orElse(null);
 
         String branchCode = branch != null ? branch.getCode() : "?";
@@ -354,7 +391,9 @@ public class JobCardService {
             jc.getGstNo(),
             jc.getCategoryId(),
             category != null ? category.getName() : null,
-            category != null && category.isClaim(),
+            jc.getClaimTypeId(),
+            claimType != null ? claimType.getName() : null,
+            jc.getClaimTypeId() != null,
             jc.getBusinessStatusId(),
             status != null ? status.getName() : null,
             pending,

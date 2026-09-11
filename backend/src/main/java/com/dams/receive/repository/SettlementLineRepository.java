@@ -170,6 +170,50 @@ public interface SettlementLineRepository extends JpaRepository<SettlementLine, 
         @Param("from") java.time.LocalDate from,
         @Param("to") java.time.LocalDate to);
 
+    /**
+     * Line-level detail behind {@link #dashboardCollections} — same APPROVED-only filter, so
+     * a reconciliation breakdown always sums to exactly the KPI it explains.
+     */
+    @Query("""
+        select l, d, j
+        from SettlementLine l, ReceiveDocument d, JobCard j
+        where l.receiveDocumentId = d.id
+          and d.jobCardId = j.id
+          and d.orgId = :orgId
+          and d.workflowStatus = com.dams.receive.entity.WorkflowStatus.APPROVED
+          and l.transactionDate between :from and :to
+          and (:branchId is null or d.branchId = :branchId)
+        order by l.transactionDate desc, l.id desc
+        """)
+    List<Object[]> findApprovedForBreakdown(
+        @Param("orgId") Long orgId,
+        @Param("from") java.time.LocalDate from,
+        @Param("to") java.time.LocalDate to,
+        @Param("branchId") Long branchId);
+
+    /**
+     * Line-level detail behind the Cash-page drawer's "cash receipts" subtotal — same filter
+     * as {@link #sumCashModeForBranchDate}.
+     */
+    @Query("""
+        select l, d, j
+        from SettlementLine l, ReceiveDocument d, JobCard j
+        where l.receiveDocumentId = d.id
+          and d.jobCardId = j.id
+          and d.orgId = :orgId
+          and d.branchId = :branchId
+          and l.transactionDate = :date
+          and l.settlementModeId in :cashModeIds
+          and d.workflowStatus <> com.dams.receive.entity.WorkflowStatus.DRAFT
+          and d.workflowStatus <> com.dams.receive.entity.WorkflowStatus.REJECTED
+        order by l.id desc
+        """)
+    List<Object[]> findCashModeForBranchDate(
+        @Param("orgId") Long orgId,
+        @Param("branchId") Long branchId,
+        @Param("date") java.time.LocalDate date,
+        @Param("cashModeIds") java.util.Collection<Long> cashModeIds);
+
     /** Super Admin org-purge only. */
     long deleteByOrgId(Long orgId);
 }

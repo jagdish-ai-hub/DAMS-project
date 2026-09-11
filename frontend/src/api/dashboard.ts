@@ -63,6 +63,21 @@ export interface ActivityItem {
   at: string
 }
 
+/** One receipt or expense line behind a KPI — the reconciliation breakdown row shape. */
+export interface MoneyMovementItem {
+  kind: 'receipt' | 'expense'
+  documentId: number
+  documentNo: string | null
+  workflowStatus: string
+  date: string
+  createdAt: string
+  branchCode: string | null
+  party: string
+  description: string
+  modeName: string
+  amount: number
+}
+
 export const dashboardApi = {
   summary(period: DashboardPeriod, branchId?: number) {
     return api.get<DashboardSummary>('/api/v1/dashboard/summary', { params: { period, branchId } })
@@ -72,5 +87,11 @@ export const dashboardApi = {
   },
   activity(branchId?: number, limit = 20) {
     return api.get<ActivityItem[]>('/api/v1/dashboard/activity', { params: { branchId, limit } })
+  },
+  collectionsBreakdown(period: DashboardPeriod, branchId?: number) {
+    return api.get<MoneyMovementItem[]>('/api/v1/dashboard/collections-breakdown', { params: { period, branchId } })
+  },
+  expensesBreakdown(period: DashboardPeriod, branchId?: number) {
+    return api.get<MoneyMovementItem[]>('/api/v1/dashboard/expenses-breakdown', { params: { period, branchId } })
   },
 }

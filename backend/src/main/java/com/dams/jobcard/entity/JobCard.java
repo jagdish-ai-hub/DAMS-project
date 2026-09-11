@@ -14,12 +14,15 @@ import java.time.Instant;
  * case-level money fields. One invoice per job; over its life a job card can own several
  * ReceiveDocuments (Stage 4).
  *
- * {@code is_claim} is deliberately NOT stored here — it is read from
- * {@code receive_category.is_claim} via {@link #categoryId}, so the flag can never drift.
+ * {@code claimTypeId} is the claim fact: null means this job card is not a claim; set,
+ * it names which claim type (Warranty / AMC / CGW / ...). Selecting one on a receipt IS
+ * the "Transfer to Claim" action — there is no separate button on the receive side (the
+ * expense side keeps its own, since not every expense on a claim job is billable to it).
  *
- * {@code categoryId} / {@code businessStatusId} are editable via PATCH until a ClaimClose
- * row exists for the job card (Stage 8); a category change is audited (CATEGORY_CHANGED).
- * The screen reference is {@code {branchCode}-JC-{id}}, built at read time.
+ * {@code categoryId} / {@code businessStatusId} / {@code claimTypeId} are editable via
+ * PATCH until a ClaimClose row exists for the job card (Stage 8); a category change is
+ * audited (CATEGORY_CHANGED), a claim type change (CLAIM_TYPE_CHANGED). The screen
+ * reference is {@code {branchCode}-JC-{id}}, built at read time.
  */
 @Entity
 @Table(name = "job_card")
@@ -67,6 +70,10 @@ public class JobCard {
 
     @Column(name = "category_id", nullable = false)
     private Long categoryId;
+
+    /** Null when this job card is not a Warranty / AMC / CGW claim. */
+    @Column(name = "claim_type_id")
+    private Long claimTypeId;
 
     @Column(name = "business_status_id", nullable = false)
     private Long businessStatusId;

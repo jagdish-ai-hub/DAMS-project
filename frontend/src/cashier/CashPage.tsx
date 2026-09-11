@@ -10,6 +10,7 @@ import {
 } from '../api/cash'
 import { card, ErrorBanner, inr, primaryBtn, ghostBtn, inputStyle, Modal, Badge, Skeleton, SkeletonRows, fmtDate, istToday } from '../shell/ui'
 import HelpButton from '../help/HelpButton'
+import MoneyBreakdownModal, { type BreakdownRow, moneyMovementsToRows, cashMovementsToRows } from '../shell/MoneyBreakdownModal'
 
 /**
  * Cash page (AGENT.md decision #1 — no HTML mockup). One dedicated per-branch, per-day
@@ -32,6 +33,7 @@ function queryNote(history: DocumentHistoryEntry[]): string | null {
   return null
 }
 
+
 export default function CashPage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
@@ -45,6 +47,17 @@ export default function CashPage() {
 
   const [movementModal, setMovementModal] = useState<{ direction: CashDirection; editDoc?: CashDocument } | null>(null)
   const [closeModal, setCloseModal] = useState(false)
+  const [breakdown, setBreakdown] = useState<{ title: string; rows: BreakdownRow[] } | null>(null)
+
+  function openBreakdown(title: string, rows: BreakdownRow[]) {
+    setBreakdown({ title, rows })
+  }
+
+  function openBreakdownRow(row: BreakdownRow) {
+    setBreakdown(null)
+    const path = row.kind === 'expense' ? '/app/new-expense' : row.kind === 'receipt' ? '/app/new-receipt' : '/app/cash'
+    navigate(`${path}?editDoc=${row.documentId}`)
+  }
 
   useEffect(() => {
     mastersApi.list('banks').then(({ data }) => setBanks(data.filter((b) => b.active))).catch(() => {})
@@ -113,7 +126,7 @@ export default function CashPage() {
 
       {drawer && (
         <>
-          <DrawerCard drawer={drawer} />
+          <DrawerCard drawer={drawer} onLineClick={openBreakdown} />
 
           {drawer.closed ? (
             <ClosedBanner drawer={drawer} />
@@ -165,27 +178,40 @@ export default function CashPage() {
           onDone={() => { setCloseModal(false); refresh() }}
         />
       )}
+      {breakdown && (
+        <MoneyBreakdownModal
+          title={breakdown.title}
+          subtitle={`${drawer?.branchCode ?? ''} · ${fmtDate(date)}`}
+          rows={breakdown.rows}
+          onRowClick={openBreakdownRow}
+          onClose={() => setBreakdown(null)}
+        />
+      )}
     </div>
   )
 }
 
 // ───────────────────────────── Drawer summary ─────────────────────────────
 
-function DrawerCard({ drawer }: { drawer: CashDrawer }) {
+function DrawerCard({ drawer, onLineClick }: { drawer: CashDrawer; onLineClick: (title: string, rows: BreakdownRow[]) => void }) {
   return (
     <section style={{ ...card, padding: 0 }}>
       <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--line)' }}>
         <h3 style={{ fontSize: '0.94rem', fontWeight: 700 }}>Drawer position</h3>
         <span style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>
-          opening + cash receipts + cash in − cash expenses − cash out
+          opening + cash receipts + cash in − cash expenses − cash out · click a line to see where it came from
         </span>
       </div>
       <div style={{ padding: '8px 18px 14px' }}>
         <Line k="Opening" v={inr(drawer.opening)} note={!drawer.openingSet ? 'not set — ask your Accountant to set the branch opening' : undefined} />
-        <Line k="＋ Cash receipts (cash mode)" v={inr(drawer.cashReceipts)} tone="green" />
-        <Line k="＋ Cash In from bank" v={inr(drawer.cashIn)} tone="green" />
-        <Line k="− Cash expenses (cash mode)" v={inr(drawer.cashExpenses)} tone="red" />
-        <Line k="− Cash Out to bank" v={inr(drawer.cashOut)} tone="red" />
+        <Line k="＋ Cash receipts (cash mode)" v={inr(drawer.cashReceipts)} tone="green"
+          onClick={() => onLineClick('Cash receipts (cash mode)', moneyMovementsToRows(drawer.cashReceiptLines))} />
+        <Line k="＋ Cash In from bank" v={inr(drawer.cashIn)} tone="green"
+          onClick={() => onLineClick('Cash In from bank', cashMovementsToRows(drawer.movements, 'IN'))} />
+        <Line k="− Cash expenses (cash mode)" v={inr(drawer.cashExpenses)} tone="red"
+          onClick={() => onLineClick('Cash expenses (cash mode)', moneyMovementsToRows(drawer.cashExpenseLines))} />
+        <Line k="− Cash Out to bank" v={inr(drawer.cashOut)} tone="red"
+          onClick={() => onLineClick('Cash Out to bank', cashMovementsToRows(drawer.movements, 'OUT'))} />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '12px 0 2px', borderTop: '2px solid var(--line)', marginTop: 6 }}>
           <span style={{ fontSize: '0.86rem', fontWeight: 700 }}>Computed position</span>
           <span style={{ fontSize: '1.35rem', fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: 'var(--navy)' }}>
@@ -197,12 +223,19 @@ function DrawerCard({ drawer }: { drawer: CashDrawer }) {
   )
 }
 
-function Line({ k, v, tone, note }: { k: string; v: string; tone?: 'green' | 'red'; note?: string }) {
+function Line({ k, v, tone, note, onClick }: { k: string; v: string; tone?: 'green' | 'red'; note?: string; onClick?: () => void }) {
   const color = tone === 'green' ? 'var(--green)' : tone === 'red' ? 'var(--red)' : 'var(--ink)'
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '7px 0', borderBottom: '1px dashed var(--line)' }}>
+    <div
+      onClick={onClick}
+      style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '7px 0',
+        borderBottom: '1px dashed var(--line)', cursor: onClick ? 'pointer' : undefined,
+      }}
+    >
       <span style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
         {k}
+        {onClick && <span style={{ color: 'var(--navy2)' }}> ⓘ</span>}
         {note && <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--amber)' }}>{note}</span>}
       </span>
       <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color }}>{v}</span>

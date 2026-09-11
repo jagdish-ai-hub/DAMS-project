@@ -16,8 +16,6 @@ import com.dams.dashboard.service.DashboardService;
 import com.dams.jobcard.entity.JobCard;
 import com.dams.jobcard.repository.ClaimCloseRepository;
 import com.dams.jobcard.repository.JobCardRepository;
-import com.dams.masters.repository.ReceiveCategoryRepository;
-import com.dams.masters.entity.ReceiveCategory;
 import com.dams.receive.entity.ReceiveDocument;
 import com.dams.receive.entity.WorkflowStatus;
 import com.dams.receive.repository.ReceiveDocumentRepository;
@@ -43,7 +41,7 @@ import java.util.stream.Collectors;
 /**
  * Operations insights (FEAT-12 claim chaser, FEAT-15 cash advice, FEAT-21 close
  * checklist). Open claims are discovered the same way as the FM queue — an
- * APPROVED receipt on a claim-category job card with no ClaimClose row — but
+ * APPROVED receipt on a job card carrying a Claim Type with no ClaimClose row — but
  * scoped here so the Owner sees them read-only without FM role guards.
  * Never closes anything: the FM still calls {@code POST /job-cards/{id}/close-claim}.
  */
@@ -57,7 +55,6 @@ public class AiOpsService {
     private final ReceiveDocumentRepository receiveDocumentRepo;
     private final JobCardRepository jobCardRepo;
     private final ClaimCloseRepository claimCloseRepo;
-    private final ReceiveCategoryRepository receiveCategoryRepo;
     private final CustomerRepository customerRepo;
     private final BranchRepository branchRepo;
     private final DashboardService dashboardService;
@@ -66,7 +63,6 @@ public class AiOpsService {
     public AiOpsService(ReceiveDocumentRepository receiveDocumentRepo,
                         JobCardRepository jobCardRepo,
                         ClaimCloseRepository claimCloseRepo,
-                        ReceiveCategoryRepository receiveCategoryRepo,
                         CustomerRepository customerRepo,
                         BranchRepository branchRepo,
                         DashboardService dashboardService,
@@ -74,7 +70,6 @@ public class AiOpsService {
         this.receiveDocumentRepo = receiveDocumentRepo;
         this.jobCardRepo = jobCardRepo;
         this.claimCloseRepo = claimCloseRepo;
-        this.receiveCategoryRepo = receiveCategoryRepo;
         this.customerRepo = customerRepo;
         this.branchRepo = branchRepo;
         this.dashboardService = dashboardService;
@@ -87,12 +82,6 @@ public class AiOpsService {
         Long orgId = TenantContext.requireOrgId();
         requireVisibleBranch(branchId);
 
-        Set<Long> claimCategoryIds = receiveCategoryRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId)
-            .stream().filter(ReceiveCategory::isClaim).map(ReceiveCategory::getId)
-            .collect(Collectors.toSet());
-        if (claimCategoryIds.isEmpty()) {
-            return List.of();
-        }
         Set<Long> closedJcIds = new HashSet<>(claimCloseRepo.findJobCardIdsByOrgId(orgId));
         List<ReceiveDocument> approved = receiveDocumentRepo
             .findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(orgId, WorkflowStatus.APPROVED);
@@ -113,7 +102,7 @@ public class AiOpsService {
         }
         Map<Long, JobCard> jobCards = new HashMap<>();
         for (JobCard jc : jobCardRepo.findByOrgIdAndIdIn(orgId, new ArrayList<>(docsByJobCard.keySet()))) {
-            if (claimCategoryIds.contains(jc.getCategoryId())) {
+            if (jc.getClaimTypeId() != null) {
                 jobCards.put(jc.getId(), jc);
             }
         }

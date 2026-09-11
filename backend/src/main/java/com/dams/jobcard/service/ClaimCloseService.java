@@ -14,8 +14,6 @@ import com.dams.jobcard.entity.JobCard;
 import com.dams.jobcard.repository.ClaimCloseRepository;
 import com.dams.jobcard.repository.JobCardRepository;
 import com.dams.common.security.BranchScope;
-import com.dams.masters.entity.ReceiveCategory;
-import com.dams.masters.repository.ReceiveCategoryRepository;
 import com.dams.receive.entity.ReceiveDocument;
 import com.dams.receive.entity.SettlementLine;
 import com.dams.receive.entity.WorkflowStatus;
@@ -59,7 +57,6 @@ public class ClaimCloseService {
     private final JobCardRepository jobCardRepo;
     private final ReceiveDocumentRepository receiveDocumentRepo;
     private final SettlementLineRepository settlementLineRepo;
-    private final ReceiveCategoryRepository categoryRepo;
     private final BranchRepository branchRepo;
     private final AppUserRepository userRepo;
     private final BranchScope branchScope;
@@ -71,7 +68,6 @@ public class ClaimCloseService {
                              JobCardRepository jobCardRepo,
                              ReceiveDocumentRepository receiveDocumentRepo,
                              SettlementLineRepository settlementLineRepo,
-                             ReceiveCategoryRepository categoryRepo,
                              BranchRepository branchRepo,
                              AppUserRepository userRepo,
                              BranchScope branchScope,
@@ -82,7 +78,6 @@ public class ClaimCloseService {
         this.jobCardRepo = jobCardRepo;
         this.receiveDocumentRepo = receiveDocumentRepo;
         this.settlementLineRepo = settlementLineRepo;
-        this.categoryRepo = categoryRepo;
         this.branchRepo = branchRepo;
         this.userRepo = userRepo;
         this.branchScope = branchScope;
@@ -100,9 +95,7 @@ public class ClaimCloseService {
             .orElseThrow(() -> DamsException.notFound("Job card", jobCardId));
         String ref = reference(orgId, jc);
 
-        ReceiveCategory category = categoryRepo.findByIdAndOrgId(jc.getCategoryId(), orgId)
-            .orElseThrow(() -> DamsException.notFound("Receive category", jc.getCategoryId()));
-        if (!category.isClaim()) {
+        if (jc.getClaimTypeId() == null) {
             throw DamsException.conflict("Job card " + ref + " is not a warranty / AMC / CG claim — "
                 + "there is no claim to close");
         }

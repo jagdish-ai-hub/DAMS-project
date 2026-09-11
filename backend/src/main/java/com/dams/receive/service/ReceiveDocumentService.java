@@ -22,10 +22,12 @@ import com.dams.jobcard.repository.ClaimCloseRepository;
 import com.dams.jobcard.repository.JobCardRepository;
 import com.dams.jobcard.service.JobCardService;
 import com.dams.jobcard.service.PendingAmountCalculator;
+import com.dams.masters.entity.ClaimType;
 import com.dams.masters.entity.ReceiveBusinessStatus;
 import com.dams.masters.entity.ReceiveCategory;
 import com.dams.masters.entity.SettlementMode;
 import com.dams.masters.repository.BankRepository;
+import com.dams.masters.repository.ClaimTypeRepository;
 import com.dams.masters.repository.ReceiveBusinessStatusRepository;
 import com.dams.masters.repository.ReceiveCategoryRepository;
 import com.dams.masters.repository.SettlementModeRepository;
@@ -71,6 +73,8 @@ import java.util.stream.Collectors;
  *  - After any line change the job-card-wide Pending Amount is recomputed; at 0 (with an
  *    invoice, no closed claim) the document auto-settles and a SYSTEM audit event is written.
  *  - No new document may be opened on a job card that has a ClaimClose (409).
+ *  - Adding a line (Add Payment) to a VERIFIED/APPROVED document reopens it to SUBMITTED —
+ *    a payment nobody has reviewed should never sit under an already-approved status.
  */
 @Service
 public class ReceiveDocumentService {
@@ -87,6 +91,7 @@ public class ReceiveDocumentService {
     private final BranchRepository branchRepo;
     private final ReceiveCategoryRepository categoryRepo;
     private final ReceiveBusinessStatusRepository statusRepo;
+    private final ClaimTypeRepository claimTypeRepo;
     private final SettlementModeRepository settlementModeRepo;
     private final BankRepository bankRepo;
     private final AppUserRepository userRepo;
@@ -110,6 +115,7 @@ public class ReceiveDocumentService {
                                   BranchRepository branchRepo,
                                   ReceiveCategoryRepository categoryRepo,
                                   ReceiveBusinessStatusRepository statusRepo,
+                                  ClaimTypeRepository claimTypeRepo,
                                   SettlementModeRepository settlementModeRepo,
                                   BankRepository bankRepo,
                                   AppUserRepository userRepo,
@@ -132,6 +138,7 @@ public class ReceiveDocumentService {
         this.branchRepo = branchRepo;
         this.categoryRepo = categoryRepo;
         this.statusRepo = statusRepo;
+        this.claimTypeRepo = claimTypeRepo;
         this.settlementModeRepo = settlementModeRepo;
         this.bankRepo = bankRepo;
         this.userRepo = userRepo;
@@ -259,6 +266,17 @@ public class ReceiveDocumentService {
         doc.setLastModifiedBy(me.getId());
         auditService.recordUserEvent(ENTITY, doc.getId(), doc.getBranchId(), EventType.LINE_ADDED, me.getId(),
             orderedDetail("lineNo", line.getLineNo(), "amount", line.getAmount()));
+
+        // A new payment on an already-reviewed document means the Accountant/FM approved a
+        // smaller picture than what's now on record — reopen it for re-review rather than
+        // leaving a payment nobody has checked sitting under an APPROVED/VERIFIED status.
+        if (doc.getWorkflowStatus() == WorkflowStatus.VERIFIED || doc.getWorkflowStatus() == WorkflowStatus.APPROVED) {
+            WorkflowStatus reopenedFrom = doc.getWorkflowStatus();
+            doc.setWorkflowStatus(WorkflowStatus.SUBMITTED);
+            doc.setSubmittedAt(Instant.now());
+            auditService.recordUserEvent(ENTITY, doc.getId(), doc.getBranchId(), EventType.SUBMITTED, me.getId(),
+                orderedDetail("documentNo", doc.getDocumentNo(), "reopenedFrom", reopenedFrom.name()));
+        }
 
         settleIfFullyPaid(orgId, jobCard, doc);
         receiveDocumentRepo.save(doc);
@@ -539,6 +557,8 @@ public class ReceiveDocumentService {
         Vehicle vehicle = jc.getVehicleId() == null ? null
             : vehicleRepo.findByIdAndOrgId(jc.getVehicleId(), orgId).orElse(null);
         ReceiveCategory category = categoryRepo.findByIdAndOrgId(jc.getCategoryId(), orgId).orElse(null);
+        ClaimType claimType = jc.getClaimTypeId() == null ? null
+            : claimTypeRepo.findByIdAndOrgId(jc.getClaimTypeId(), orgId).orElse(null);
         ReceiveBusinessStatus status = statusRepo.findByIdAndOrgId(jc.getBusinessStatusId(), orgId).orElse(null);
         ClaimClose claimClose = claimCloseRepo.findByOrgIdAndJobCardId(orgId, jc.getId()).orElse(null);
 
@@ -575,7 +595,9 @@ public class ReceiveDocumentService {
             jc.getGstNo(),
             jc.getCategoryId(),
             category != null ? category.getName() : null,
-            category != null && category.isClaim(),
+            jc.getClaimTypeId(),
+            claimType != null ? claimType.getName() : null,
+            jc.getClaimTypeId() != null,
             jc.getBusinessStatusId(),
             status != null ? status.getName() : null,
             pending,

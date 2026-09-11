@@ -10,6 +10,7 @@ export type MasterTypeSlug =
   | 'expense-modes'
   | 'expense-statuses'
   | 'banks'
+  | 'claim-types'
 
 export interface MasterRow {
   id: number
@@ -17,7 +18,6 @@ export interface MasterRow {
   name: string
   active: boolean
   sortOrder: number
-  isClaim?: boolean
   requiresBank?: boolean
   requiresRef?: boolean
   triggersClaim?: boolean
@@ -29,7 +29,6 @@ export interface MasterRequest {
   name: string
   active?: boolean
   sortOrder?: number
-  isClaim?: boolean
   requiresBank?: boolean
   requiresRef?: boolean
   triggersClaim?: boolean

@@ -369,17 +369,25 @@ export default function NewExpensePage() {
    * Reconcile the on-screen rows against the server for an already-saved document — by
    * lineNo, never by array position, so rows added or removed on this visit don't get
    * silently dropped or matched to the wrong existing line.
+   *
+   * Editing or removing an *existing* line is only allowed while the document is a draft
+   * or queried (the backend's requireEditableLines) — once it's VERIFIED/APPROVED those
+   * calls are guaranteed to fail, and doing so here would let a spurious "expense lines
+   * can only be edited…" error mask a header patch that already succeeded. So on a
+   * non-editable document we skip the update/delete calls entirely. Adding a brand-new
+   * line ("Add Expense") stays allowed regardless of status.
    */
   async function syncLines(docId: number) {
     if (!loadedDoc) return
     const existingByLineNo = new Map(loadedDoc.lines.map((l) => [l.lineNo, l]))
     const keptLineNos = new Set<number>()
+    const linesEditable = loadedDoc.workflowStatus === 'DRAFT' || loadedDoc.workflowStatus === 'QUERIED'
 
     for (const current of lines) {
       if (current.lineNo != null) {
         keptLineNos.add(current.lineNo)
         const existing = existingByLineNo.get(current.lineNo)
-        if (existing && (
+        if (linesEditable && existing && (
           Number(current.amount) !== existing.amount ||
           Number(current.subCategoryId) !== existing.subCategoryId ||
           Number(current.expenseModeId) !== existing.expenseModeId ||
@@ -399,7 +407,8 @@ export default function NewExpensePage() {
           })
         }
       } else if (Number(current.amount) > 0 && current.subCategoryId !== '' && current.expenseModeId !== '') {
-        // A row added on this visit — never sent to the server before.
+        // A row added on this visit — never sent to the server before. Always allowed
+        // (this is "Add Expense"), even once the document is verified/approved.
         await expensesApi.addLine(docId, {
           transactionDate: current.transactionDate,
           subCategoryId: Number(current.subCategoryId),
@@ -412,9 +421,11 @@ export default function NewExpensePage() {
       }
     }
 
-    for (const existing of loadedDoc.lines) {
-      if (!keptLineNos.has(existing.lineNo)) {
-        await expensesApi.deleteLine(docId, existing.lineNo)
+    if (linesEditable) {
+      for (const existing of loadedDoc.lines) {
+        if (!keptLineNos.has(existing.lineNo)) {
+          await expensesApi.deleteLine(docId, existing.lineNo)
+        }
       }
     }
   }

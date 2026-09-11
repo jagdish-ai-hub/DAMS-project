@@ -1,7 +1,9 @@
 import api from './axios'
 import type { DocumentHistoryEntry } from './receipts'
+import type { MoneyMovementItem } from './dashboard'
 
 export type { DocumentHistoryEntry }
+export type { MoneyMovementItem }
 
 export type CashDirection = 'IN' | 'OUT'
 export type CashWorkflowStatus =
@@ -64,6 +66,8 @@ export interface CashDrawer {
   closed: boolean
   close: CashDayClose | null
   movements: CashDocument[]
+  cashReceiptLines: MoneyMovementItem[]
+  cashExpenseLines: MoneyMovementItem[]
 }
 
 export interface CreateCashDocumentRequest {

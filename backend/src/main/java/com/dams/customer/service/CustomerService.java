@@ -191,7 +191,7 @@ public class CustomerService {
                 b != null ? b.getCode() : null,
                 b != null ? b.getName() : null,
                 cat != null ? cat.getName() : null,
-                cat != null && cat.isClaim(),
+                j.getClaimTypeId() != null,
                 st != null ? st.getName() : null,
                 j.getDbmId(),
                 j.getInvoiceNo(),

@@ -5,7 +5,6 @@ import com.dams.masters.MasterType;
 import com.dams.masters.entity.ExpenseBusinessStatus;
 import com.dams.masters.entity.ExpenseMode;
 import com.dams.masters.entity.ExpenseSubCategory;
-import com.dams.masters.entity.ReceiveCategory;
 import com.dams.masters.entity.SettlementMode;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
@@ -19,7 +18,6 @@ public record MasterResponse(
     String name,
     boolean active,
     int sortOrder,
-    Boolean isClaim,
     Boolean requiresBank,
     Boolean requiresRef,
     Boolean isCash,
@@ -29,7 +27,6 @@ public record MasterResponse(
 ) {
 
     public static MasterResponse of(MasterType type, OrgMaster m) {
-        Boolean isClaim = null;
         Boolean requiresBank = null;
         Boolean requiresRef = null;
         Boolean isCash = null;
@@ -37,9 +34,7 @@ public record MasterResponse(
         Long expenseCategoryId = null;
         BigDecimal limitAmount = null;
 
-        if (m instanceof ReceiveCategory rc) {
-            isClaim = rc.isClaim();
-        } else if (m instanceof SettlementMode sm) {
+        if (m instanceof SettlementMode sm) {
             requiresBank = sm.isRequiresBank();
             requiresRef = sm.isRequiresRef();
             isCash = sm.isCash();
@@ -56,6 +51,6 @@ public record MasterResponse(
 
         return new MasterResponse(
             m.getId(), type.slug(), m.getName(), m.isActive(), m.getSortOrder(),
-            isClaim, requiresBank, requiresRef, isCash, triggersClaim, expenseCategoryId, limitAmount);
+            requiresBank, requiresRef, isCash, triggersClaim, expenseCategoryId, limitAmount);
     }
 }

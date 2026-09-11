@@ -7,12 +7,26 @@ import com.dams.cash.repository.BranchCashOpeningRepository;
 import com.dams.cash.repository.CashDayCloseRepository;
 import com.dams.cash.repository.CashDocumentRepository;
 import com.dams.cash.service.DrawerService;
+import com.dams.customer.entity.Customer;
+import com.dams.customer.repository.CustomerRepository;
+import com.dams.dashboard.dto.MoneyMovementItem;
+import com.dams.expense.entity.ExpenseDocument;
+import com.dams.expense.entity.ExpenseLine;
+import com.dams.expense.entity.ExpenseWorkflowStatus;
 import com.dams.expense.repository.ExpenseLineRepository;
+import com.dams.jobcard.entity.JobCard;
+import com.dams.masters.entity.ExpenseCategory;
 import com.dams.masters.entity.ExpenseMode;
 import com.dams.masters.entity.SettlementMode;
+import com.dams.masters.repository.ExpenseCategoryRepository;
 import com.dams.masters.repository.ExpenseModeRepository;
 import com.dams.masters.repository.SettlementModeRepository;
+import com.dams.receive.entity.ReceiveDocument;
+import com.dams.receive.entity.SettlementLine;
+import com.dams.receive.entity.WorkflowStatus;
 import com.dams.receive.repository.SettlementLineRepository;
+import com.dams.receiver.entity.Receiver;
+import com.dams.receiver.repository.ReceiverRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -52,13 +66,17 @@ class DrawerServiceTest {
     @Mock private ExpenseLineRepository expenseLineRepo;
     @Mock private SettlementModeRepository settlementModeRepo;
     @Mock private ExpenseModeRepository expenseModeRepo;
+    @Mock private ExpenseCategoryRepository expenseCategoryRepo;
+    @Mock private CustomerRepository customerRepo;
+    @Mock private ReceiverRepository receiverRepo;
 
     private DrawerService service;
 
     @BeforeEach
     void setUp() {
         service = new DrawerService(branchCashOpeningRepo, cashDayCloseRepo, cashDocumentRepo,
-            settlementLineRepo, expenseLineRepo, settlementModeRepo, expenseModeRepo);
+            settlementLineRepo, expenseLineRepo, settlementModeRepo, expenseModeRepo,
+            expenseCategoryRepo, customerRepo, receiverRepo);
 
         lenient().when(settlementModeRepo.findByOrgIdAndCashTrue(ORG)).thenReturn(List.of(settlementMode(10L)));
         lenient().when(expenseModeRepo.findByOrgIdAndCashTrue(ORG)).thenReturn(List.of(expenseMode(20L)));
@@ -128,10 +146,75 @@ class DrawerServiceTest {
         verify(expenseLineRepo, never()).sumCashModeForBranchDate(any(), any(), any(), any());
     }
 
+    @Test
+    void lineBreakdown_returnsTheActualLinesBehindTheCashSubtotals() {
+        SettlementLine sLine = new SettlementLine();
+        ReflectionTestUtils.setField(sLine, "id", 900L);
+        sLine.setTransactionDate(DATE);
+        sLine.setSettlementModeId(10L);
+        sLine.setAmount(new BigDecimal("5000"));
+        ReceiveDocument rDoc = new ReceiveDocument();
+        ReflectionTestUtils.setField(rDoc, "id", 500L);
+        rDoc.setDocumentNo("OOR-AUG26-R-001");
+        rDoc.setWorkflowStatus(WorkflowStatus.APPROVED);
+        JobCard jc = new JobCard();
+        ReflectionTestUtils.setField(jc, "id", 70L);
+        jc.setCustomerId(42L);
+        when(settlementLineRepo.findCashModeForBranchDate(eq(ORG), eq(BRANCH), eq(DATE), anyList()))
+            .thenReturn(List.<Object[]>of(new Object[]{sLine, rDoc, jc}));
+        when(settlementModeRepo.findByOrgIdOrderBySortOrderAscIdAsc(ORG)).thenReturn(List.of(settlementMode(10L, "Cash")));
+        Customer customer = new Customer();
+        ReflectionTestUtils.setField(customer, "id", 42L);
+        customer.setName("ABC Transport");
+        when(customerRepo.findByOrgIdAndIdInOrderByNameAsc(eq(ORG), anyList())).thenReturn(List.of(customer));
+
+        ExpenseLine eLine = new ExpenseLine();
+        ReflectionTestUtils.setField(eLine, "id", 950L);
+        eLine.setTransactionDate(DATE);
+        eLine.setExpenseModeId(20L);
+        eLine.setAmount(new BigDecimal("800"));
+        ExpenseDocument eDoc = new ExpenseDocument();
+        ReflectionTestUtils.setField(eDoc, "id", 600L);
+        eDoc.setDocumentNo("OOR-AUG26-E-001");
+        eDoc.setWorkflowStatus(ExpenseWorkflowStatus.APPROVED);
+        eDoc.setExpenseCategoryId(3L);
+        eDoc.setReceiverId(9L);
+        when(expenseLineRepo.findCashModeForBranchDate(eq(ORG), eq(BRANCH), eq(DATE), anyList()))
+            .thenReturn(List.<Object[]>of(new Object[]{eLine, eDoc}));
+        when(expenseModeRepo.findByOrgIdOrderBySortOrderAscIdAsc(ORG)).thenReturn(List.of(expenseMode(20L, "Cash")));
+        when(expenseCategoryRepo.findByOrgIdOrderBySortOrderAscIdAsc(ORG)).thenReturn(List.of(category(3L, "Service")));
+        Receiver receiver = new Receiver();
+        ReflectionTestUtils.setField(receiver, "id", 9L);
+        receiver.setName("Bikram Nayak");
+        when(receiverRepo.findByOrgIdAndIdIn(eq(ORG), anyList())).thenReturn(List.of(receiver));
+
+        DrawerService.DrawerLines lines = service.lineBreakdown(ORG, BRANCH, DATE, "OOR");
+
+        assertThat(lines.cashReceiptLines()).hasSize(1);
+        MoneyMovementItem receipt = lines.cashReceiptLines().get(0);
+        assertThat(receipt.kind()).isEqualTo("receipt");
+        assertThat(receipt.party()).isEqualTo("ABC Transport");
+        assertThat(receipt.description()).isEqualTo("OOR-JC-70");
+        assertThat(receipt.amount()).isEqualByComparingTo("5000");
+
+        assertThat(lines.cashExpenseLines()).hasSize(1);
+        MoneyMovementItem expense = lines.cashExpenseLines().get(0);
+        assertThat(expense.kind()).isEqualTo("expense");
+        assertThat(expense.party()).isEqualTo("Bikram Nayak");
+        assertThat(expense.description()).isEqualTo("Service");
+        assertThat(expense.amount()).isEqualByComparingTo("800");
+    }
+
     private static SettlementMode settlementMode(long id) {
         SettlementMode m = new SettlementMode();
         ReflectionTestUtils.setField(m, "id", id);
         m.setCash(true);
+        return m;
+    }
+
+    private static SettlementMode settlementMode(long id, String name) {
+        SettlementMode m = settlementMode(id);
+        m.setName(name);
         return m;
     }
 
@@ -140,6 +223,19 @@ class DrawerServiceTest {
         ReflectionTestUtils.setField(m, "id", id);
         m.setCash(true);
         return m;
+    }
+
+    private static ExpenseMode expenseMode(long id, String name) {
+        ExpenseMode m = expenseMode(id);
+        m.setName(name);
+        return m;
+    }
+
+    private static ExpenseCategory category(long id, String name) {
+        ExpenseCategory c = new ExpenseCategory();
+        ReflectionTestUtils.setField(c, "id", id);
+        c.setName(name);
+        return c;
     }
 
     private static CashDayClose close(BigDecimal counted) {

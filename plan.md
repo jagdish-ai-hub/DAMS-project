@@ -7,6 +7,63 @@
 
 ## Revision log
 
+- **rev 30 (2026-09-10)** — Cash-box reconciliation breakdown ("where is the money
+  coming from / going to"), on user request that Collections/Expenses/Cash-in-hand
+  were hard to reconcile by eye. New `MoneyMovementItem` DTO plus
+  `SettlementLineRepository`/`ExpenseLineRepository` `findApprovedForBreakdown` and
+  `findCashModeForBranchDate` queries, each an exact mirror of the existing sum
+  query's filter (APPROVED-only for collections, APPROVED-or-CLOSED for expenses,
+  non-DRAFT/non-REJECTED cash-mode-only for drawer subtotals) so a breakdown always
+  totals to the figure it explains. Two new read endpoints,
+  `GET /api/v1/dashboard/collections-breakdown` and `.../expenses-breakdown`
+  (`branchId`, `period=today|mtd`). `DrawerService.lineBreakdown()` adds
+  `cashReceiptLines`/`cashExpenseLines` to `CashDrawerResponse`. `GET /api/v1/cash/drawer`
+  widened to `OWNER`/`FINANCE_MANAGER` reads (POST endpoints unchanged — still
+  CASHIER/ACCOUNTANT-only, enforced by the existing service guards, which is what
+  makes the read-side widening safe).
+  Frontend: shared `MoneyBreakdownModal` (+ `moneyMovementsToRows`/`cashMovementsToRows`)
+  makes the Owner Dashboard's Collections/Expenses/Cash-in-hand KPI cards and all four
+  Cash-page drawer lines (cash receipts, cash In, cash expenses, cash Out) clickable,
+  Today and MTD. Per user instruction, a row opens the real editable document via the
+  same `?editDoc=` navigation `MyEntriesPage` already uses — not a separate read-only
+  viewer. `new-receipt`/`new-expense`/`cash` routes widened to Owner/FM so those roles
+  can open what they click; write actions on those pages still refuse for those roles
+  server-side.
+  Verified: `mvn test` 178 green (0 failures/errors, 4 pre-existing Docker-only skips);
+  `tsc`/`eslint`/`vitest` clean.
+
+- **rev 29 (2026-09-10)** — Claim Type redesign + two workflow bug fixes.
+  Split the receipt's "Tran. Category" (which conflated ordinary transaction types with
+  Warranty/AMC/CGW claim-ness) into two independent fields: Category is now a plain
+  "Transaction Type" with no claim options, and a new job-card-level `claim_type_id`
+  (a new Owner-editable `claim_type` master, mirroring `receive_category`) carries the
+  claim fact. Picking a Claim Type on a receipt IS "Transfer to Claim" for receipts —
+  no separate button, unlike expenses which keep their own manual button since not
+  every expense on a claim job is billable to the claim. Renamed the B2B/B2C toggle to
+  "Customer Type". V23 migration: creates `claim_type`, seeds it per-org from every
+  existing `is_claim=true` receive_category row, adds `job_card.claim_type_id`,
+  backfills every existing claim job card (sets claim_type_id, reassigns category_id to
+  "Workshop" — there is no record of the actual shop work under the old claim
+  categories), and deactivates the old Warranty/AMC/CGW receive_category rows (never
+  deleted). Every backend call site that read `receive_category.is_claim` (FM open-claims
+  queue, ClaimClose guard, receipt/job-card/customer-history `isClaim`, AI claim
+  insights, dashboard outstanding items, expense claim-eligibility, new-org
+  provisioning) now reads `job_card.claim_type_id != null` instead. Claim Type shares
+  the same edit-lock as Category (frozen once a ClaimClose exists; a change writes a new
+  `CLAIM_TYPE_CHANGED` audit event).
+  Bug fix: `syncLines()` (NewReceiptPage/NewExpensePage) no longer attempts
+  `updateLine`/`deleteLine` on a document that isn't DRAFT/QUERIED — those calls were
+  guaranteed to fail once VERIFIED/APPROVED, and doing so let a spurious "settlement
+  lines can only be edited…" error mask a header patch (e.g. a Category change) that had
+  already succeeded. Adding a brand-new line ("Add Payment"/"Add Expense") stays allowed
+  regardless of status.
+  Bug fix: `ReceiveDocumentService.addLine()` now reopens a VERIFIED/APPROVED document
+  back to SUBMITTED when a new payment is added, with a `SUBMITTED`/`reopenedFrom` audit
+  event — a payment nobody has reviewed should never sit under an already-approved
+  status. DRAFT/QUERIED/REJECTED/settled/closed-claim documents are unaffected.
+  Verified: `mvn test` 174 green (0 failures/errors, 4 pre-existing Docker-only skips),
+  `tsc`/`eslint`/`vitest` clean.
+
 - **rev 28 (2026-09-07)** — Full rulebook audit batch (AGENT.md/plan.md compliance).
   Backend: submit/resubmit re-checks the cash-day lock per line before numbering
   (V21 narrows the one-open index past REJECTED; V22 adds a monotonic `line_no_seq`

@@ -80,6 +80,8 @@ public class CashCloseService {
         Branch branch = branchRepo.findByIdAndOrgId(branchId, orgId).orElse(null);
 
         DrawerService.DrawerPosition p = drawerService.position(orgId, branchId, date);
+        String branchCode = branch != null ? branch.getCode() : "?";
+        DrawerService.DrawerLines lines = drawerService.lineBreakdown(orgId, branchId, date, branchCode);
         CashDayClose close = cashDayCloseRepo.findByOrgIdAndBranchIdAndCloseDate(orgId, branchId, date).orElse(null);
         List<CashDocumentResponse> movements = cashDocumentRepo
             .findByOrgIdAndBranchIdAndTransactionDateOrderByIdAsc(orgId, branchId, date)
@@ -99,7 +101,9 @@ public class CashCloseService {
             p.computedPosition(),
             close != null,
             close != null ? toCloseResponse(orgId, close) : null,
-            movements);
+            movements,
+            lines.cashReceiptLines(),
+            lines.cashExpenseLines());
     }
 
     // ------------------------------------------------------------------ opening

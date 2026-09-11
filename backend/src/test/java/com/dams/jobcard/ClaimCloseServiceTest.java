@@ -14,8 +14,6 @@ import com.dams.jobcard.repository.ClaimCloseRepository;
 import com.dams.jobcard.repository.JobCardRepository;
 import com.dams.jobcard.service.ClaimCloseService;
 import com.dams.jobcard.service.JobCardService;
-import com.dams.masters.entity.ReceiveCategory;
-import com.dams.masters.repository.ReceiveCategoryRepository;
 import com.dams.receive.entity.ReceiveDocument;
 import com.dams.receive.entity.WorkflowStatus;
 import com.dams.receive.repository.ReceiveDocumentRepository;
@@ -57,13 +55,12 @@ class ClaimCloseServiceTest {
     private static final long FM_ID = 60L;
     private static final long BRANCH = 3L;
     private static final long JC_ID = 70L;
-    private static final long CLAIM_CATEGORY = 9L;
+    private static final long CLAIM_TYPE = 9L;
 
     @Mock private ClaimCloseRepository claimCloseRepo;
     @Mock private JobCardRepository jobCardRepo;
     @Mock private ReceiveDocumentRepository receiveDocumentRepo;
     @Mock private SettlementLineRepository settlementLineRepo;
-    @Mock private ReceiveCategoryRepository categoryRepo;
     @Mock private BranchRepository branchRepo;
     @Mock private com.dams.user.repository.AppUserRepository userRepo;
     @Mock private BranchScope branchScope;
@@ -76,12 +73,11 @@ class ClaimCloseServiceTest {
     @BeforeEach
     void setUp() {
         service = new ClaimCloseService(claimCloseRepo, jobCardRepo, receiveDocumentRepo, settlementLineRepo,
-            categoryRepo, branchRepo, userRepo, branchScope, attachmentService, auditService, jobCardService);
+            branchRepo, userRepo, branchScope, attachmentService, auditService, jobCardService);
         TenantContext.setOrgId(ORG);
         lenient().when(branchScope.currentUserId()).thenReturn(FM_ID);
         lenient().when(userRepo.findByIdAndOrganization_Id(FM_ID, ORG)).thenReturn(Optional.of(user(Role.FINANCE_MANAGER)));
-        lenient().when(jobCardRepo.findByIdAndOrgId(JC_ID, ORG)).thenReturn(Optional.of(jobCard()));
-        lenient().when(categoryRepo.findByIdAndOrgId(CLAIM_CATEGORY, ORG)).thenReturn(Optional.of(category(true)));
+        lenient().when(jobCardRepo.findByIdAndOrgId(JC_ID, ORG)).thenReturn(Optional.of(jobCard(CLAIM_TYPE)));
         lenient().when(claimCloseRepo.existsByOrgIdAndJobCardId(ORG, JC_ID)).thenReturn(false);
         lenient().when(settlementLineRepo.sumAmountForJobCard(ORG, JC_ID)).thenReturn(new BigDecimal("13000"));
         lenient().when(settlementLineRepo.findByOrgIdAndReceiveDocumentIdOrderByLineNoAsc(eq(ORG), any()))
@@ -146,8 +142,8 @@ class ClaimCloseServiceTest {
     }
 
     @Test
-    void closeClaim_conflict_whenCategoryIsNotAClaim() {
-        when(categoryRepo.findByIdAndOrgId(CLAIM_CATEGORY, ORG)).thenReturn(Optional.of(category(false)));
+    void closeClaim_conflict_whenJobCardHasNoClaimType() {
+        when(jobCardRepo.findByIdAndOrgId(JC_ID, ORG)).thenReturn(Optional.of(jobCard(null)));
 
         assertThatThrownBy(() -> service.closeClaim(JC_ID, new CloseClaimRequest(BigDecimal.ZERO, null)))
             .isInstanceOf(DamsException.class)
@@ -192,23 +188,16 @@ class ClaimCloseServiceTest {
         return u;
     }
 
-    private static JobCard jobCard() {
+    private static JobCard jobCard(Long claimTypeId) {
         JobCard jc = new JobCard();
         ReflectionTestUtils.setField(jc, "id", JC_ID);
         jc.setOrgId(ORG);
         jc.setBranchId(BRANCH);
         jc.setCustomerId(42L);
-        jc.setCategoryId(CLAIM_CATEGORY);
+        jc.setCategoryId(1L);
+        jc.setClaimTypeId(claimTypeId);
         jc.setBusinessStatusId(5L);
         return jc;
-    }
-
-    private static ReceiveCategory category(boolean claim) {
-        ReceiveCategory c = new ReceiveCategory();
-        ReflectionTestUtils.setField(c, "id", CLAIM_CATEGORY);
-        c.setName("Warranty");
-        c.setClaim(claim);
-        return c;
     }
 
     private static ReceiveDocument doc(long id, WorkflowStatus status, boolean settled) {

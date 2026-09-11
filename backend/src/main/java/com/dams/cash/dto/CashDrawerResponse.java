@@ -1,5 +1,7 @@
 package com.dams.cash.dto;
 
+import com.dams.dashboard.dto.MoneyMovementItem;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -25,6 +27,8 @@ public record CashDrawerResponse(
     boolean closed,                 // a cash_day_close exists for (branch, date)
     CashDayCloseResponse close,     // the close row when closed, else null
 
-    List<CashDocumentResponse> movements
+    List<CashDocumentResponse> movements,           // cash_document rows — the UI filters by direction for In/Out
+    List<MoneyMovementItem> cashReceiptLines,        // the settlement lines behind cashReceipts
+    List<MoneyMovementItem> cashExpenseLines         // the expense lines behind cashExpenses
 ) {
 }

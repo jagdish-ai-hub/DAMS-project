@@ -2,6 +2,7 @@ package com.dams.dashboard.controller;
 
 import com.dams.dashboard.dto.ActivityItem;
 import com.dams.dashboard.dto.DashboardSummary;
+import com.dams.dashboard.dto.MoneyMovementItem;
 import com.dams.dashboard.dto.OutstandingItem;
 import com.dams.dashboard.service.DashboardService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -44,6 +45,20 @@ public class DashboardController {
     @Operation(summary = "Money still owed / awaiting — part-paid jobs, B2B credit, open claims")
     public List<OutstandingItem> outstanding(@RequestParam(required = false) Long branchId) {
         return dashboardService.outstanding(branchId);
+    }
+
+    @GetMapping("/collections-breakdown")
+    @Operation(summary = "Line-level receipts behind the Collections KPI, for the same period/branch")
+    public List<MoneyMovementItem> collectionsBreakdown(@RequestParam(required = false) Long branchId,
+                                                         @RequestParam(required = false, defaultValue = "mtd") String period) {
+        return dashboardService.collectionsBreakdown(branchId, period);
+    }
+
+    @GetMapping("/expenses-breakdown")
+    @Operation(summary = "Line-level expenses behind the Expenses KPI, for the same period/branch")
+    public List<MoneyMovementItem> expensesBreakdown(@RequestParam(required = false) Long branchId,
+                                                      @RequestParam(required = false, defaultValue = "mtd") String period) {
+        return dashboardService.expensesBreakdown(branchId, period);
     }
 
     @GetMapping("/activity")

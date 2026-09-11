@@ -18,9 +18,10 @@ This is the "who and what" of the payment.
 
 - **Customer Name** *(required)* — start typing and pick them from the list. If they're new, just type the full name and carry on; DAMS creates them.
 - **Vehicle #, Job Card / DBM, Invoice #** — fill whichever you have. All optional, but they make the receipt much easier to find later.
-- **Tran. Category** and **Status** — pick from the lists your owner set up (e.g. *Cash Sale*, *AMC*, *Warranty*).
+- **Transaction Type** and **Status** — pick from the lists your owner set up (e.g. *Workshop*, *Breakdown*, *Advance*).
 - **Invoice Amount** — the full bill. Leave it blank if this is just an advance with no bill yet.
-- **Transaction Type** — leave as **B2C** for a normal customer. Choose **B2B** only for a registered business, and then a **GST #** is required.
+- **Claim Type** — leave as **Not a claim** for a normal job. Pick **Warranty**, **AMC**, or whichever claim type applies when the manufacturer is footing the bill — this is also what moves the job onto the finance manager's claims queue, so there's no separate "Transfer to Claim" step for a receipt.
+- **Customer Type** — leave as **B2C** for a normal customer. Choose **B2B** only for a registered business, and then a **GST #** is required.
 
 ## Step 3 — add the payment lines
 

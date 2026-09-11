@@ -17,5 +17,6 @@ public enum EventType {
     LINE_ADDED,
     SETTLED,
     CATEGORY_CHANGED,
+    CLAIM_TYPE_CHANGED,
     TRANSFERRED_TO_CLAIM
 }
