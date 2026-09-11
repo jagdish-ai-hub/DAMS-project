@@ -9,7 +9,6 @@ import AttachmentsPanel, { type LineTarget } from './AttachmentsPanel'
 import { Printer, QrCode } from 'lucide-react'
 import PrintReceiptModal from './PrintReceiptModal'
 import UpiQrModal from './UpiQrModal'
-import { useDraftRecovery } from '../shared/useDraftRecovery'
 
 /** The most recent accountant question / rejection reason, for the fix-and-resubmit banner. */
 function queryNote(history: DocumentHistoryEntry[]): string | null {
@@ -79,29 +78,6 @@ export default function NewReceiptPage() {
   const [notice, setNotice] = useState('')
   const [showPrintModal, setShowPrintModal] = useState(false)
   const [upiModal, setUpiModal] = useState<{ amount: number; customerName: string; docRef?: string } | null>(null)
-
-  const draftData = useMemo(() => ({
-    customerId,
-    customerName,
-    vehicleNo,
-    dbmId,
-    invoiceNo,
-    invoiceAmount,
-    categoryId,
-    claimTypeId,
-    businessStatusId,
-    b2b,
-    gstNo,
-    lines,
-  }), [customerId, customerName, vehicleNo, dbmId, invoiceNo, invoiceAmount, categoryId, claimTypeId, businessStatusId, b2b, gstNo, lines])
-
-  const {
-    hasDraft,
-    draftTimestamp,
-    restoreDraft,
-    discardDraft,
-    clearDraft,
-  } = useDraftRecovery<typeof draftData>('dams_receipt_draft', draftData, !editDocId && !loadedDoc)
 
   // masters + optional prefill / edit-load
   useEffect(() => {
@@ -500,7 +476,6 @@ export default function NewReceiptPage() {
   }
 
   function finish(submitted: boolean, doc: ReceiveDocument) {
-    clearDraft()
     const ref = doc.documentNo ?? `draft #${doc.id}`
     navigate(`/app?flash=${encodeURIComponent(submitted ? `${ref} submitted for checking` : `${ref} saved as draft`)}`)
   }
@@ -531,50 +506,6 @@ export default function NewReceiptPage() {
       {loadedDoc?.workflowStatus === 'QUERIED' && queryNote(loadedDoc.history) && (
         <div style={{ background: 'var(--amber-bg)', border: '1px solid #EAD3AE', color: 'var(--amber)', borderRadius: 8, padding: '10px 13px', fontSize: '0.82rem', marginBottom: 12 }}>
           <strong>Query from the accountant:</strong> {queryNote(loadedDoc.history)}
-        </div>
-      )}
-
-      {hasDraft && (
-        <div style={{
-          background: 'var(--amber-bg)', border: '1px solid #EAD3AE', color: 'var(--amber)',
-          borderRadius: 8, padding: '10px 14px', marginBottom: 12,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap',
-        }}>
-          <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>
-            📋 Unsaved draft found from {draftTimestamp?.toLocaleTimeString()} ({draftTimestamp?.toLocaleDateString()}). Would you like to restore it?
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              type="button"
-              onClick={() => {
-                const restored = restoreDraft()
-                if (restored) {
-                  if (restored.customerId != null) setCustomerId(restored.customerId)
-                  if (restored.customerName) setCustomerName(restored.customerName)
-                  if (restored.vehicleNo) setVehicleNo(restored.vehicleNo)
-                  if (restored.dbmId) setDbmId(restored.dbmId)
-                  if (restored.invoiceNo) setInvoiceNo(restored.invoiceNo)
-                  if (restored.invoiceAmount) setInvoiceAmount(restored.invoiceAmount)
-                  if (restored.categoryId) setCategoryId(restored.categoryId)
-                  if (restored.claimTypeId) setClaimTypeId(restored.claimTypeId)
-                  if (restored.businessStatusId) setBusinessStatusId(restored.businessStatusId)
-                  if (restored.b2b != null) setB2b(restored.b2b)
-                  if (restored.gstNo) setGstNo(restored.gstNo)
-                  if (restored.lines && restored.lines.length > 0) setLines(restored.lines)
-                }
-              }}
-              style={{ ...primaryBtn(false), padding: '4px 12px', minHeight: 30, fontSize: '0.78rem' }}
-            >
-              Restore Draft
-            </button>
-            <button
-              type="button"
-              onClick={discardDraft}
-              style={{ ...ghostBtn, padding: '4px 12px', minHeight: 30, fontSize: '0.78rem' }}
-            >
-              Discard
-            </button>
-          </div>
         </div>
       )}
 
