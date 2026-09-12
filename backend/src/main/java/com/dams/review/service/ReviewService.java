@@ -170,6 +170,53 @@ public class ReviewService {
         return toExpenseItems(orgId, docs);
     }
 
+    /**
+     * Accountant "Verified" overview — everything that has moved past SUBMITTED (VERIFIED or
+     * later), so the reviewer can see what they've already cleared instead of it just
+     * disappearing from view once verified. Newest first; the client filters by branch/date.
+     */
+    @Transactional(readOnly = true)
+    public List<ReviewQueueItem> verifiedReceiptQueue() {
+        Long orgId = TenantContext.requireOrgId();
+        guard.requireAccountant();
+        Set<Long> branchIds = branchScope.allowedBranchIds().orElseGet(Set::of);
+        if (branchIds.isEmpty()) {
+            return List.of();
+        }
+        List<ReceiveDocument> docs = receiveDocumentRepo
+            .findByOrgIdAndWorkflowStatusInAndBranchIdInOrderBySubmittedAtDescIdDesc(
+                orgId, List.of(WorkflowStatus.VERIFIED, WorkflowStatus.APPROVED), branchIds);
+        return toReceiptItems(orgId, docs);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReviewQueueItem> verifiedExpenseQueue() {
+        Long orgId = TenantContext.requireOrgId();
+        guard.requireAccountant();
+        Set<Long> branchIds = branchScope.allowedBranchIds().orElseGet(Set::of);
+        if (branchIds.isEmpty()) {
+            return List.of();
+        }
+        List<ExpenseDocument> docs = expenseDocumentRepo
+            .findByOrgIdAndWorkflowStatusInAndBranchIdInOrderBySubmittedAtDescIdDesc(
+                orgId, List.of(ExpenseWorkflowStatus.VERIFIED, ExpenseWorkflowStatus.APPROVED, ExpenseWorkflowStatus.CLOSED), branchIds);
+        return toExpenseItems(orgId, docs);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReviewQueueItem> verifiedCashQueue() {
+        Long orgId = TenantContext.requireOrgId();
+        guard.requireAccountant();
+        Set<Long> branchIds = branchScope.allowedBranchIds().orElseGet(Set::of);
+        if (branchIds.isEmpty()) {
+            return List.of();
+        }
+        List<CashDocument> docs = cashDocumentRepo
+            .findByOrgIdAndWorkflowStatusInAndBranchIdInOrderBySubmittedAtDescIdDesc(
+                orgId, List.of(CashWorkflowStatus.VERIFIED, CashWorkflowStatus.APPROVED), branchIds);
+        return toCashItems(orgId, docs);
+    }
+
     // ============================================================ finance-manager queue
 
     @Transactional(readOnly = true)
@@ -296,7 +343,8 @@ public class ReviewService {
             String party = "IN".equals(d.getDirection().name()) ? "Cash IN from bank" : "Cash OUT to bank";
             out.add(new ReviewQueueItem("cash", d.getId(), d.getDocumentNo(),
                 d.getBranchId(), branchCode(orgId, d.getBranchId(), branchCodes),
-                party, "Cash movement", d.getAmount(), false, false, d.getSubmittedAt()));
+                party, "Cash movement", d.getAmount(), false, false, d.getSubmittedAt(),
+                d.getWorkflowStatus().name()));
         }
         return out;
     }
@@ -642,7 +690,8 @@ public class ReviewService {
 
             out.add(new ReviewQueueItem("receipt", d.getId(), d.getDocumentNo(),
                 d.getBranchId(), branchCode(orgId, d.getBranchId(), branchCodes),
-                party, category, amount, false, hasOverride, d.getSubmittedAt()));
+                party, category, amount, false, hasOverride, d.getSubmittedAt(),
+                d.getWorkflowStatus().name()));
         }
         return out;
     }
@@ -666,7 +715,8 @@ public class ReviewService {
 
             out.add(new ReviewQueueItem("expense", d.getId(), d.getDocumentNo(),
                 d.getBranchId(), branchCode(orgId, d.getBranchId(), branchCodes),
-                party, category, amount, d.isOverLimit(), hasOverride, d.getSubmittedAt()));
+                party, category, amount, d.isOverLimit(), hasOverride, d.getSubmittedAt(),
+                d.getWorkflowStatus().name()));
         }
         return out;
     }
@@ -701,7 +751,7 @@ public class ReviewService {
             Long docId = doc != null ? doc.getId() : jc.getId();
             out.add(new ReviewQueueItem("receipt", docId, ref, jc.getBranchId(),
                 code, party, category,
-                cc.getFinalAmount(), false, cc.isOverridden(), cc.getClosedAt()));
+                cc.getFinalAmount(), false, cc.isOverridden(), cc.getClosedAt(), "CLOSED"));
         }
         return out;
     }

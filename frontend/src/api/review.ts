@@ -18,6 +18,7 @@ export interface ReviewQueueItem {
   overLimit: boolean
   hasOverride: boolean
   submittedAt: string | null
+  workflowStatus: string
 }
 
 /** The Finance Manager's queue for one document type (open claims / recently closed are receipts only). */
@@ -57,6 +58,12 @@ export const reviewApi = {
   },
   queue(t: ReviewType) {
     return api.get<ReviewQueueItem[]>(`/api/v1/review/${SEGMENT[t] === 'cash-documents' ? 'cash' : SEGMENT[t]}`)
+  },
+  /** What this accountant has already verified or later (VERIFIED/APPROVED[/CLOSED]) — the
+   * "goes missing once reviewed" gap: this is what lets it show up again. */
+  verifiedQueue(t: ReviewType) {
+    const segment = SEGMENT[t] === 'cash-documents' ? 'cash' : SEGMENT[t]
+    return api.get<ReviewQueueItem[]>(`/api/v1/review/${segment}/verified`)
   },
   fmQueue(t: ReviewType) {
     return api.get<FmQueue>(`/api/v1/review/fm/${fmSegment(t)}`)

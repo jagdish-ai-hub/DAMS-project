@@ -394,6 +394,21 @@ class ReviewServiceTest {
             .findByOrgIdAndWorkflowStatusAndBranchIdInOrderBySubmittedAtAscIdAsc(any(), any(), any());
     }
 
+    @Test
+    void verifiedReceiptQueue_returnsDocsWithTheirRealWorkflowStatus() {
+        when(branchScope.allowedBranchIds()).thenReturn(Optional.of(java.util.Set.of(BRANCH)));
+        ReceiveDocument verified = receiveDoc(WorkflowStatus.VERIFIED);
+        when(receiveDocumentRepo.findByOrgIdAndWorkflowStatusInAndBranchIdInOrderBySubmittedAtDescIdDesc(
+            eq(ORG), eq(java.util.List.of(WorkflowStatus.VERIFIED, WorkflowStatus.APPROVED)), eq(java.util.Set.of(BRANCH))))
+            .thenReturn(java.util.List.of(verified));
+
+        var result = service.verifiedReceiptQueue();
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).workflowStatus()).isEqualTo("VERIFIED");
+        assertThat(result.get(0).id()).isEqualTo(R_ID);
+    }
+
     // ---------------------------------------------------- fixtures
 
     private static AppUser actor(Role role) {

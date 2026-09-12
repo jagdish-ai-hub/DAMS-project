@@ -7,6 +7,30 @@
 
 ## Revision log
 
+- **rev 36 (2026-09-12)** — Accountant "Verified" overview + shared sort control (user
+  report: "after an accountant reviews something it goes missing here"). A verified item
+  moves to VERIFIED status and simply vanishes from the SUBMITTED-only queue, so the
+  accountant had no way to see what they'd already cleared. New Accountant-only endpoints
+  `GET /api/v1/review/{receipts|expenses|cash}/verified` (`ReviewService.verifiedReceiptQueue
+  /verifiedExpenseQueue/verifiedCashQueue`, branch-scoped like the existing queue, statuses
+  VERIFIED/APPROVED — plus CLOSED for expenses). `ReviewQueueItem` gained a `workflowStatus`
+  field so a mixed pending/verified list can still show each row's real state. Two new
+  stat boxes ("Verified" / "Total value verified") on the Accountant overview — labelled
+  "Verified" rather than "Approved" since Approve is the Finance Manager's distinct action
+  in this app; reusing that word here would blur a distinction the rest of the UI is
+  careful about. All four stat boxes are now clickable and open a drill-down modal listing
+  pending and verified rows together, filterable by branch and by submitted-date range,
+  each row opening straight into the existing record panel.
+  Also added a shared "All / By branch / By date" sort control
+  (`review/SortModeControl.tsx`, `groupItems()`) grouping the queue list under branch or
+  date subheaders; wired into both the Accountant's own SUBMITTED queue and the Finance
+  Manager's "Awaiting final approval" list, per user instruction to mirror it there too.
+  Removed the (acknowledged-broken) "Export Tally / CSV" button from the Accountant
+  screen only — the Owner Dashboard's export is unaffected; re-add once Export Tally
+  itself is fixed. The Finance Manager screen never had this button.
+  Verified: `mvn test` 182 green (0 failures/errors, 4 pre-existing Docker-only skips);
+  `tsc`/`eslint`/`vitest` clean; production build succeeds.
+
 - **rev 35 (2026-09-12)** — Fixed the real bug behind "Warranty claims never reach the
   FM's Open Claims queue" (dealership report — a Warranty job the cashier created
   couldn't be closed because it never showed up as a claim at all).

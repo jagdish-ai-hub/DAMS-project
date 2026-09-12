@@ -37,6 +37,10 @@ public interface ReceiveDocumentRepository extends JpaRepository<ReceiveDocument
     List<ReceiveDocument> findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(
         Long orgId, WorkflowStatus workflowStatus);
 
+    /** Accountant "Verified" overview — documents past SUBMITTED within the caller's branches, newest first. */
+    List<ReceiveDocument> findByOrgIdAndWorkflowStatusInAndBranchIdInOrderBySubmittedAtDescIdDesc(
+        Long orgId, Collection<WorkflowStatus> workflowStatuses, Collection<Long> branchIds);
+
     boolean existsByOrgIdAndDocumentNo(Long orgId, String documentNo);
 
     boolean existsByOrgId(Long orgId);

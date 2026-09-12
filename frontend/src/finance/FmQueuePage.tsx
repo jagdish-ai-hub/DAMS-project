@@ -10,6 +10,7 @@ import GlobalSearch from '../shared/GlobalSearch'
 import { useAuth } from '../auth/useAuth'
 import AiClaimBanner from './AiClaimBanner'
 import { useRiskMap, RiskDot } from '../review/AiRiskBadge'
+import SortModeControl, { groupItems, type SortMode } from '../review/SortModeControl'
 
 /**
  * Finance Manager queue (intial ui prototypes/review-close.html, FM view). Approve / query /
@@ -67,6 +68,7 @@ export default function FmQueuePage() {
   const [flash, setFlash] = useState('')
   const [tick, setTick] = useState(0)
   const [claimBucket, setClaimBucket] = useState<AgingBucket>('all')
+  const [sortMode, setSortMode] = useState<SortMode>('all')
 
   const reload = useCallback(() => setTick((n) => n + 1), [])
   const riskMap = useRiskMap(type)
@@ -127,7 +129,10 @@ export default function FmQueuePage() {
             Give each verified entry final approval, and close warranty / AMC / CG claims.
           </div>
         </div>
-        <GlobalSearch />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <SortModeControl value={sortMode} onChange={setSortMode} />
+          <GlobalSearch />
+        </div>
       </div>
 
       <ErrorBanner message={error} />
@@ -155,7 +160,7 @@ export default function FmQueuePage() {
             ))}
           </div>
 
-          <Section title="Awaiting final approval" items={queue.awaitingApproval} selectedId={selectedId} onSelect={setSelectedId} riskMap={riskMap} />
+          <Section title="Awaiting final approval" items={queue.awaitingApproval} selectedId={selectedId} onSelect={setSelectedId} riskMap={riskMap} sortMode={sortMode} />
           {type === 'receipt' && (
             <>
               <Section
@@ -210,7 +215,9 @@ function Section(props: {
   claimFilter?: AgingBucket
   onClaimFilterChange?: (bucket: AgingBucket) => void
   totalCount?: number
+  sortMode?: SortMode
 }) {
+  const groups = useMemo(() => groupItems(props.items, props.sortMode ?? 'all'), [props.items, props.sortMode])
   return (
     <>
       <div style={{ padding: '10px 14px 6px', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--faint)', fontWeight: 700 }}>
@@ -244,38 +251,57 @@ function Section(props: {
         </div>
       )}
 
-      {props.items.map((it) => {
-        const sel = props.selectedId === it.id
-        return (
-          <button key={`${props.title}-${it.id}`} type="button" onClick={() => props.onSelect(it.id)}
-            style={{
-              textAlign: 'left', border: 'none', borderBottom: '1px solid var(--line)', cursor: 'pointer',
-              borderLeft: `3px solid ${sel ? 'var(--navy)' : 'transparent'}`,
-              background: sel ? 'var(--navy3)' : 'transparent', padding: '12px 14px', minHeight: 44,
-              display: 'flex', flexDirection: 'column', gap: 3, opacity: props.plain ? 0.75 : 1, width: '100%',
+      {groups.map((g) => (
+        <div key={g.heading || 'all'}>
+          {g.heading && (
+            <div style={{
+              padding: '6px 14px', fontSize: '0.7rem', fontWeight: 800, color: 'var(--navy2)',
+              background: 'var(--navy3)', textTransform: props.sortMode === 'branch' ? 'uppercase' : 'none' as 'uppercase' | 'none',
             }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <span style={{ fontFamily: 'Consolas, monospace', fontSize: '0.7rem', fontWeight: 700, color: 'var(--navy2)' }}>
-                {it.documentNo ?? 'draft'}
-              </span>
-              <span style={{ marginLeft: 'auto', fontSize: '0.68rem', color: 'var(--faint)' }}>{it.branchCode}</span>
+              {props.sortMode === 'date' ? fmtGroupDate(g.heading) : g.heading} · {g.rows.length}
             </div>
-            <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{it.partyName}</div>
-            <div style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>
-              {it.categoryName} · <strong style={{ fontVariantNumeric: 'tabular-nums' }}>{inr(it.amount)}</strong>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
-              {it.hasOverride && <Tag>Overridden</Tag>}
-              {props.showAging && <AgingBadge days={claimAgeDays(it.submittedAt)} />}
-              {props.riskMap?.get(it.id) != null && props.riskMap.get(it.id)!.score > 0 && (
-                <RiskDot risk={props.riskMap.get(it.id)} />
-              )}
-            </div>
-          </button>
-        )
-      })}
+          )}
+          {g.rows.map((it) => {
+            const sel = props.selectedId === it.id
+            return (
+              <button key={`${props.title}-${it.id}`} type="button" onClick={() => props.onSelect(it.id)}
+                style={{
+                  textAlign: 'left', border: 'none', borderBottom: '1px solid var(--line)', cursor: 'pointer',
+                  borderLeft: `3px solid ${sel ? 'var(--navy)' : 'transparent'}`,
+                  background: sel ? 'var(--navy3)' : 'transparent', padding: '12px 14px', minHeight: 44,
+                  display: 'flex', flexDirection: 'column', gap: 3, opacity: props.plain ? 0.75 : 1, width: '100%',
+                }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <span style={{ fontFamily: 'Consolas, monospace', fontSize: '0.7rem', fontWeight: 700, color: 'var(--navy2)' }}>
+                    {it.documentNo ?? 'draft'}
+                  </span>
+                  <span style={{ marginLeft: 'auto', fontSize: '0.68rem', color: 'var(--faint)' }}>{it.branchCode}</span>
+                </div>
+                <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{it.partyName}</div>
+                <div style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>
+                  {it.categoryName} · <strong style={{ fontVariantNumeric: 'tabular-nums' }}>{inr(it.amount)}</strong>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+                  {it.hasOverride && <Tag>Overridden</Tag>}
+                  {props.showAging && <AgingBadge days={claimAgeDays(it.submittedAt)} />}
+                  {props.riskMap?.get(it.id) != null && props.riskMap.get(it.id)!.score > 0 && (
+                    <RiskDot risk={props.riskMap.get(it.id)} />
+                  )}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      ))}
     </>
   )
+}
+
+function fmtGroupDate(key: string): string {
+  if (key === 'Unknown date') return key
+  const d = new Date(key + 'T00:00:00')
+  if (isNaN(d.getTime())) return key
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 function Overview({

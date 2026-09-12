@@ -3,14 +3,13 @@ import { receiptsApi } from '../api/receipts'
 import { expensesApi } from '../api/expenses'
 import { cashApi, type CashDocument } from '../api/cash'
 import { reviewApi, type ReviewQueueItem, type ReviewType } from '../api/review'
-import { card, ErrorBanner, ghostBtn, primaryBtn, Skeleton, SkeletonRows, inr } from '../shell/ui'
+import { card, ErrorBanner, ghostBtn, primaryBtn, Modal, Badge, Skeleton, SkeletonRows, inr, inputStyle, th, td } from '../shell/ui'
 import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, type AnyDoc } from '../review/reviewShared'
 import GlobalSearch from '../shared/GlobalSearch'
 import { useAuth } from '../auth/useAuth'
-import { Download } from 'lucide-react'
-import ExportModal from '../shared/ExportModal'
 import { useRiskMap, RiskDot, } from '../review/AiRiskBadge'
 import type { RiskScore } from '../api/ai'
+import SortModeControl, { groupItems, type SortMode } from '../review/SortModeControl'
 
 /**
  * Accountant review queue (intial ui prototypes/review-close.html, Accountant view). Two
@@ -26,17 +25,28 @@ const queueFor = (t: ReviewType) =>
 const detailFor = (t: ReviewType, id: number) =>
   t === 'receipt' ? receiptsApi.get(id) : t === 'expense' ? expensesApi.get(id) : cashApi.get(id)
 
+const verifiedQueueFor = (t: ReviewType) => reviewApi.verifiedQueue(t)
+
+function fmtGroupDate(key: string): string {
+  if (key === 'Unknown date') return key
+  const d = new Date(key + 'T00:00:00')
+  if (isNaN(d.getTime())) return key
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
 export default function ReviewQueuePage() {
   const [type, setType] = useState<ReviewType>('receipt')
   const [items, setItems] = useState<ReviewQueueItem[] | null>(null)
+  const [verifiedItems, setVerifiedItems] = useState<ReviewQueueItem[] | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [doc, setDoc] = useState<DetailDoc | null>(null)
   const [error, setError] = useState('')
   const [flash, setFlash] = useState('')
   const [tick, setTick] = useState(0)
-  const [showExportModal, setShowExportModal] = useState(false)
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [bulkBusy, setBulkBusy] = useState(false)
+  const [sortMode, setSortMode] = useState<SortMode>('all')
+  const [drilldown, setDrilldown] = useState(false)
 
   const reload = useCallback(() => setTick((n) => n + 1), [])
   const riskMap = useRiskMap(type)
@@ -44,8 +54,8 @@ export default function ReviewQueuePage() {
   useEffect(() => {
     let live = true
     setError('')
-    queueFor(type)
-      .then(({ data }) => { if (live) setItems(data) })
+    Promise.all([queueFor(type), verifiedQueueFor(type)])
+      .then(([q, v]) => { if (live) { setItems(q.data); setVerifiedItems(v.data) } })
       .catch((e) => { if (live) setError(apiError(e, 'Could not load the review queue.')) })
     return () => { live = false }
   }, [type, tick])
@@ -65,6 +75,7 @@ export default function ReviewQueuePage() {
     setSelectedIds([])
     setDoc(null)
     setFlash('')
+    setDrilldown(false)
   }
 
   async function handleBulkVerify() {
@@ -118,23 +129,7 @@ export default function ReviewQueuePage() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={() => setShowExportModal(true)}
-            style={{
-              ...ghostBtn,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              minHeight: 36,
-              padding: '6px 12px',
-              fontSize: '0.8rem',
-              fontWeight: 600,
-            }}
-          >
-            <Download size={15} />
-            <span>Export Tally / CSV</span>
-          </button>
+          <SortModeControl value={sortMode} onChange={setSortMode} />
           <GlobalSearch />
         </div>
       </div>
@@ -151,6 +146,7 @@ export default function ReviewQueuePage() {
           <QueuePane
             type={type}
             items={items}
+            sortMode={sortMode}
             selectedId={selectedId}
             onType={pickType}
             onSelect={setSelectedId}
@@ -165,7 +161,13 @@ export default function ReviewQueuePage() {
         </div>
         <div className={selectedId == null ? 'hidden lg:block border-t lg:border-t-0 lg:border-l border-[var(--line)] p-4 sm:p-6 overflow-y-auto' : 'block border-t lg:border-t-0 lg:border-l border-[var(--line)] p-4 sm:p-6 overflow-y-auto'}>
           {selectedId == null
-            ? <Overview type={type} items={items ?? []} onSelect={setSelectedId} />
+            ? <Overview
+                type={type}
+                items={items ?? []}
+                verifiedItems={verifiedItems ?? []}
+                onSelect={setSelectedId}
+                onOpenDrilldown={() => setDrilldown(true)}
+              />
             : doc == null
               ? <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <div className="lg:hidden mb-2">
@@ -178,7 +180,15 @@ export default function ReviewQueuePage() {
         </div>
       </div>
 
-      {showExportModal && <ExportModal onClose={() => setShowExportModal(false)} />}
+      {drilldown && (
+        <DrilldownModal
+          type={type}
+          pending={items ?? []}
+          verified={verifiedItems ?? []}
+          onSelect={(id) => { setDrilldown(false); setSelectedId(id) }}
+          onClose={() => setDrilldown(false)}
+        />
+      )}
     </div>
   )
 }
@@ -188,6 +198,7 @@ export default function ReviewQueuePage() {
 function QueuePane(props: {
   type: ReviewType
   items: ReviewQueueItem[] | null
+  sortMode: SortMode
   selectedId: number | null
   onType: (t: ReviewType) => void
   onSelect: (id: number) => void
@@ -200,6 +211,7 @@ function QueuePane(props: {
   bulkBusy: boolean
 }) {
   const { items } = props
+  const groups = useMemo(() => groupItems(items ?? [], props.sortMode), [items, props.sortMode])
   return (
     <div style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
       <div style={{ display: 'flex', padding: 12, gap: 4 }}>
@@ -249,16 +261,28 @@ function QueuePane(props: {
         <p style={{ padding: 14, color: 'var(--faint)', fontSize: '0.82rem' }}>Nothing waiting on you — the queue is clear.</p>
       )}
 
-      {(items ?? []).map((it) => (
-        <QueueRow
-          key={it.id}
-          it={it}
-          selected={props.selectedId === it.id}
-          onSelect={() => props.onSelect(it.id)}
-          risk={props.riskMap.get(it.id)}
-          checked={props.type !== 'cash' ? props.selectedIds.includes(it.id) : undefined}
-          onToggleCheck={props.type !== 'cash' ? () => props.onToggleSelect(it.id) : undefined}
-        />
+      {groups.map((g) => (
+        <div key={g.heading || 'all'}>
+          {g.heading && (
+            <div style={{
+              padding: '6px 14px', fontSize: '0.7rem', fontWeight: 800, color: 'var(--navy2)',
+              background: 'var(--navy3)', textTransform: props.sortMode === 'branch' ? 'uppercase' : 'none',
+            }}>
+              {props.sortMode === 'date' ? fmtGroupDate(g.heading) : g.heading} · {g.rows.length}
+            </div>
+          )}
+          {g.rows.map((it) => (
+            <QueueRow
+              key={it.id}
+              it={it}
+              selected={props.selectedId === it.id}
+              onSelect={() => props.onSelect(it.id)}
+              risk={props.riskMap.get(it.id)}
+              checked={props.type !== 'cash' ? props.selectedIds.includes(it.id) : undefined}
+              onToggleCheck={props.type !== 'cash' ? () => props.onToggleSelect(it.id) : undefined}
+            />
+          ))}
+        </div>
       ))}
 
       {props.type !== 'cash' && props.selectedIds.length > 0 && (
@@ -385,9 +409,16 @@ export function QueueRow({
 
 // ───────────────────────────── Overview panel ─────────────────────────────
 
-function Overview(props: { type: ReviewType; items: ReviewQueueItem[]; onSelect: (id: number) => void }) {
-  const { items } = props
+function Overview(props: {
+  type: ReviewType
+  items: ReviewQueueItem[]
+  verifiedItems: ReviewQueueItem[]
+  onSelect: (id: number) => void
+  onOpenDrilldown: () => void
+}) {
+  const { items, verifiedItems } = props
   const total = items.reduce((a, r) => a + r.amount, 0)
+  const verifiedTotal = verifiedItems.reduce((a, r) => a + r.amount, 0)
   const byBranch = useMemo(() => {
     const m = new Map<string, number>()
     items.forEach((r) => m.set(r.branchCode, (m.get(r.branchCode) ?? 0) + 1))
@@ -403,8 +434,14 @@ function Overview(props: { type: ReviewType; items: ReviewQueueItem[]; onSelect:
       <div style={{ fontSize: '0.82rem', color: 'var(--muted)', marginBottom: 16 }}>Reviewing {label}</div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 12, marginBottom: 18 }}>
-        <Stat label="Awaiting your review" value={String(items.length)} sub={items.length === 1 ? 'item' : 'items'} />
-        <Stat label="Total value pending" value={inr(total)} sub="across your branches" accent />
+        <Stat label="Awaiting your review" value={String(items.length)} sub={items.length === 1 ? 'item' : 'items'}
+          onClick={props.onOpenDrilldown} />
+        <Stat label="Total value pending" value={inr(total)} sub="across your branches" accent
+          onClick={props.onOpenDrilldown} />
+        <Stat label="Verified" value={String(verifiedItems.length)} sub="moved on to the Finance Manager or closed"
+          onClick={props.onOpenDrilldown} />
+        <Stat label="Total value verified" value={inr(verifiedTotal)} sub="across your branches" accent
+          onClick={props.onOpenDrilldown} />
       </div>
 
       {items.length === 0 ? (
@@ -447,13 +484,119 @@ function Overview(props: { type: ReviewType; items: ReviewQueueItem[]; onSelect:
   )
 }
 
-function Stat({ label, value, sub, accent }: { label: string; value: string; sub: string; accent?: boolean }) {
+function Stat({ label, value, sub, accent, onClick }: { label: string; value: string; sub: string; accent?: boolean; onClick?: () => void }) {
   return (
-    <div style={{ ...card, borderTop: `3px solid ${accent ? 'var(--amber)' : 'var(--navy2)'}` }}>
-      <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--muted)', fontWeight: 600 }}>{label}</div>
+    <div
+      onClick={onClick}
+      style={{ ...card, borderTop: `3px solid ${accent ? 'var(--amber)' : 'var(--navy2)'}`, cursor: onClick ? 'pointer' : undefined }}
+    >
+      <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--muted)', fontWeight: 600 }}>
+        {label}{onClick && <span style={{ color: 'var(--navy2)' }}> ⓘ</span>}
+      </div>
       <div style={{ fontSize: '1.4rem', fontWeight: 800, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
       <div style={{ fontSize: '0.76rem', color: 'var(--faint)' }}>{sub}</div>
     </div>
+  )
+}
+
+// ───────────────────────────── Drill-down: pending vs verified ─────────────────────────────
+
+function DrilldownModal(props: {
+  type: ReviewType
+  pending: ReviewQueueItem[]
+  verified: ReviewQueueItem[]
+  onSelect: (id: number) => void
+  onClose: () => void
+}) {
+  const [branch, setBranch] = useState('')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+
+  const combined = useMemo(
+    () => [
+      ...props.pending.map((it) => ({ ...it, bucket: 'pending' as const })),
+      ...props.verified.map((it) => ({ ...it, bucket: 'verified' as const })),
+    ],
+    [props.pending, props.verified],
+  )
+  const branches = useMemo(() => [...new Set(combined.map((it) => it.branchCode))].sort(), [combined])
+
+  const filtered = useMemo(() => combined.filter((it) => {
+    if (branch && it.branchCode !== branch) return false
+    const day = it.submittedAt ? it.submittedAt.slice(0, 10) : null
+    if ((from || to) && !day) return false
+    if (from && day! < from) return false
+    if (to && day! > to) return false
+    return true
+  }), [combined, branch, from, to])
+
+  const total = filtered.reduce((a, r) => a + r.amount, 0)
+  const label = props.type === 'receipt' ? 'receipts' : props.type === 'expense' ? 'expenses' : 'cash movements'
+
+  return (
+    <Modal title={`Pending vs verified — ${label}`} subtitle="click a row to open it" onClose={props.onClose} maxWidth={780}>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+        <select value={branch} onChange={(e) => setBranch(e.target.value)} style={{ ...inputStyle, width: 'auto' }}>
+          <option value="">All branches</option>
+          {branches.map((b) => <option key={b} value={b}>{b}</option>)}
+        </select>
+        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={{ ...inputStyle, width: 'auto' }} title="Submitted from" />
+        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={{ ...inputStyle, width: 'auto' }} title="Submitted to" />
+        {(branch || from || to) && (
+          <button type="button" onClick={() => { setBranch(''); setFrom(''); setTo('') }} style={{ ...ghostBtn, minHeight: 36 }}>
+            Clear filters
+          </button>
+        )}
+      </div>
+
+      {filtered.length === 0 ? (
+        <div style={{ padding: '18px 4px', fontSize: '0.84rem', color: 'var(--muted)', textAlign: 'center' }}>
+          Nothing matches these filters.
+        </div>
+      ) : (
+        <>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+              <thead>
+                <tr>
+                  <th style={th}>Date</th>
+                  <th style={th}>Doc</th>
+                  <th style={th}>Party</th>
+                  <th style={th}>Branch</th>
+                  <th style={th}>Status</th>
+                  <th style={{ ...th, textAlign: 'right' }}>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((it) => (
+                  <tr
+                    key={`${it.type}-${it.id}`}
+                    onClick={() => props.onSelect(it.id)}
+                    style={{ cursor: 'pointer' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--navy3)' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                  >
+                    <td style={td}>{it.submittedAt ? it.submittedAt.slice(0, 10) : '—'}</td>
+                    <td style={{ ...td, fontFamily: 'Consolas, monospace', fontSize: '0.76rem' }}>{it.documentNo ?? 'draft'}</td>
+                    <td style={td}>{it.partyName}</td>
+                    <td style={td}>{it.branchCode}</td>
+                    <td style={td}><Badge tone={it.bucket === 'pending' ? 'amber' : 'green'}>{it.workflowStatus}</Badge></td>
+                    <td style={{ ...td, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{inr(it.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            padding: '12px 4px 2px', marginTop: 8, borderTop: '2px solid var(--line)',
+          }}>
+            <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>{filtered.length} entr{filtered.length === 1 ? 'y' : 'ies'}</span>
+            <span style={{ fontSize: '0.98rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{inr(total)}</span>
+          </div>
+        </>
+      )}
+    </Modal>
   )
 }
 

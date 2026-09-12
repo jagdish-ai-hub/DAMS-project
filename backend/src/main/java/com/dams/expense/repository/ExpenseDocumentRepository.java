@@ -31,6 +31,10 @@ public interface ExpenseDocumentRepository extends JpaRepository<ExpenseDocument
     List<ExpenseDocument> findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(
         Long orgId, ExpenseWorkflowStatus workflowStatus);
 
+    /** Accountant "Verified" overview — documents past SUBMITTED within the caller's branches, newest first. */
+    List<ExpenseDocument> findByOrgIdAndWorkflowStatusInAndBranchIdInOrderBySubmittedAtDescIdDesc(
+        Long orgId, Collection<ExpenseWorkflowStatus> workflowStatuses, Collection<Long> branchIds);
+
     boolean existsByOrgIdAndDocumentNo(Long orgId, String documentNo);
 
     boolean existsByOrgId(Long orgId);

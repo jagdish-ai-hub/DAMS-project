@@ -20,6 +20,8 @@ public record ReviewQueueItem(
     BigDecimal amount,      // Σ lines, or the invoice amount when a receipt has no lines yet
     boolean overLimit,      // expenses only
     boolean hasOverride,    // a line amount has already been overridden
-    Instant submittedAt
+    Instant submittedAt,
+    String workflowStatus   // SUBMITTED | VERIFIED | APPROVED | CLOSED — lets a "verified" list
+                            // still show each row's real state
 ) {
 }
