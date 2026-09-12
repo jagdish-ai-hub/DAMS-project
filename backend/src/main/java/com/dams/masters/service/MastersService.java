@@ -44,7 +44,8 @@ public class MastersService {
                           ExpenseModeRepository expenseModeRepo,
                           ExpenseBusinessStatusRepository expenseStatusRepo,
                           BankRepository bankRepo,
-                          ClaimTypeRepository claimTypeRepo) {
+                          ClaimTypeRepository claimTypeRepo,
+                          UpiVpaRepository upiVpaRepo) {
         this.subCategoryRepo = subCategoryRepo;
         this.expenseCategoryRepo = expenseCategoryRepo;
 
@@ -57,6 +58,7 @@ public class MastersService {
         repos.put(MasterType.EXPENSE_STATUSES, expenseStatusRepo);
         repos.put(MasterType.BANKS, bankRepo);
         repos.put(MasterType.CLAIM_TYPES, claimTypeRepo);
+        repos.put(MasterType.UPI_VPAS, upiVpaRepo);
 
         factories.put(MasterType.RECEIVE_CATEGORIES, ReceiveCategory::new);
         factories.put(MasterType.RECEIVE_STATUSES, ReceiveBusinessStatus::new);
@@ -67,6 +69,7 @@ public class MastersService {
         factories.put(MasterType.EXPENSE_STATUSES, ExpenseBusinessStatus::new);
         factories.put(MasterType.BANKS, Bank::new);
         factories.put(MasterType.CLAIM_TYPES, ClaimType::new);
+        factories.put(MasterType.UPI_VPAS, UpiVpa::new);
     }
 
     @Transactional(readOnly = true)
@@ -190,6 +193,17 @@ public class MastersService {
                 esc.setExpenseCategoryId(parentId);
             }
             esc.setLimitAmount(req.getLimitAmount());
+        } else if (type.isUpiVpa() && entity instanceof UpiVpa uv) {
+            String vpa = req.getVpa() != null ? req.getVpa().trim() : null;
+            if (isCreate && (vpa == null || vpa.isEmpty())) {
+                throw DamsException.badRequest("A UPI ID is required");
+            }
+            if (vpa != null && !vpa.isEmpty()) {
+                if (!vpa.contains("@")) {
+                    throw DamsException.badRequest("'" + vpa + "' doesn't look like a UPI ID (expected name@bank)");
+                }
+                uv.setVpa(vpa);
+            }
         }
     }
 

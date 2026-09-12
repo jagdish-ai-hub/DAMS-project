@@ -39,4 +39,8 @@ public class MasterRequest {
     // expense-sub-categories only
     private Long expenseCategoryId;
     private BigDecimal limitAmount;
+
+    // upi-vpas only
+    @Size(max = 120, message = "UPI ID must be at most 120 characters")
+    private String vpa;
 }

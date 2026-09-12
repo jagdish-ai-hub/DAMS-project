@@ -7,6 +7,23 @@
 
 ## Revision log
 
+- **rev 33 (2026-09-12)** — Real UPI IDs, multiple, shown as QR cards. The UPI QR
+  modal always pointed at a hardcoded fake account (`jjmotors@icici` / "JJ Motors")
+  baked into `UpiQrModal.tsx` — there was nowhere in the app for an org to enter its
+  own UPI ID, so every generated QR code was useless for actually collecting money.
+  New tenth Owner-editable master, **UPI IDs** (`upi-vpas`, `V25__upi_vpa.sql`,
+  `UpiVpa extends OrgMaster` + a `vpa` column) — `name` doubles as the payee name a
+  customer's UPI app shows when paying (e.g. "JJ Motors - HDFC"), `vpa` is the actual
+  UPI ID; validated non-blank and must contain `@` on create. Starts empty for every
+  org (no seed) — nothing fake to fall back to. `UpiQrModal` now fetches the org's
+  active UPI IDs itself and renders one QR card per row (a responsive grid when there
+  is more than one), each with its own `upi://pay` URI and copy-link button; zero
+  configured shows a message pointing at Masters → UPI IDs instead of a QR code.
+  Neither call site (New Receipt, Add Payment) needed changes — both already only
+  passed `amount`/`customerName`/`docRef`/`onClose`.
+  Verified: `mvn test` 178 green (0 failures/errors, 4 pre-existing Docker-only skips);
+  `tsc`/`eslint`/`vitest` clean.
+
 - **rev 32 (2026-09-12)** — UI-noise cleanup batch (dealership testing feedback).
   `AppShell` header split into two rows: row 1 (logo + right-side actions) stays a
   single line at every width; row 2 is the role's nav, its own line whenever the

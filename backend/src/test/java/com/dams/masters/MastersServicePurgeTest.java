@@ -9,6 +9,7 @@ import com.dams.masters.repository.ExpenseSubCategoryRepository;
 import com.dams.masters.repository.ReceiveBusinessStatusRepository;
 import com.dams.masters.repository.ReceiveCategoryRepository;
 import com.dams.masters.repository.SettlementModeRepository;
+import com.dams.masters.repository.UpiVpaRepository;
 import com.dams.masters.service.MastersService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,11 +37,12 @@ class MastersServicePurgeTest {
     @Mock private ExpenseBusinessStatusRepository expenseStatusRepo;
     @Mock private BankRepository bankRepo;
     @Mock private ClaimTypeRepository claimTypeRepo;
+    @Mock private UpiVpaRepository upiVpaRepo;
 
     @Test
     void purgeOrg_deletesSubCategoriesBeforeTheirParentCategory() {
         MastersService service = new MastersService(receiveCategoryRepo, receiveStatusRepo, settlementModeRepo,
-            expenseCategoryRepo, subCategoryRepo, expenseModeRepo, expenseStatusRepo, bankRepo, claimTypeRepo);
+            expenseCategoryRepo, subCategoryRepo, expenseModeRepo, expenseStatusRepo, bankRepo, claimTypeRepo, upiVpaRepo);
 
         service.purgeOrg(99L);
 
@@ -52,7 +54,7 @@ class MastersServicePurgeTest {
     @Test
     void purgeOrg_deletesEverySubCategoryRowExactlyOnce() {
         MastersService service = new MastersService(receiveCategoryRepo, receiveStatusRepo, settlementModeRepo,
-            expenseCategoryRepo, subCategoryRepo, expenseModeRepo, expenseStatusRepo, bankRepo, claimTypeRepo);
+            expenseCategoryRepo, subCategoryRepo, expenseModeRepo, expenseStatusRepo, bankRepo, claimTypeRepo, upiVpaRepo);
 
         service.purgeOrg(99L);
 
