@@ -2,17 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { searchApi, type SearchHit } from '../api/search'
 import { customersApi, type CustomerHistory } from '../api/customers'
-import { receiptsApi, type ReceiveDocument } from '../api/receipts'
 import { card, ErrorBanner, Skeleton, SkeletonRows, inr, initials, fmtDateShort } from '../shell/ui'
 import AddPaymentModal from './AddPaymentModal'
-import ViewReceiptsModal from './ViewReceiptsModal'
-import PrintReceiptModal from './PrintReceiptModal'
-import { Printer } from 'lucide-react'
 
 /**
  * Cashier home (intial ui prototypes/cashier-home.html): universal search, results, a
  * "recently looked up" strip, and the customer history card with New Receipt / Add Payment
- * / View Receipts wired to Stage 4.
+ * / View wired to Stage 4. "View" opens the real receipt (`?editDoc=`, same page My
+ * Entries opens into) rather than a separate read-only modal — printing lives there too,
+ * one click in, so there's no separate Print shortcut on this row.
  */
 
 const RECENT_KEY = 'dams.recentCustomers'
@@ -326,12 +324,6 @@ type PaymentTarget = {
   documentNo: string | null
   balanceDue: number
 }
-type ReceiptsTarget = {
-  receiptId: number
-  subtitle: string
-  frozen: boolean
-}
-
 function CustomerHistoryView(props: {
   customerId: number
   onBack: () => void
@@ -342,8 +334,6 @@ function CustomerHistoryView(props: {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [payTarget, setPayTarget] = useState<PaymentTarget | null>(null)
-  const [receiptsTarget, setReceiptsTarget] = useState<ReceiptsTarget | null>(null)
-  const [printDoc, setPrintDoc] = useState<ReceiveDocument | null>(null)
   const [reloadTick, setReloadTick] = useState(0)
   const { onLoaded } = props
 
@@ -495,31 +485,10 @@ function CustomerHistoryView(props: {
                   {j.receiveDocumentId != null && (
                     <button
                       type="button"
-                      onClick={() => setReceiptsTarget({
-                        receiptId: j.receiveDocumentId!,
-                        subtitle: `${j.reference} · whole receipt`,
-                        frozen: j.receiveDocumentSettled || j.workflowStatus === 'REJECTED',
-                      })}
-                      style={{ border: 'none', background: 'none', color: 'var(--navy2)', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
+                      onClick={() => navigate(`/app/new-receipt?editDoc=${j.receiveDocumentId}`)}
+                      style={{ border: '1.5px solid var(--line)', background: 'var(--surface)', borderRadius: 8, padding: '6px 11px', fontSize: '0.78rem', fontWeight: 700, color: 'var(--navy2)', cursor: 'pointer', whiteSpace: 'nowrap' }}
                     >
-                      View Receipts
-                    </button>
-                  )}
-                  {j.receiveDocumentId != null && (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          const res = await receiptsApi.get(j.receiveDocumentId!)
-                          setPrintDoc(res.data)
-                        } catch {
-                          /* ignore */
-                        }
-                      }}
-                      style={{ border: 'none', background: 'none', color: 'var(--navy2)', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 3 }}
-                    >
-                      <Printer size={12} />
-                      <span>Print</span>
+                      View
                     </button>
                   )}
                   {j.canRecordPayment && j.receiveDocumentId != null ? (
@@ -587,21 +556,6 @@ function CustomerHistoryView(props: {
             setPayTarget(null)
             setReloadTick((n) => n + 1)
           }}
-        />
-      )}
-      {receiptsTarget && (
-        <ViewReceiptsModal
-          receiptId={receiptsTarget.receiptId}
-          subtitle={receiptsTarget.subtitle}
-          frozen={receiptsTarget.frozen}
-          onClose={() => setReceiptsTarget(null)}
-          onChanged={() => setReloadTick((n) => n + 1)}
-        />
-      )}
-      {printDoc && (
-        <PrintReceiptModal
-          doc={printDoc}
-          onClose={() => setPrintDoc(null)}
         />
       )}
     </div>

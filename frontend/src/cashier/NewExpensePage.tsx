@@ -364,7 +364,6 @@ export default function NewExpensePage() {
     if (!loadedDoc) return
     const existingByLineNo = new Map(loadedDoc.lines.map((l) => [l.lineNo, l]))
     const keptLineNos = new Set<number>()
-    const linesEditable = loadedDoc.workflowStatus === 'DRAFT' || loadedDoc.workflowStatus === 'QUERIED'
 
     for (const current of lines) {
       if (current.lineNo != null) {
@@ -522,6 +521,11 @@ export default function NewExpensePage() {
 
   const isQueried = loadedDoc?.workflowStatus === 'QUERIED'
   const inEditMode = editDocId != null
+  // Once VERIFIED/APPROVED (or SUBMITTED again after a reopen), the accountant/FM has
+  // already checked what's on record — an existing line stays locked for the cashier.
+  // A brand-new row (lineNo == null) is always addable; the server reopens the document
+  // for re-review when that happens (see ExpenseDocumentService.addLine).
+  const linesEditable = !loadedDoc || loadedDoc.workflowStatus === 'DRAFT' || loadedDoc.workflowStatus === 'QUERIED'
   const showTransferButton =
     inEditMode &&
     loadedDoc != null &&
@@ -635,6 +639,14 @@ export default function NewExpensePage() {
             <h4 style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--navy)' }}>Expense Lines</h4>
             <span style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>breakdown by sub-category / mode</span>
           </div>
+          {!linesEditable && (
+            <div style={{
+              background: 'var(--navy3)', border: '1px solid #C9D8F2', color: 'var(--navy)',
+              borderRadius: 8, padding: '8px 12px', fontSize: '0.78rem', marginBottom: 10,
+            }}>
+              🔒 This expense has already been reviewed — existing lines are locked. Add a new row below for a new expense.
+            </div>
+          )}
 
           <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
@@ -655,13 +667,14 @@ export default function NewExpensePage() {
                   const m = modeById(l.expenseModeId)
                   const sc = subById(l.subCategoryId)
                   const over = sc?.limitAmount != null && (Number(l.amount) || 0) > sc.limitAmount
+                  const rowLocked = l.lineNo != null && !linesEditable
                   return (
-                    <tr key={i}>
+                    <tr key={i} style={rowLocked ? { background: 'var(--bg)' } : undefined}>
                       <td style={cellStyle}>
-                        <input type="date" value={l.transactionDate} onChange={(e) => setLine(i, { transactionDate: e.target.value })} style={cellInput} />
+                        <input type="date" value={l.transactionDate} disabled={rowLocked} title={rowLocked ? 'Already reviewed — locked' : undefined} onChange={(e) => setLine(i, { transactionDate: e.target.value })} style={cellInput} />
                       </td>
                       <td style={cellStyle}>
-                        <select value={l.subCategoryId} onChange={(e) => setLine(i, { subCategoryId: Number(e.target.value) })} style={cellInput}>
+                        <select value={l.subCategoryId} disabled={rowLocked} title={rowLocked ? 'Already reviewed — locked' : undefined} onChange={(e) => setLine(i, { subCategoryId: Number(e.target.value) })} style={cellInput}>
                           {subCats.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
                       </td>
@@ -669,29 +682,33 @@ export default function NewExpensePage() {
                         <input
                           type="number"
                           value={l.amount}
+                          disabled={rowLocked}
+                          title={rowLocked ? 'Already reviewed — locked' : undefined}
                           onChange={(e) => setLine(i, { amount: e.target.value })}
                           style={{ ...cellInput, textAlign: 'right', ...(over ? { borderColor: 'var(--amber)', color: 'var(--amber)' } : {}) }}
                         />
                       </td>
                       <td style={cellStyle}>
-                        <select value={l.expenseModeId} onChange={(e) => setLine(i, { expenseModeId: Number(e.target.value) })} style={cellInput}>
+                        <select value={l.expenseModeId} disabled={rowLocked} title={rowLocked ? 'Already reviewed — locked' : undefined} onChange={(e) => setLine(i, { expenseModeId: Number(e.target.value) })} style={cellInput}>
                           {modes.map((mm) => <option key={mm.id} value={mm.id}>{mm.name}</option>)}
                         </select>
                       </td>
                       <td style={cellStyle}>
-                        <select value={l.bankId} disabled={!m?.requiresBank} onChange={(e) => setLine(i, { bankId: e.target.value === '' ? '' : Number(e.target.value) })} style={cellInput}>
+                        <select value={l.bankId} disabled={rowLocked || !m?.requiresBank} onChange={(e) => setLine(i, { bankId: e.target.value === '' ? '' : Number(e.target.value) })} style={cellInput}>
                           <option value="">{m?.requiresBank ? 'Select…' : '—'}</option>
                           {banks.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                         </select>
                       </td>
                       <td style={cellStyle}>
-                        <input value={l.transactionRef} disabled={!m?.requiresRef} onChange={(e) => setLine(i, { transactionRef: e.target.value })} placeholder={m?.requiresRef ? 'UPI / bank ref' : '—'} style={cellInput} />
+                        <input value={l.transactionRef} disabled={rowLocked || !m?.requiresRef} onChange={(e) => setLine(i, { transactionRef: e.target.value })} placeholder={m?.requiresRef ? 'UPI / bank ref' : '—'} style={cellInput} />
                       </td>
                       <td style={cellStyle}>
-                        <input value={l.remark} onChange={(e) => setLine(i, { remark: e.target.value })} style={cellInput} />
+                        <input value={l.remark} disabled={rowLocked} title={rowLocked ? 'Already reviewed — locked' : undefined} onChange={(e) => setLine(i, { remark: e.target.value })} style={cellInput} />
                       </td>
                       <td style={cellStyle}>
-                        {lines.length > 1 && (
+                        {rowLocked ? (
+                          <span title="Already reviewed — locked" style={{ color: 'var(--faint)', fontSize: '0.9rem' }}>🔒</span>
+                        ) : lines.length > 1 && (
                           <button
                             type="button"
                             onClick={() => removeLine(i)}
@@ -746,13 +763,20 @@ export default function NewExpensePage() {
               <button type="button" onClick={resubmitEdited} style={primaryBtn(busy)} disabled={busy}>
                 {busy ? <><Spinner /> Resubmitting…</> : 'Resubmit'}
               </button>
-            ) : loadedDoc != null ? (
+            ) : loadedDoc != null && loadedDoc.workflowStatus === 'DRAFT' ? (
               <>
                 <button type="button" onClick={saveDraftExisting} style={ghostBtn} disabled={busy}>Save Draft</button>
                 <button type="button" onClick={submitDraft} style={primaryBtn(busy)} disabled={busy}>
                   {busy ? <><Spinner /> Submitting…</> : 'Submit'}
                 </button>
               </>
+            ) : loadedDoc != null ? (
+              // Already reviewed (SUBMITTED/VERIFIED/APPROVED/REJECTED/CLOSED) — existing
+              // lines are locked above, so this can only save a header edit or a brand-new
+              // expense row; there's nothing left here to "submit".
+              <button type="button" onClick={saveDraftExisting} style={primaryBtn(busy)} disabled={busy}>
+                {busy ? <><Spinner /> Saving…</> : 'Save'}
+              </button>
             ) : (
               <>
                 <button type="button" onClick={() => saveNew(false)} style={ghostBtn} disabled={busy}>Save Draft</button>
