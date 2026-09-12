@@ -7,6 +7,21 @@
 
 ## Revision log
 
+- **rev 37 (2026-09-12)** — Fixed the actual cause of "my fixes don't show up" / random broken-
+  looking screens: `frontend/nginx.conf` cached `/assets/*` forever (correct — Vite hashes
+  those filenames) but set **no cache header on `index.html`**, so browsers cached it too.
+  Every deploy ships a brand-new container, so the previous build's hashed JS/CSS files are
+  simply gone afterward — a browser holding a stale cached `index.html` was pointing at
+  bundle files that no longer existed, which explains both a fixed bug appearing to persist
+  (e.g. the AppShell hamburger fix from rev 32, confirmed live and successful in every deploy
+  since via GitHub Actions) and unrelated screens rendering as unstyled/broken ("weird
+  square" boxes) when a stale reference half-loaded. `location /` in nginx.conf now sends
+  `Cache-Control: no-cache, no-store, must-revalidate`, so the HTML shell is always
+  revalidated while the hashed assets it references stay cached for a year. One-time fix for
+  anyone already stuck on a stale copy: hard refresh (Ctrl/Cmd+Shift+R).
+  No application code touched — infra-only change, not covered by `tsc`/`eslint`/`vitest`/
+  `mvn test`.
+
 - **rev 36 (2026-09-12)** — Accountant "Verified" overview + shared sort control (user
   report: "after an accountant reviews something it goes missing here"). A verified item
   moves to VERIFIED status and simply vanishes from the SUBMITTED-only queue, so the
