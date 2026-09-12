@@ -11,6 +11,7 @@ export type MasterTypeSlug =
   | 'expense-statuses'
   | 'banks'
   | 'claim-types'
+  | 'upi-vpas'
 
 export interface MasterRow {
   id: number
@@ -23,6 +24,7 @@ export interface MasterRow {
   triggersClaim?: boolean
   expenseCategoryId?: number
   limitAmount?: number | null
+  vpa?: string
 }
 
 export interface MasterRequest {
@@ -34,6 +36,7 @@ export interface MasterRequest {
   triggersClaim?: boolean
   expenseCategoryId?: number
   limitAmount?: number | null
+  vpa?: string
 }
 
 export const mastersApi = {

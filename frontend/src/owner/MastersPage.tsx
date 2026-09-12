@@ -7,7 +7,7 @@ import {
 import AiMastersStrip from './AiMastersStrip'
 import ReceiversSection from './ReceiversSection'
 
-type Extra = 'mode' | 'sub' | undefined
+type Extra = 'mode' | 'sub' | 'upi' | undefined
 const TABS: { slug: MasterTypeSlug; label: string; extra: Extra }[] = [
   { slug: 'receive-categories', label: 'Transaction types', extra: undefined },
   { slug: 'receive-statuses', label: 'Receipt statuses', extra: undefined },
@@ -18,6 +18,7 @@ const TABS: { slug: MasterTypeSlug; label: string; extra: Extra }[] = [
   { slug: 'expense-modes', label: 'Expense modes', extra: undefined },
   { slug: 'expense-statuses', label: 'Expense statuses', extra: undefined },
   { slug: 'banks', label: 'Banks', extra: undefined },
+  { slug: 'upi-vpas', label: 'UPI IDs', extra: 'upi' },
 ]
 
 function apiError(err: unknown, fallback: string) {
@@ -126,6 +127,7 @@ export default function MastersPage() {
                   <th style={th}>Name</th>
                   {tab.extra === 'mode' && <th style={th}>Requires</th>}
                   {tab.extra === 'sub' && <th style={th}>Limit</th>}
+                  {tab.extra === 'upi' && <th style={th}>UPI ID</th>}
                   <th style={th}>Status</th><th style={th}></th>
                 </tr>
               </thead>
@@ -139,6 +141,7 @@ export default function MastersPage() {
                       </td>
                     )}
                     {tab.extra === 'sub' && <td style={td}>{r.limitAmount != null ? `₹${r.limitAmount}` : '—'}</td>}
+                    {tab.extra === 'upi' && <td style={{ ...td, fontFamily: 'Consolas, monospace', fontSize: '0.78rem' }}>{r.vpa}</td>}
                     <td style={td}>{r.active ? <Badge tone="green">Active</Badge> : <Badge>Inactive</Badge>}</td>
                     <td style={{ ...td, textAlign: 'right' }}>
                       <button style={{ ...ghostBtn, minHeight: 36, padding: '4px 12px' }} onClick={() => setModal({ editing: r })}>Edit</button>
@@ -183,6 +186,7 @@ function MasterModal(props: {
   const [requiresBank, setRequiresBank] = useState(editing?.requiresBank ?? false)
   const [requiresRef, setRequiresRef] = useState(editing?.requiresRef ?? false)
   const [limitAmount, setLimitAmount] = useState(editing?.limitAmount != null ? String(editing.limitAmount) : '')
+  const [vpa, setVpa] = useState(editing?.vpa ?? '')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -199,6 +203,7 @@ function MasterModal(props: {
         body.expenseCategoryId = editing?.expenseCategoryId ?? props.parentId ?? undefined
         body.limitAmount = limitAmount === '' ? null : Number(limitAmount)
       }
+      if (tab.extra === 'upi') body.vpa = vpa.trim()
       if (editing) await mastersApi.update(tab.slug, editing.id, body)
       else await mastersApi.create(tab.slug, body)
       props.onSaved()
@@ -212,10 +217,18 @@ function MasterModal(props: {
   return (
     <Modal title={editing ? `Edit — ${tab.label}` : `Add — ${tab.label}`} onClose={props.onClose}>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <Field label="Name"><TextInput value={name} onChange={setName} required /></Field>
+        <Field label="Name" hint={tab.extra === 'upi' ? 'Shown to the customer\'s UPI app as who they\'re paying — e.g. "JJ Motors - HDFC"' : undefined}>
+          <TextInput value={name} onChange={setName} required />
+        </Field>
         <Field label="Sort order" hint="Optional — controls dropdown order">
           <TextInput value={sortOrder} onChange={setSortOrder} type="number" placeholder="0" />
         </Field>
+
+        {tab.extra === 'upi' && (
+          <Field label="UPI ID (VPA)" hint="e.g. jjmotors@okhdfcbank">
+            <TextInput value={vpa} onChange={setVpa} required placeholder="name@bank" />
+          </Field>
+        )}
 
         {tab.extra === 'mode' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

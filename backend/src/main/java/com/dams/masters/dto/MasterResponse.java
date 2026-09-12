@@ -6,6 +6,7 @@ import com.dams.masters.entity.ExpenseBusinessStatus;
 import com.dams.masters.entity.ExpenseMode;
 import com.dams.masters.entity.ExpenseSubCategory;
 import com.dams.masters.entity.SettlementMode;
+import com.dams.masters.entity.UpiVpa;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.math.BigDecimal;
@@ -23,7 +24,8 @@ public record MasterResponse(
     Boolean isCash,
     Boolean triggersClaim,
     Long expenseCategoryId,
-    BigDecimal limitAmount
+    BigDecimal limitAmount,
+    String vpa
 ) {
 
     public static MasterResponse of(MasterType type, OrgMaster m) {
@@ -33,6 +35,7 @@ public record MasterResponse(
         Boolean triggersClaim = null;
         Long expenseCategoryId = null;
         BigDecimal limitAmount = null;
+        String vpa = null;
 
         if (m instanceof SettlementMode sm) {
             requiresBank = sm.isRequiresBank();
@@ -47,10 +50,12 @@ public record MasterResponse(
         } else if (m instanceof ExpenseSubCategory esc) {
             expenseCategoryId = esc.getExpenseCategoryId();
             limitAmount = esc.getLimitAmount();
+        } else if (m instanceof UpiVpa uv) {
+            vpa = uv.getVpa();
         }
 
         return new MasterResponse(
             m.getId(), type.slug(), m.getName(), m.isActive(), m.getSortOrder(),
-            requiresBank, requiresRef, isCash, triggersClaim, expenseCategoryId, limitAmount);
+            requiresBank, requiresRef, isCash, triggersClaim, expenseCategoryId, limitAmount, vpa);
     }
 }

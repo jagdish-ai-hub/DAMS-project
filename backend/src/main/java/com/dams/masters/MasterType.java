@@ -23,7 +23,8 @@ public enum MasterType {
     EXPENSE_MODES("expense-modes"),
     EXPENSE_STATUSES("expense-statuses"),
     BANKS("banks"),
-    CLAIM_TYPES("claim-types");
+    CLAIM_TYPES("claim-types"),
+    UPI_VPAS("upi-vpas");
 
     private final String slug;
 
@@ -47,6 +48,10 @@ public enum MasterType {
 
     public boolean isExpenseSubCategory() {
         return this == EXPENSE_SUB_CATEGORIES;
+    }
+
+    public boolean isUpiVpa() {
+        return this == UPI_VPAS;
     }
 
     public static MasterType fromSlug(String slug) {
