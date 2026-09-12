@@ -212,7 +212,7 @@ export function Modal(props: { title: string; subtitle?: string; onClose: () => 
       onMouseDown={props.onClose}
       style={{
         position: 'fixed', inset: 0, background: 'rgba(16,24,40,.45)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        display: 'flex', justifyContent: 'center',
         padding: 'clamp(12px, 3vh, 32px) clamp(10px, 3vw, 16px)', zIndex: 50, overflowY: 'auto',
       }}
     >
@@ -221,7 +221,7 @@ export function Modal(props: { title: string; subtitle?: string; onClose: () => 
         onMouseDown={(e) => e.stopPropagation()}
         style={{
           background: 'var(--surface)', borderRadius: 12, boxShadow: 'var(--shadow-lift)',
-          width: '100%', maxWidth: props.maxWidth ?? 460,
+          width: '100%', maxWidth: props.maxWidth ?? 460, margin: 'auto 0',
           maxHeight: 'min(calc(100vh - 32px), 720px)', display: 'flex', flexDirection: 'column',
         }}
       >
