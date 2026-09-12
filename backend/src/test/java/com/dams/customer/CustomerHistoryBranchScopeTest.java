@@ -4,18 +4,26 @@ import com.dams.common.security.BranchScope;
 import com.dams.config.TenantContext;
 import com.dams.customer.dto.CustomerHistoryResponse;
 import com.dams.customer.entity.Customer;
+import com.dams.customer.dto.CustomerExpenseEntry;
 import com.dams.customer.repository.CustomerRepository;
 import com.dams.customer.service.CustomerService;
+import com.dams.expense.entity.ExpenseDocument;
+import com.dams.expense.entity.ExpenseLine;
+import com.dams.expense.entity.ExpenseWorkflowStatus;
 import com.dams.jobcard.entity.JobCard;
 import com.dams.jobcard.repository.JobCardRepository;
 import com.dams.jobcard.service.PendingAmountCalculator;
 import com.dams.branch.repository.BranchRepository;
+import com.dams.expense.repository.ExpenseDocumentRepository;
+import com.dams.expense.repository.ExpenseLineRepository;
+import com.dams.masters.repository.ExpenseCategoryRepository;
 import com.dams.masters.repository.ReceiveBusinessStatusRepository;
 import com.dams.masters.repository.ReceiveCategoryRepository;
 import com.dams.masters.repository.SettlementModeRepository;
 import com.dams.receive.repository.ReceiveDocumentRepository;
 import com.dams.receive.repository.SettlementLineRepository;
 import com.dams.receive.service.ReceivePaymentGuard;
+import com.dams.receiver.repository.ReceiverRepository;
 import com.dams.vehicle.repository.VehicleRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,6 +65,10 @@ class CustomerHistoryBranchScopeTest {
     @Mock private PendingAmountCalculator pendingAmountCalculator;
     @Mock private ReceivePaymentGuard paymentGuard;
     @Mock private BranchScope branchScope;
+    @Mock private ExpenseDocumentRepository expenseDocumentRepo;
+    @Mock private ExpenseLineRepository expenseLineRepo;
+    @Mock private ExpenseCategoryRepository expenseCategoryRepo;
+    @Mock private ReceiverRepository receiverRepo;
 
     private CustomerService service;
 
@@ -64,7 +76,8 @@ class CustomerHistoryBranchScopeTest {
     void setUp() {
         service = new CustomerService(customerRepo, vehicleRepo, jobCardRepo, branchRepo,
             categoryRepo, statusRepo, receiveDocumentRepo, settlementLineRepo, settlementModeRepo,
-            pendingAmountCalculator, paymentGuard, branchScope);
+            pendingAmountCalculator, paymentGuard, branchScope,
+            expenseDocumentRepo, expenseLineRepo, expenseCategoryRepo, receiverRepo);
         TenantContext.setOrgId(ORG);
         lenient().when(pendingAmountCalculator.forJobCard(any(JobCard.class)))
             .thenReturn(BigDecimal.ZERO);
@@ -94,6 +107,66 @@ class CustomerHistoryBranchScopeTest {
         assertThat(history.jobCardCount()).isEqualTo(1);
         assertThat(history.customerName()).isEqualTo("Acme Transport");
         assertThat(history.phone()).isEqualTo("9999999999");
+    }
+
+    @Test
+    void expenses_showsOnlyOwnBranchJobCards_withTheLineSumAsAmount() {
+        Customer customer = new Customer();
+        ReflectionTestUtils.setField(customer, "id", 1L);
+        customer.setOrgId(ORG);
+        customer.setName("Acme Transport");
+        when(customerRepo.findByIdAndOrgId(1L, ORG)).thenReturn(Optional.of(customer));
+        when(jobCardRepo.findByOrgIdAndCustomerIdOrderByCreatedAtDesc(ORG, 1L))
+            .thenReturn(List.of(jobCard(21L, 10L), jobCard(22L, 99L)));
+        lenient().when(branchScope.allowedBranchIds()).thenReturn(Optional.of(Set.of(10L)));
+
+        ExpenseDocument doc = new ExpenseDocument();
+        ReflectionTestUtils.setField(doc, "id", 600L);
+        doc.setOrgId(ORG);
+        doc.setBranchId(10L);
+        doc.setJobCardId(21L);
+        doc.setReceiverId(5L);
+        doc.setExpenseCategoryId(3L);
+        doc.setBusinessStatusId(1L);
+        doc.setDocumentNo("OOK-SEP26-E-001");
+        doc.setWorkflowStatus(ExpenseWorkflowStatus.APPROVED);
+        when(expenseDocumentRepo.findByOrgIdAndJobCardIdInOrderByCreatedAtDesc(ORG, List.of(21L)))
+            .thenReturn(List.of(doc));
+
+        ExpenseLine l1 = new ExpenseLine();
+        l1.setOrgId(ORG);
+        l1.setExpenseDocumentId(600L);
+        l1.setLineNo(1);
+        l1.setAmount(new BigDecimal("400"));
+        ExpenseLine l2 = new ExpenseLine();
+        l2.setOrgId(ORG);
+        l2.setExpenseDocumentId(600L);
+        l2.setLineNo(2);
+        l2.setAmount(new BigDecimal("150"));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdInOrderByLineNoAsc(ORG, List.of(600L)))
+            .thenReturn(List.of(l1, l2));
+
+        List<CustomerExpenseEntry> entries = service.expenses(1L);
+
+        assertThat(entries).hasSize(1);
+        CustomerExpenseEntry entry = entries.get(0);
+        assertThat(entry.jobCardId()).isEqualTo(21L);
+        assertThat(entry.amount()).isEqualByComparingTo(new BigDecimal("550"));
+        assertThat(entry.workflowStatus()).isEqualTo("APPROVED");
+    }
+
+    @Test
+    void expenses_returnsEmpty_whenTheCustomerHasNoJobCardsInScope() {
+        Customer customer = new Customer();
+        ReflectionTestUtils.setField(customer, "id", 1L);
+        customer.setOrgId(ORG);
+        customer.setName("Acme Transport");
+        when(customerRepo.findByIdAndOrgId(1L, ORG)).thenReturn(Optional.of(customer));
+        when(jobCardRepo.findByOrgIdAndCustomerIdOrderByCreatedAtDesc(ORG, 1L))
+            .thenReturn(List.of(jobCard(22L, 99L)));
+        lenient().when(branchScope.allowedBranchIds()).thenReturn(Optional.of(Set.of(10L)));
+
+        assertThat(service.expenses(1L)).isEmpty();
     }
 
     private static JobCard jobCard(long id, long branchId) {

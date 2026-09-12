@@ -35,6 +35,9 @@ public interface ExpenseDocumentRepository extends JpaRepository<ExpenseDocument
     List<ExpenseDocument> findByOrgIdAndWorkflowStatusInAndBranchIdInOrderBySubmittedAtDescIdDesc(
         Long orgId, Collection<ExpenseWorkflowStatus> workflowStatuses, Collection<Long> branchIds);
 
+    /** Customer history — every expense tagged to one of this customer's job cards, newest first. */
+    List<ExpenseDocument> findByOrgIdAndJobCardIdInOrderByCreatedAtDesc(Long orgId, Collection<Long> jobCardIds);
+
     boolean existsByOrgIdAndDocumentNo(Long orgId, String documentNo);
 
     boolean existsByOrgId(Long orgId);

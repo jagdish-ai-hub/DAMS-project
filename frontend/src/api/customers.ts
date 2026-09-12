@@ -59,6 +59,20 @@ export interface CustomerHistory {
   timeline: TimelineEntry[]
 }
 
+/** One expense tagged to a customer's job card — fetched on demand, not part of CustomerHistory. */
+export interface CustomerExpenseEntry {
+  id: number
+  documentNo: string | null
+  jobCardId: number
+  jobCardReference: string | null
+  branchCode: string | null
+  categoryName: string
+  receiverName: string
+  amount: number
+  workflowStatus: string
+  date: string
+}
+
 export const customersApi = {
   search(q: string) {
     return api.get<Customer[]>('/api/v1/customers', { params: q ? { q } : undefined })
@@ -68,6 +82,9 @@ export const customersApi = {
   },
   history(id: number) {
     return api.get<CustomerHistory>(`/api/v1/customers/${id}/history`)
+  },
+  expenses(id: number) {
+    return api.get<CustomerExpenseEntry[]>(`/api/v1/customers/${id}/expenses`)
   },
   create(data: CustomerRequest) {
     return api.post<Customer>('/api/v1/customers', data)
