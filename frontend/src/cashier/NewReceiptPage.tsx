@@ -192,9 +192,20 @@ export default function NewReceiptPage() {
     setLines((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : [freshLine('')]))
   }
 
+  // A Warranty/AMC/CGW claim may have nothing collected from the customer at all — the
+  // OEM covers it, and the real figure is only known at Close Claim time — so a claim
+  // line may be entered at ₹0. A plain (non-claim) line must still be > 0.
+  const isClaim = claimTypeId !== ''
+
+  function lineHasAmount(l: LineRow) {
+    if (l.amount === '') return false
+    const n = Number(l.amount)
+    return isClaim ? n >= 0 : n > 0
+  }
+
   function buildLines() {
     return lines
-      .filter((l) => Number(l.amount) > 0 && l.settlementModeId !== '')
+      .filter((l) => lineHasAmount(l) && l.settlementModeId !== '')
       .map((l) => ({
         transactionDate: l.transactionDate,
         settlementModeId: Number(l.settlementModeId),
@@ -211,8 +222,10 @@ export default function NewReceiptPage() {
     if (categoryId === '' || businessStatusId === '') return 'Category and status are required'
     if (requireLine && buildLines().length === 0) return 'Add at least one settlement row with an amount'
     for (const l of lines) {
-      if (l.amount !== '' && !(Number(l.amount) > 0)) return 'Line amount must be greater than 0'
-      if (Number(l.amount) > 0) {
+      if (l.amount !== '' && !(isClaim ? Number(l.amount) >= 0 : Number(l.amount) > 0)) {
+        return isClaim ? 'Line amount cannot be negative' : 'Line amount must be greater than 0'
+      }
+      if (lineHasAmount(l)) {
         if (l.settlementModeId === '') return 'Select a settlement mode for each payment row with an amount'
         const m = modeById(l.settlementModeId)
         if (m?.requiresBank && l.bankId === '') return `${m.name} needs a bank`
@@ -357,7 +370,7 @@ export default function NewReceiptPage() {
             remark: current.remark || undefined,
           })
         }
-      } else if (Number(current.amount) > 0 && current.settlementModeId !== '') {
+      } else if (lineHasAmount(current) && current.settlementModeId !== '') {
         // A row added on this visit — never sent to the server before. Always allowed
         // (this is "Add Payment"), even once the document is verified/approved.
         await receiptsApi.addLine(docId, {

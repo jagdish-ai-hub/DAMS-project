@@ -7,6 +7,37 @@
 
 ## Revision log
 
+- **rev 35 (2026-09-12)** — Fixed the real bug behind "Warranty claims never reach the
+  FM's Open Claims queue" (dealership report — a Warranty job the cashier created
+  couldn't be closed because it never showed up as a claim at all).
+  Root cause: `ReceiveDocumentService.createJobCardInline()` built the new job card's
+  create request from every `CreateReceiptRequest` field EXCEPT `claimTypeId` — and
+  `CreateReceiptRequest` didn't even declare that field, so a Claim Type picked while
+  creating a brand-new receipt was silently dropped by Jackson before it ever reached
+  `JobCardService` (whose own create/patch logic was already correct — this was purely
+  a missing wire-up from the Claim Type redesign, rev 29). The bug only hit a *brand-new*
+  job card created with a claim type from the start; editing an *existing* job card to
+  add a Claim Type already worked (that path goes through `JobCardService.patch`, which
+  was correct all along). Added `claimTypeId` to `CreateReceiptRequest`, wired it through
+  `createJobCardInline`, and added a regression test
+  (`create_withNoExistingJobCard_carriesTheClaimTypeOntoTheNewJobCard`) — this exact
+  scenario had zero test coverage before. A job already broken by this (created after
+  rev 29, before this fix) has no reliable signal to auto-heal from; the fix going
+  forward is to open that receipt and re-pick its Claim Type once, which saves via the
+  already-correct patch path.
+  Also: a Warranty/AMC/CGW line may now be entered at ₹0 — the OEM can cover the whole
+  amount, with the real figure only known at Close Claim time, and the old blanket
+  "amount must be > 0" rule made that impossible to record at all. `SettlementLineInput
+  .amount` relaxed from `@Positive` to `@PositiveOrZero` (still blocks negative); a new
+  service-side check in `ReceiveDocumentService.applyLineInput` enforces the real rule —
+  a claim line may be 0, a plain line still must be > 0 — since that distinction needs
+  the job card's claim status, not just the DTO in isolation. `NewReceiptPage.tsx`
+  mirrors the same rule (`lineHasAmount()`) so a claim receipt can actually be submitted
+  with an all-₹0 line. New tests: `addPayment_onANonClaimJobCard_rejectsAZeroAmount`,
+  `addPayment_onAWarrantyClaimJobCard_allowsAZeroAmount`.
+  Verified: `mvn test` 181 green (0 failures/errors, 4 pre-existing Docker-only skips);
+  `tsc`/`eslint`/`vitest` clean.
+
 - **rev 34 (2026-09-12)** — Cashier Home "View" button + enforced line lock on reopened
   documents. `CashierHomePage`'s per-job-card row dropped "View Receipts" (a separate
   read-only modal) and "Print" in favour of one "View" button, styled like Add Payment,

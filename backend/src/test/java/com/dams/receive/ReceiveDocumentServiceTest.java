@@ -13,6 +13,8 @@ import com.dams.common.exception.DamsException;
 import com.dams.config.TenantContext;
 import com.dams.customer.entity.Customer;
 import com.dams.customer.repository.CustomerRepository;
+import com.dams.jobcard.dto.JobCardCreateRequest;
+import com.dams.jobcard.dto.JobCardResponse;
 import com.dams.jobcard.entity.JobCard;
 import com.dams.jobcard.repository.ClaimCloseRepository;
 import com.dams.jobcard.repository.JobCardRepository;
@@ -57,6 +59,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -201,6 +204,32 @@ class ReceiveDocumentServiceTest {
     }
 
     @Test
+    void addPayment_onANonClaimJobCard_rejectsAZeroAmount() {
+        ReceiveDocument open = openDoc();
+        when(receiveDocumentRepo.findByIdAndOrgId(500L, ORG)).thenReturn(Optional.of(open));
+
+        assertThatThrownBy(() -> service.addLine(500L, lineInput(BigDecimal.ZERO)))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("greater than 0");
+        verify(settlementLineRepo, never()).save(any(SettlementLine.class));
+    }
+
+    @Test
+    void addPayment_onAWarrantyClaimJobCard_allowsAZeroAmount() {
+        ReceiveDocument open = openDoc();
+        when(receiveDocumentRepo.findByIdAndOrgId(500L, ORG)).thenReturn(Optional.of(open));
+        JobCard claimJobCard = jobCard(new BigDecimal("15431"));
+        claimJobCard.setClaimTypeId(9L); // Warranty
+        when(jobCardRepo.findByIdAndOrgId(JOB_CARD_ID, ORG)).thenReturn(Optional.of(claimJobCard));
+
+        service.addLine(500L, lineInput(BigDecimal.ZERO));
+
+        ArgumentCaptor<SettlementLine> line = ArgumentCaptor.forClass(SettlementLine.class);
+        verify(settlementLineRepo).save(line.capture());
+        assertThat(line.getValue().getAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
     void create_onAJobCardWithAClosedClaim_isRejected() {
         when(claimCloseRepo.existsByOrgIdAndJobCardId(ORG, JOB_CARD_ID)).thenReturn(true);
 
@@ -241,6 +270,33 @@ class ReceiveDocumentServiceTest {
         ArgumentCaptor<ReceiveDocument> docCaptor = ArgumentCaptor.forClass(ReceiveDocument.class);
         verify(receiveDocumentRepo, org.mockito.Mockito.atLeastOnce()).save(docCaptor.capture());
         verify(auditService).recordUserEvent(eq("ReceiveDocument"), any(), any(), eq(EventType.CREATED), eq(CASHIER_ID), any());
+    }
+
+    @Test
+    void create_withNoExistingJobCard_carriesTheClaimTypeOntoTheNewJobCard() {
+        long newJobCardId = 99L;
+        JobCardResponse createdJobCard = mock(JobCardResponse.class);
+        when(createdJobCard.id()).thenReturn(newJobCardId);
+        when(jobCardService.create(any())).thenReturn(createdJobCard);
+        JobCard newJobCard = jobCard(null);
+        ReflectionTestUtils.setField(newJobCard, "id", newJobCardId);
+        when(jobCardRepo.findByIdAndOrgId(newJobCardId, ORG)).thenReturn(Optional.of(newJobCard));
+        when(receiveDocumentRepo.findByOrgIdAndJobCardIdAndSettledFalseAndWorkflowStatusNot(
+            ORG, newJobCardId, WorkflowStatus.REJECTED)).thenReturn(Optional.empty());
+        when(claimCloseRepo.existsByOrgIdAndJobCardId(ORG, newJobCardId)).thenReturn(false);
+        when(paymentGuard.requireCanPost(eq(ORG), any(JobCard.class))).thenReturn(cashier());
+
+        CreateReceiptRequest req = new CreateReceiptRequest();
+        req.setCustomerName("Kaka Kalia");
+        req.setCategoryId(1L);
+        req.setBusinessStatusId(1L);
+        req.setClaimTypeId(9L); // Warranty
+
+        service.create(req);
+
+        ArgumentCaptor<JobCardCreateRequest> jcReq = ArgumentCaptor.forClass(JobCardCreateRequest.class);
+        verify(jobCardService).create(jcReq.capture());
+        assertThat(jcReq.getValue().getClaimTypeId()).isEqualTo(9L);
     }
 
     @Test
