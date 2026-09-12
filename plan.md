@@ -7,6 +7,24 @@
 
 ## Revision log
 
+- **rev 32 (2026-09-12)** — UI-noise cleanup batch (dealership testing feedback).
+  `AppShell` header split into two rows: row 1 (logo + right-side actions) stays a
+  single line at every width; row 2 is the role's nav, its own line whenever the
+  screen is wider than a phone. The hamburger drawer used to hide the desktop nav
+  below `lg` (1024px) — a real desktop window that's unmaximized, has devtools open,
+  or is running above ~125% OS display scaling easily reports an effective CSS width
+  under that, so the hamburger was showing on genuine desktops. Threshold dropped to
+  `sm` (640px) and nav no longer shares a row with the button cluster, so it can't be
+  squeezed out; nav row scrolls horizontally as a safety net if it's ever still tight.
+  Removed the per-screen "?" `HelpButton` from 7 screens (Cashier Home, My Entries,
+  Dashboard, Team & Branches, Masters, FM Approvals & Claims, Accountant Review Queue)
+  — every one of those is a core, frequently-used screen already covered by the
+  topbar-wide "? Help" button (unchanged). Kept it only on the two genuinely
+  non-obvious accounting workflows: the Cash page (day-close, drawer reconciliation)
+  and Override Audit.
+  Verified: `tsc --noEmit`, `eslint --max-warnings=0`, `vitest run` all clean;
+  production build confirmed the `sm:hidden`/`sm:flex` rules are actually generated.
+
 - **rev 31 (2026-09-11)** — Cashier feedback batch (dealership testing on Ooriba Motors),
   merged in from a previously-unmerged PR that had drifted onto a stale base (the
   designated branch had been restarted from `main` before this PR landed, so it sat

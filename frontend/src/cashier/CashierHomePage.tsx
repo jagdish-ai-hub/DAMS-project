@@ -8,7 +8,6 @@ import AddPaymentModal from './AddPaymentModal'
 import ViewReceiptsModal from './ViewReceiptsModal'
 import PrintReceiptModal from './PrintReceiptModal'
 import { Printer } from 'lucide-react'
-import HelpButton from '../help/HelpButton'
 
 /**
  * Cashier home (intial ui prototypes/cashier-home.html): universal search, results, a
@@ -129,10 +128,7 @@ function HomeSearch(props: {
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '32px 0 24px' }}>
       <div style={{ textAlign: 'center', marginBottom: 6 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-          <h1 style={{ fontSize: '1.5rem', color: 'var(--navy)', marginBottom: 6 }}>Find a customer</h1>
-          <HelpButton slug="finding-a-customer" />
-        </div>
+        <h1 style={{ fontSize: '1.5rem', color: 'var(--navy)', marginBottom: 6 }}>Find a customer</h1>
         <div style={{ fontSize: '0.9rem', color: 'var(--muted)' }}>
           Search by name, vehicle number, job card, or invoice — anything works
         </div>

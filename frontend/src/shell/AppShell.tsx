@@ -113,49 +113,85 @@ export default function AppShell() {
       <header style={{
         position: 'sticky', top: 0, zIndex: 40,
         background: 'var(--navy)', color: '#fff', padding: '0 clamp(10px, 2.5vw, 20px)',
-        display: 'flex', alignItems: 'center', gap: 'clamp(10px, 2vw, 22px)', height: 52,
       }}>
-        {/* Mobile hamburger toggle (< 1024px) */}
-        <button
-          type="button"
-          onClick={() => setNavOpen(!navOpen)}
-          className="flex lg:hidden"
-          aria-label="Toggle navigation"
-          aria-expanded={navOpen}
-          style={{
-            background: 'none', border: 'none', color: '#fff', cursor: 'pointer',
-            padding: 6, minWidth: 40, minHeight: 40, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            {navOpen ? (
-              <>
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </>
-            ) : (
-              <>
-                <line x1="3" y1="12" x2="21" y2="12" />
-                <line x1="3" y1="6" x2="21" y2="6" />
-                <line x1="3" y1="18" x2="21" y2="18" />
-              </>
-            )}
-          </svg>
-        </button>
+        {/* Row 1: hamburger (phone only, < 640px) + logo + right-side actions — always one line. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(10px, 2vw, 22px)', height: 52 }}>
+          <button
+            type="button"
+            onClick={() => setNavOpen(!navOpen)}
+            className="flex sm:hidden"
+            aria-label="Toggle navigation"
+            aria-expanded={navOpen}
+            style={{
+              background: 'none', border: 'none', color: '#fff', cursor: 'pointer',
+              padding: 6, minWidth: 40, minHeight: 40, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              {navOpen ? (
+                <>
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </>
+              ) : (
+                <>
+                  <line x1="3" y1="12" x2="21" y2="12" />
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <line x1="3" y1="18" x2="21" y2="18" />
+                </>
+              )}
+            </svg>
+          </button>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            width: 28, height: 28, borderRadius: 7, background: 'rgba(255,255,255,.14)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontWeight: 700, fontSize: '0.72rem',
-          }}>
-            DA
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 28, height: 28, borderRadius: 7, background: 'rgba(255,255,255,.14)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontWeight: 700, fontSize: '0.72rem',
+            }}>
+              DA
+            </div>
+            <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>DAMS</span>
           </div>
-          <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>DAMS</span>
+
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+            {canAsk && (
+              <button
+                type="button"
+                onClick={() => setAskOpen(true)}
+                title="Ask DAMS (Ctrl+K)"
+                style={{
+                  background: 'rgba(255,255,255,.14)', color: '#fff', border: 'none', borderRadius: 7,
+                  padding: '6px 12px', fontSize: '0.83rem', fontWeight: 600, cursor: 'pointer',
+                  minHeight: 32, display: 'flex', alignItems: 'center',
+                }}
+              >
+                ✦ Ask DAMS
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setHelpOpen(true)}
+              style={{
+                background: 'rgba(255,255,255,.14)', color: '#fff', border: 'none', borderRadius: 7,
+                padding: '6px 12px', fontSize: '0.83rem', fontWeight: 600, cursor: 'pointer',
+                minHeight: 32, display: 'flex', alignItems: 'center',
+              }}
+            >
+              ? Help
+            </button>
+
+            <AccountMenu />
+          </div>
         </div>
 
-        {/* Desktop Navigation (>= 1024px) */}
-        <nav className="hidden lg:flex" style={{ gap: 4, flex: 1 }}>
+        {/* Row 2: nav — its own line so it never fights the row above for space, on any
+            screen from a phone-landscape width up. Only phones (< 640px) get the hamburger
+            drawer instead, so "desktop" (tablet width and up) never shows a hamburger. */}
+        <nav
+          className="hidden sm:flex"
+          style={{ gap: 4, padding: '0 0 8px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
+        >
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -163,7 +199,7 @@ export default function AppShell() {
               end={item.end}
               style={({ isActive }) => ({
                 color: '#fff', textDecoration: 'none', fontSize: '0.83rem', fontWeight: 600,
-                padding: '6px 12px', borderRadius: 7,
+                padding: '6px 12px', borderRadius: 7, whiteSpace: 'nowrap',
                 background: isActive ? 'rgba(255,255,255,.16)' : 'transparent',
               })}
             >
@@ -171,42 +207,12 @@ export default function AppShell() {
             </NavLink>
           ))}
         </nav>
-
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
-          {canAsk && (
-            <button
-              type="button"
-              onClick={() => setAskOpen(true)}
-              title="Ask DAMS (Ctrl+K)"
-              style={{
-                background: 'rgba(255,255,255,.14)', color: '#fff', border: 'none', borderRadius: 7,
-                padding: '6px 12px', fontSize: '0.83rem', fontWeight: 600, cursor: 'pointer',
-                minHeight: 32, display: 'flex', alignItems: 'center',
-              }}
-            >
-              ✦ Ask DAMS
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setHelpOpen(true)}
-            style={{
-              background: 'rgba(255,255,255,.14)', color: '#fff', border: 'none', borderRadius: 7,
-              padding: '6px 12px', fontSize: '0.83rem', fontWeight: 600, cursor: 'pointer',
-              minHeight: 32, display: 'flex', alignItems: 'center',
-            }}
-          >
-            ? Help
-          </button>
-
-          <AccountMenu />
-        </div>
       </header>
 
-      {/* Mobile navigation slide-out drawer (< 1024px) */}
+      {/* Mobile navigation slide-out drawer (< 640px only) */}
       {navOpen && (
         <div
-          className="dams-anim-backdrop lg:hidden"
+          className="dams-anim-backdrop sm:hidden"
           onClick={() => setNavOpen(false)}
           style={{
             position: 'fixed', inset: 0, background: 'rgba(16,24,40,.45)', zIndex: 45,

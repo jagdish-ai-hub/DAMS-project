@@ -6,7 +6,6 @@ import { reviewApi, type ReviewQueueItem, type ReviewType } from '../api/review'
 import { card, ErrorBanner, ghostBtn, primaryBtn, Skeleton, SkeletonRows, inr } from '../shell/ui'
 import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, type AnyDoc } from '../review/reviewShared'
 import GlobalSearch from '../shared/GlobalSearch'
-import HelpButton from '../help/HelpButton'
 import { useAuth } from '../auth/useAuth'
 import { Download } from 'lucide-react'
 import ExportModal from '../shared/ExportModal'
@@ -113,10 +112,7 @@ export default function ReviewQueuePage() {
     <div style={{ maxWidth: 1180, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)', marginBottom: 4 }}>Review Queue</h1>
-            <HelpButton slug="reviewing-the-queue" />
-          </div>
+          <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)', marginBottom: 4 }}>Review Queue</h1>
           <div style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
             Verify, query, or adjust each submitted entry. A verified entry moves on to the Finance Manager.
           </div>

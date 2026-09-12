@@ -13,7 +13,6 @@ import { card, ErrorBanner, Skeleton, inr, fmtDate, fmtDateTime, primaryBtn, gho
 import GlobalSearch from '../shared/GlobalSearch'
 import AskDamsPanel from './AskDamsPanel'
 import AiInsightsSection from './AiInsightsSection'
-import HelpButton from '../help/HelpButton'
 import { Download, AlertTriangle } from 'lucide-react'
 import ExportModal from '../shared/ExportModal'
 import MoneyBreakdownModal, { type BreakdownRow, moneyMovementsToRows, cashMovementsToRows } from '../shell/MoneyBreakdownModal'
@@ -154,7 +153,6 @@ export default function DashboardPage() {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 4 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap' }}>
           <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)' }}>Dashboard</h1>
-          <HelpButton slug="reading-the-dashboard" />
           <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
             Verified numbers · cash In/Out excluded from collections &amp; expenses
           </span>

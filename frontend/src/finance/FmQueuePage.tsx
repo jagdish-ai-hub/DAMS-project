@@ -7,7 +7,6 @@ import { jobCardsApi } from '../api/jobCards'
 import { card, ErrorBanner, ghostBtn, primaryBtn, inputStyle, Modal, Skeleton, SkeletonRows, inr } from '../shell/ui'
 import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, type AnyDoc } from '../review/reviewShared'
 import GlobalSearch from '../shared/GlobalSearch'
-import HelpButton from '../help/HelpButton'
 import { useAuth } from '../auth/useAuth'
 import AiClaimBanner from './AiClaimBanner'
 import { useRiskMap, RiskDot } from '../review/AiRiskBadge'
@@ -123,10 +122,7 @@ export default function FmQueuePage() {
     <div style={{ maxWidth: 1180, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)', marginBottom: 4 }}>Approvals & Claims</h1>
-            <HelpButton slug="approving-entries" />
-          </div>
+          <h1 style={{ fontSize: '1.3rem', color: 'var(--navy)', marginBottom: 4 }}>Approvals & Claims</h1>
           <div style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
             Give each verified entry final approval, and close warranty / AMC / CG claims.
           </div>
