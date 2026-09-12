@@ -32,6 +32,10 @@ public interface CashDocumentRepository extends JpaRepository<CashDocument, Long
     List<CashDocument> findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(
         Long orgId, CashWorkflowStatus workflowStatus);
 
+    /** Accountant "Verified" overview — movements past SUBMITTED within the caller's branches, newest first. */
+    List<CashDocument> findByOrgIdAndWorkflowStatusInAndBranchIdInOrderBySubmittedAtDescIdDesc(
+        Long orgId, Collection<CashWorkflowStatus> workflowStatuses, Collection<Long> branchIds);
+
     boolean existsByOrgIdAndDocumentNo(Long orgId, String documentNo);
 
     boolean existsByOrgId(Long orgId);

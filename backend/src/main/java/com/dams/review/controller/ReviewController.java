@@ -55,6 +55,27 @@ public class ReviewController {
         return reviewService.expenseQueue();
     }
 
+    @GetMapping("/review/receipts/verified")
+    @Operation(summary = "Receipts this accountant has already verified or later (VERIFIED/APPROVED, in their branches)")
+    @PreAuthorize("hasAuthority('ACCOUNTANT')")
+    public List<ReviewQueueItem> verifiedReceiptQueue() {
+        return reviewService.verifiedReceiptQueue();
+    }
+
+    @GetMapping("/review/expenses/verified")
+    @Operation(summary = "Expenses this accountant has already verified or later (VERIFIED/APPROVED/CLOSED, in their branches)")
+    @PreAuthorize("hasAuthority('ACCOUNTANT')")
+    public List<ReviewQueueItem> verifiedExpenseQueue() {
+        return reviewService.verifiedExpenseQueue();
+    }
+
+    @GetMapping("/review/cash/verified")
+    @Operation(summary = "Cash movements this accountant has already verified or later (VERIFIED/APPROVED, in their branches)")
+    @PreAuthorize("hasAuthority('ACCOUNTANT')")
+    public List<ReviewQueueItem> verifiedCashQueue() {
+        return reviewService.verifiedCashQueue();
+    }
+
     @GetMapping("/review/fm/receipts")
     @Operation(summary = "Finance Manager receipt queue — awaiting approval, open claims, recently closed")
     @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
