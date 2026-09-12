@@ -219,7 +219,7 @@ public class ReceiveDocumentService {
             opened = true;
         }
 
-        List<SettlementLine> added = appendLines(orgId, doc, request.getLines(), me.getId());
+        List<SettlementLine> added = appendLines(orgId, doc, request.getLines(), me.getId(), jobCard.getClaimTypeId() != null);
         doc.setLastModifiedBy(me.getId());
 
         if (opened) {
@@ -262,7 +262,7 @@ public class ReceiveDocumentService {
                 + " already has a closed claim — no new receipts or payments can be recorded against it");
         }
 
-        SettlementLine line = appendLines(orgId, doc, List.of(input), me.getId()).get(0);
+        SettlementLine line = appendLines(orgId, doc, List.of(input), me.getId(), jobCard.getClaimTypeId() != null).get(0);
         doc.setLastModifiedBy(me.getId());
         auditService.recordUserEvent(ENTITY, doc.getId(), doc.getBranchId(), EventType.LINE_ADDED, me.getId(),
             orderedDetail("lineNo", line.getLineNo(), "amount", line.getAmount()));
@@ -337,7 +337,7 @@ public class ReceiveDocumentService {
         cashDateLock.requireCashLineDateOpen(orgId, doc.getBranchId(), line.getTransactionDate(),
             existingMode != null && existingMode.isCash(), "settlement");
 
-        applyLineInput(orgId, doc.getBranchId(), line, input);
+        applyLineInput(orgId, doc.getBranchId(), line, input, jobCard.getClaimTypeId() != null);
         settlementLineRepo.save(line);
         doc.setLastModifiedBy(me.getId());
         receiveDocumentRepo.save(doc);
@@ -386,6 +386,7 @@ public class ReceiveDocumentService {
         jc.setB2b(r.getB2b());
         jc.setGstNo(r.getGstNo());
         jc.setCategoryId(r.getCategoryId());
+        jc.setClaimTypeId(r.getClaimTypeId());
         jc.setBusinessStatusId(r.getBusinessStatusId());
         // JobCardService forces a cashier's branch to their home branch and validates B2B/GST.
         JobCardResponse created = jobCardService.create(jc);
@@ -404,7 +405,7 @@ public class ReceiveDocumentService {
     }
 
     private List<SettlementLine> appendLines(Long orgId, ReceiveDocument doc,
-                                             List<SettlementLineInput> inputs, Long createdByUserId) {
+                                             List<SettlementLineInput> inputs, Long createdByUserId, boolean isClaim) {
         if (inputs == null || inputs.isEmpty()) {
             return List.of();
         }
@@ -423,7 +424,7 @@ public class ReceiveDocumentService {
                 line.setLineId(doc.getDocumentNo() + "-L" + nextLineNo);
             }
             line.setCreatedBy(createdByUserId);
-            applyLineInput(orgId, doc.getBranchId(), line, input);
+            applyLineInput(orgId, doc.getBranchId(), line, input, isClaim);
             saved.add(settlementLineRepo.save(line));
             nextLineNo++;
         }
@@ -431,7 +432,15 @@ public class ReceiveDocumentService {
         return saved;
     }
 
-    private void applyLineInput(Long orgId, Long branchId, SettlementLine line, SettlementLineInput input) {
+    /**
+     * {@code isClaim} lets a Warranty/AMC/CGW job card record a ₹0 line — the whole amount
+     * may be covered by the OEM claim rather than collected from the customer at all, and the
+     * final figure is only known at Close Claim time. A non-claim line still must be > 0.
+     */
+    private void applyLineInput(Long orgId, Long branchId, SettlementLine line, SettlementLineInput input, boolean isClaim) {
+        if (!isClaim && input.getAmount().signum() <= 0) {
+            throw DamsException.badRequest("amount must be greater than 0");
+        }
         SettlementMode mode = settlementModeRepo.findByIdAndOrgId(input.getSettlementModeId(), orgId)
             .orElseThrow(() -> DamsException.notFound("Settlement mode", input.getSettlementModeId()));
         if (!mode.isActive()) {

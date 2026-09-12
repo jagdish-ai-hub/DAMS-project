@@ -1,7 +1,7 @@
 package com.dams.receive.dto;
 
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -22,8 +22,13 @@ public class SettlementLineInput {
     @NotNull(message = "settlementModeId is required")
     private Long settlementModeId;
 
+    /**
+     * A plain line must be > 0; a Warranty/AMC/CGW claim line may be 0 (see
+     * {@code ReceiveDocumentService.applyLineInput}, which enforces that distinction —
+     * this annotation only blocks a negative amount at the boundary).
+     */
     @NotNull(message = "amount is required")
-    @Positive(message = "amount must be greater than 0")
+    @PositiveOrZero(message = "amount cannot be negative")
     private BigDecimal amount;
 
     private Long bankId;

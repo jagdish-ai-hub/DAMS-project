@@ -41,6 +41,8 @@ public class CreateReceiptRequest {
     private Boolean b2b;
     @Size(max = 20) private String gstNo;
     private Long categoryId;
+    /** Optional. Set when the job card is a Warranty / AMC / CGW claim from the start. */
+    private Long claimTypeId;
     private Long businessStatusId;
 
     // --- settlement lines ---
