@@ -7,6 +7,28 @@
 
 ## Revision log
 
+- **rev 34 (2026-09-12)** — Cashier Home "View" button + enforced line lock on reopened
+  documents. `CashierHomePage`'s per-job-card row dropped "View Receipts" (a separate
+  read-only modal) and "Print" in favour of one "View" button, styled like Add Payment,
+  that opens the real receipt (`?editDoc=`, same page My Entries opens into) — printing
+  is one click further in, from inside the opened receipt, so no separate shortcut is
+  needed on the row.
+  The backend already refused `updateLine`/`deleteLine` once a receipt/expense left
+  DRAFT/QUERIED (`requireEditableLines`, unchanged) — but `NewReceiptPage`/
+  `NewExpensePage` still rendered every existing line as a live, fully-editable input
+  with no visual sign it was locked, so a cashier opening an already-VERIFIED/APPROVED
+  (or reopened-to-SUBMITTED) document could type into an old, already-checked line and
+  hit Save with no feedback that the edit was silently discarded server-side. Existing
+  lines (`lineNo != null`) are now disabled and hidden behind a 🔒 in the UI whenever
+  `workflowStatus` isn't DRAFT/QUERIED, with a banner explaining the lock; a brand-new
+  row stays fully editable and addable regardless of status, matching the reopen design
+  from rev 29. The bottom action bar no longer offers a "Submit" that the backend would
+  reject outright on an already-submitted document — outside DRAFT/QUERIED it now shows
+  a single "Save" (header edit / new line only).
+  Backend unchanged — this closes a UI gap, not a real authorization hole.
+  Verified: `tsc --noEmit`, `eslint --max-warnings=0`, `vitest run` all clean; production
+  build succeeds.
+
 - **rev 33 (2026-09-12)** — Real UPI IDs, multiple, shown as QR cards. The UPI QR
   modal always pointed at a hardcoded fake account (`jjmotors@icici` / "JJ Motors")
   baked into `UpiQrModal.tsx` — there was nowhere in the app for an org to enter its
