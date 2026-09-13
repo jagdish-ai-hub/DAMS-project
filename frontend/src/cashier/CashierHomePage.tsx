@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { searchApi, type SearchHit } from '../api/search'
-import { customersApi, type CustomerHistory } from '../api/customers'
+import { customersApi, type CustomerHistory, type CustomerExpenseEntry } from '../api/customers'
 import { card, ErrorBanner, Skeleton, SkeletonRows, inr, initials, fmtDateShort } from '../shell/ui'
 import AddPaymentModal from './AddPaymentModal'
 
@@ -335,7 +335,32 @@ function CustomerHistoryView(props: {
   const [error, setError] = useState('')
   const [payTarget, setPayTarget] = useState<PaymentTarget | null>(null)
   const [reloadTick, setReloadTick] = useState(0)
+  const [expenses, setExpenses] = useState<CustomerExpenseEntry[] | null>(null)
+  const [expensesOpen, setExpensesOpen] = useState(false)
+  const [expensesLoading, setExpensesLoading] = useState(false)
+  const [expensesError, setExpensesError] = useState('')
   const { onLoaded } = props
+
+  function toggleExpenses() {
+    if (expensesOpen) {
+      setExpensesOpen(false)
+      return
+    }
+    setExpensesOpen(true)
+    if (expenses != null) return
+    setExpensesLoading(true)
+    setExpensesError('')
+    customersApi.expenses(props.customerId)
+      .then(({ data }) => setExpenses(data))
+      .catch((e) => setExpensesError(apiError(e, 'Could not load linked expenses.')))
+      .finally(() => setExpensesLoading(false))
+  }
+
+  useEffect(() => {
+    setExpenses(null)
+    setExpensesOpen(false)
+    setExpensesError('')
+  }, [props.customerId])
 
   useEffect(() => {
     let live = true
@@ -540,6 +565,56 @@ function CustomerHistoryView(props: {
                 ))
               )}
             </div>
+          </section>
+
+          <section style={{ ...card, padding: 0 }}>
+            <button
+              type="button"
+              onClick={toggleExpenses}
+              style={{
+                width: '100%', textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer',
+                padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 8,
+                borderBottom: expensesOpen ? '1px solid var(--line)' : 'none',
+              }}
+            >
+              <h3 style={{ fontSize: '0.94rem', fontWeight: 700, flex: 1 }}>Expenses linked to this customer</h3>
+              <span style={{ fontSize: '0.76rem', color: 'var(--navy2)', fontWeight: 600 }}>
+                {expensesOpen ? 'Hide ▲' : 'Show ▼'}
+              </span>
+            </button>
+            {expensesOpen && (
+              <div style={{ padding: '14px 18px' }}>
+                <ErrorBanner message={expensesError} />
+                {expensesLoading && <SkeletonRows rows={3} height={44} />}
+                {!expensesLoading && expenses != null && expenses.length === 0 && (
+                  <div style={{ color: 'var(--faint)', fontSize: '0.83rem' }}>
+                    No expenses tagged to this customer's job cards.
+                  </div>
+                )}
+                {!expensesLoading && expenses != null && expenses.map((e) => (
+                  <button
+                    key={e.id}
+                    type="button"
+                    onClick={() => navigate(`/app/new-expense?editDoc=${e.id}`)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', width: '100%',
+                      border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer',
+                      borderBottom: '1px dashed var(--line)', fontSize: '0.83rem',
+                    }}
+                  >
+                    <span style={{ width: 96, color: 'var(--faint)', fontSize: '0.76rem', flexShrink: 0 }}>
+                      {fmtDateShort(e.date)}
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {e.categoryName} · {e.receiverName} · <span style={{ fontFamily: 'Consolas, monospace', fontSize: '0.72rem' }}>{e.documentNo ?? 'draft'}</span>
+                    </span>
+                    <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--red)' }}>
+                      {inr(e.amount)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </section>
         </>
       )}

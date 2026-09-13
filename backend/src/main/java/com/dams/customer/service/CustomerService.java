@@ -5,18 +5,25 @@ import com.dams.branch.repository.BranchRepository;
 import com.dams.common.exception.DamsException;
 import com.dams.common.security.BranchScope;
 import com.dams.config.TenantContext;
+import com.dams.customer.dto.CustomerExpenseEntry;
 import com.dams.customer.dto.CustomerHistoryResponse;
 import com.dams.customer.dto.CustomerRequest;
 import com.dams.customer.dto.CustomerResponse;
 import com.dams.customer.entity.Customer;
 import com.dams.customer.repository.CustomerRepository;
+import com.dams.expense.entity.ExpenseDocument;
+import com.dams.expense.entity.ExpenseLine;
+import com.dams.expense.repository.ExpenseDocumentRepository;
+import com.dams.expense.repository.ExpenseLineRepository;
 import com.dams.jobcard.dto.JobCardResponse;
 import com.dams.jobcard.entity.JobCard;
 import com.dams.jobcard.repository.JobCardRepository;
 import com.dams.jobcard.service.PendingAmountCalculator;
+import com.dams.masters.entity.ExpenseCategory;
 import com.dams.masters.entity.ReceiveBusinessStatus;
 import com.dams.masters.entity.ReceiveCategory;
 import com.dams.masters.entity.SettlementMode;
+import com.dams.masters.repository.ExpenseCategoryRepository;
 import com.dams.masters.repository.ReceiveBusinessStatusRepository;
 import com.dams.masters.repository.ReceiveCategoryRepository;
 import com.dams.masters.repository.SettlementModeRepository;
@@ -25,6 +32,8 @@ import com.dams.receive.entity.SettlementLine;
 import com.dams.receive.repository.ReceiveDocumentRepository;
 import com.dams.receive.repository.SettlementLineRepository;
 import com.dams.receive.service.ReceivePaymentGuard;
+import com.dams.receiver.entity.Receiver;
+import com.dams.receiver.repository.ReceiverRepository;
 import com.dams.vehicle.entity.Vehicle;
 import com.dams.vehicle.repository.VehicleRepository;
 import org.slf4j.Logger;
@@ -64,6 +73,10 @@ public class CustomerService {
     private final PendingAmountCalculator pendingAmountCalculator;
     private final ReceivePaymentGuard paymentGuard;
     private final BranchScope branchScope;
+    private final ExpenseDocumentRepository expenseDocumentRepo;
+    private final ExpenseLineRepository expenseLineRepo;
+    private final ExpenseCategoryRepository expenseCategoryRepo;
+    private final ReceiverRepository receiverRepo;
 
     public CustomerService(CustomerRepository customerRepo,
                            VehicleRepository vehicleRepo,
@@ -76,7 +89,11 @@ public class CustomerService {
                            SettlementModeRepository settlementModeRepo,
                            PendingAmountCalculator pendingAmountCalculator,
                            ReceivePaymentGuard paymentGuard,
-                           BranchScope branchScope) {
+                           BranchScope branchScope,
+                           ExpenseDocumentRepository expenseDocumentRepo,
+                           ExpenseLineRepository expenseLineRepo,
+                           ExpenseCategoryRepository expenseCategoryRepo,
+                           ReceiverRepository receiverRepo) {
         this.customerRepo = customerRepo;
         this.vehicleRepo = vehicleRepo;
         this.jobCardRepo = jobCardRepo;
@@ -89,6 +106,10 @@ public class CustomerService {
         this.pendingAmountCalculator = pendingAmountCalculator;
         this.paymentGuard = paymentGuard;
         this.branchScope = branchScope;
+        this.expenseDocumentRepo = expenseDocumentRepo;
+        this.expenseLineRepo = expenseLineRepo;
+        this.expenseCategoryRepo = expenseCategoryRepo;
+        this.receiverRepo = receiverRepo;
     }
 
     @Transactional(readOnly = true)
@@ -230,6 +251,63 @@ public class CustomerService {
             totalOutstanding,
             summaries,
             timeline);
+    }
+
+    /**
+     * Every expense tagged to one of this customer's job cards (a workshop expense billed
+     * against their vehicle/case) — fetched only when the cashier asks for it, since most
+     * customer look-ups never need it. Same branch scoping as {@link #history}, newest first.
+     */
+    @Transactional(readOnly = true)
+    public List<CustomerExpenseEntry> expenses(Long id) {
+        Long orgId = TenantContext.requireOrgId();
+        load(id);
+
+        Optional<Set<Long>> allowed = branchScope.allowedBranchIds();
+        List<JobCard> jobCards = jobCardRepo.findByOrgIdAndCustomerIdOrderByCreatedAtDesc(orgId, id)
+            .stream()
+            .filter(j -> allowed.map(set -> set.contains(j.getBranchId())).orElse(true))
+            .toList();
+        List<Long> jobCardIds = jobCards.stream().map(JobCard::getId).toList();
+        if (jobCardIds.isEmpty()) {
+            return List.of();
+        }
+
+        List<ExpenseDocument> docs = expenseDocumentRepo.findByOrgIdAndJobCardIdInOrderByCreatedAtDesc(orgId, jobCardIds);
+        if (docs.isEmpty()) {
+            return List.of();
+        }
+
+        Map<Long, JobCard> jobCardsById = jobCards.stream()
+            .collect(Collectors.toMap(JobCard::getId, Function.identity()));
+        Map<Long, Branch> branches = branchRepo.findByOrgIdOrderByCodeAsc(orgId).stream()
+            .collect(Collectors.toMap(Branch::getId, Function.identity()));
+        Map<Long, String> categoryNames = expenseCategoryRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId).stream()
+            .collect(Collectors.toMap(ExpenseCategory::getId, ExpenseCategory::getName));
+        List<Long> receiverIds = docs.stream().map(ExpenseDocument::getReceiverId).distinct().toList();
+        Map<Long, String> receiverNames = receiverRepo.findByOrgIdAndIdIn(orgId, receiverIds).stream()
+            .collect(Collectors.toMap(Receiver::getId, Receiver::getName));
+        List<Long> docIds = docs.stream().map(ExpenseDocument::getId).toList();
+        Map<Long, BigDecimal> amountByDoc = expenseLineRepo.findByOrgIdAndExpenseDocumentIdInOrderByLineNoAsc(orgId, docIds)
+            .stream()
+            .collect(Collectors.groupingBy(ExpenseLine::getExpenseDocumentId,
+                Collectors.reducing(BigDecimal.ZERO, ExpenseLine::getAmount, BigDecimal::add)));
+
+        return docs.stream().map(d -> {
+            JobCard jc = jobCardsById.get(d.getJobCardId());
+            Branch b = jc != null ? branches.get(jc.getBranchId()) : branches.get(d.getBranchId());
+            return new CustomerExpenseEntry(
+                d.getId(),
+                d.getDocumentNo(),
+                d.getJobCardId(),
+                jc != null && b != null ? JobCardResponse.reference(b.getCode(), jc.getId()) : null,
+                b != null ? b.getCode() : null,
+                categoryNames.getOrDefault(d.getExpenseCategoryId(), "—"),
+                receiverNames.getOrDefault(d.getReceiverId(), "—"),
+                amountByDoc.getOrDefault(d.getId(), BigDecimal.ZERO),
+                d.getWorkflowStatus().name(),
+                d.getSubmittedAt() != null ? d.getSubmittedAt() : d.getCreatedAt());
+        }).toList();
     }
 
     // --- helpers ---

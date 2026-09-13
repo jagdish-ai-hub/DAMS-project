@@ -1,5 +1,6 @@
 package com.dams.customer.controller;
 
+import com.dams.customer.dto.CustomerExpenseEntry;
 import com.dams.customer.dto.CustomerHistoryResponse;
 import com.dams.customer.dto.CustomerRequest;
 import com.dams.customer.dto.CustomerResponse;
@@ -50,6 +51,13 @@ public class CustomerController {
     @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER')")
     public CustomerHistoryResponse history(@PathVariable Long id) {
         return customerService.history(id);
+    }
+
+    @GetMapping("/{id}/expenses")
+    @Operation(summary = "Expenses tagged to this customer's job cards — fetched on demand")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER')")
+    public List<CustomerExpenseEntry> expenses(@PathVariable Long id) {
+        return customerService.expenses(id);
     }
 
     @PostMapping

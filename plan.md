@@ -7,6 +7,39 @@
 
 ## Revision log
 
+- **rev 39 (2026-09-12)** — Fixed the shared `Modal` component (`shell/ui.tsx`) opening
+  clipped-at-the-top / anchored toward the bottom of the screen for tall content (e.g. the
+  Accountant "pending vs verified" drill-down with a long table) on shorter viewports —
+  reported as "that box is not opening correctly in middle, it opens in bottom." Root cause:
+  the backdrop centered the modal with `align-items: center` while also being the scrollable
+  element (`overflowY: auto`). When the modal's height exceeds the backdrop's free space —
+  common once the browser chrome/toolbar/devtools eat into `100vh` — flexbox centers the box
+  symmetrically and lets it overflow equally above *and* below, but a scrollable centered
+  flex item can't be scrolled up past that overflow: the box renders as if already scrolled
+  down, its top and shadow cut off. This is a known CSS flexbox behavior, not a caching or
+  data issue — unrelated to the rev 37 `index.html` cache-header fix. Fix: replaced
+  `align-items: center` on the backdrop with `margin: auto 0` on the modal box itself — still
+  centers when it fits, but collapses to top-aligned (fully scrollable) when it overflows.
+  Affects every modal in the app (`AddPaymentModal`, `ClaimCloseModal`, `ExportModal`, the
+  Accountant drill-down, etc.) since they all share this one `Modal`. Verified:
+  `tsc`/`eslint`/`vitest` clean; production build succeeds.
+
+- **rev 38 (2026-09-12)** — Expenses linked to a customer, on the customer history card. The
+  card only ever showed job cards and the receipt-side payment timeline — an expense tagged
+  to one of the customer's job cards (a workshop expense billed against their vehicle/case)
+  was invisible there even though the data already existed. New `GET
+  /api/v1/customers/{id}/expenses` (`CustomerService.expenses`, `CustomerExpenseEntry`),
+  same branch scoping as the existing history call, newest-first. Deliberately a *separate*
+  endpoint from `CustomerHistoryResponse` rather than a field bundled into it, and fetched
+  only when the cashier opens the new "Expenses linked to this customer" section on
+  `CashierHomePage` — most look-ups never need it, so the customer card's normal load stays
+  as light as before. Each row opens the real expense (`/app/new-expense?editDoc=`), same
+  pattern as everywhere else a document opens for editing. Tests:
+  `expenses_showsOnlyOwnBranchJobCards_withTheLineSumAsAmount`,
+  `expenses_returnsEmpty_whenTheCustomerHasNoJobCardsInScope`.
+  Verified: `mvn test` 184 green (0 failures/errors, 4 pre-existing Docker-only skips);
+  `tsc`/`eslint`/`vitest` clean; production build succeeds.
+
 - **rev 37 (2026-09-12)** — Fixed the actual cause of "my fixes don't show up" / random broken-
   looking screens: `frontend/nginx.conf` cached `/assets/*` forever (correct — Vite hashes
   those filenames) but set **no cache header on `index.html`**, so browsers cached it too.
