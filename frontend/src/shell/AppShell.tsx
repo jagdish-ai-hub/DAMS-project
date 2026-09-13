@@ -122,9 +122,12 @@ export default function AppShell() {
             className="flex sm:hidden"
             aria-label="Toggle navigation"
             aria-expanded={navOpen}
+            // No `display` here on purpose: an inline style outranks every stylesheet rule, so
+            // hard-coding display:flex made `sm:hidden` a no-op and the hamburger showed on
+            // desktop no matter which breakpoint the class used. Display is the classes' job.
             style={{
               background: 'none', border: 'none', color: '#fff', cursor: 'pointer',
-              padding: 6, minWidth: 40, minHeight: 40, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: 6, minWidth: 40, minHeight: 40, alignItems: 'center', justifyContent: 'center',
             }}
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

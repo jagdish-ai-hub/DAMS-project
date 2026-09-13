@@ -7,6 +7,24 @@
 
 ## Revision log
 
+- **rev 41 (2026-09-13)** — **Real** root cause of "the hamburger still shows on desktop",
+  reported three times and wrongly diagnosed twice (rev 32 moved the breakpoint `lg`→`sm`;
+  rev 37 blamed browser caching). Neither could ever have worked: the button carried
+  `className="flex sm:hidden"` *and* `display: 'flex'` in its inline `style` prop, and an
+  inline style outranks every stylesheet rule — so `sm:hidden` was a dead no-op at every
+  breakpoint and the hamburger was hard-wired visible on all screen sizes. Fix: drop `display`
+  from the inline style and let the classes own it. Verified in the **built bundle**, not just
+  the source — `@media (min-width: 640px){.sm\:hidden{display:none}}` is emitted, and the
+  button's compiled style object no longer contains `display:"flex"`. Audited every other
+  responsive display class in the app for the same defect: `HelpDrawer`'s mobile "← Back"
+  button had it too (inline `display: mobileView === 'reader' ? 'flex' : 'none'` beating
+  `sm:hidden`, leaking it onto desktop) — now rendered conditionally instead. The `<nav>`,
+  the drawer backdrop, and the `lg:hidden` back-buttons in the FM/Accountant queues set no
+  inline `display` and were already correct.
+  Lesson recorded: when a UI fix "doesn't take", check the built artifact before blaming
+  caching or deployment.
+  Verified: `tsc`/`eslint`/`vitest` clean; production build succeeds.
+
 - **rev 40 (2026-09-13)** — Claims are open claims from submission, not only once approved
   (dealership report: an AMC ₹65,000 job and a Warranty job both sat in the FM's "Awaiting
   final approval" list looking exactly like ordinary receipts, with "Open warranty / AMC / CG
