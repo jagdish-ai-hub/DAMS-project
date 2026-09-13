@@ -15,6 +15,8 @@ export default function AddPaymentModal(props: {
   jobReference: string
   documentNo: string | null
   balanceDue: number
+  /** Warranty / AMC / CG job card — its lines may be ₹0. */
+  isClaim?: boolean
   onClose: () => void
   onDone: (updated: ReceiveDocument) => void
 }) {
@@ -45,8 +47,14 @@ export default function AddPaymentModal(props: {
   const mode = useMemo(() => modes.find((m) => m.id === modeId), [modes, modeId])
 
   async function save() {
-    if (!(Number(amount) > 0)) {
-      setError('Enter an amount above 0')
+    // A Warranty/AMC/CGW claim may collect nothing from the customer — the OEM covers it and
+    // the real figure lands at Close Claim — so a claim line may be ₹0. Plain lines must be > 0.
+    if (amount.trim() === '') {
+      setError('Enter an amount')
+      return
+    }
+    if (props.isClaim ? Number(amount) < 0 : !(Number(amount) > 0)) {
+      setError(props.isClaim ? 'Amount cannot be negative' : 'Enter an amount above 0')
       return
     }
     if (modeId === '') {

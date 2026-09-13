@@ -323,6 +323,7 @@ type PaymentTarget = {
   jobReference: string
   documentNo: string | null
   balanceDue: number
+  isClaim: boolean
 }
 function CustomerHistoryView(props: {
   customerId: number
@@ -524,6 +525,7 @@ function CustomerHistoryView(props: {
                         jobReference: j.reference,
                         documentNo: null,
                         balanceDue: j.balance,
+                        isClaim: j.isClaim,
                       })}
                       style={{ border: '1.5px solid #BBDCC9', background: 'var(--surface)', borderRadius: 8, padding: '6px 11px', fontSize: '0.78rem', fontWeight: 700, color: 'var(--green)', cursor: 'pointer', whiteSpace: 'nowrap' }}
                     >
@@ -626,6 +628,7 @@ function CustomerHistoryView(props: {
           jobReference={payTarget.jobReference}
           documentNo={payTarget.documentNo}
           balanceDue={payTarget.balanceDue}
+          isClaim={payTarget.isClaim}
           onClose={() => setPayTarget(null)}
           onDone={() => {
             setPayTarget(null)

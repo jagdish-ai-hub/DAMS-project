@@ -4,7 +4,7 @@ import { expensesApi } from '../api/expenses'
 import { cashApi, type CashDocument } from '../api/cash'
 import { reviewApi, type FmQueue, type ReviewQueueItem, type ReviewType } from '../api/review'
 import { jobCardsApi } from '../api/jobCards'
-import { card, ErrorBanner, ghostBtn, primaryBtn, inputStyle, Modal, Skeleton, SkeletonRows, inr } from '../shell/ui'
+import { card, Badge, ErrorBanner, ghostBtn, primaryBtn, inputStyle, Modal, Skeleton, SkeletonRows, inr } from '../shell/ui'
 import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, type AnyDoc } from '../review/reviewShared'
 import GlobalSearch from '../shared/GlobalSearch'
 import { useAuth } from '../auth/useAuth'
@@ -283,6 +283,13 @@ function Section(props: {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
                   {it.hasOverride && <Tag>Overridden</Tag>}
+                  {/* A claim is listed from submission (AGENT.md closing-rule #3), so the row must
+                      say whether it still needs approving or is ready to close. */}
+                  {props.showAging && (
+                    <Badge tone={it.workflowStatus === 'APPROVED' ? 'green' : 'amber'}>
+                      {it.workflowStatus === 'APPROVED' ? 'Ready to close' : `Needs approval · ${it.workflowStatus}`}
+                    </Badge>
+                  )}
                   {props.showAging && <AgingBadge days={claimAgeDays(it.submittedAt)} />}
                   {props.riskMap?.get(it.id) != null && props.riskMap.get(it.id)!.score > 0 && (
                     <RiskDot risk={props.riskMap.get(it.id)} />
@@ -330,6 +337,9 @@ function Overview({
     return { b0_30, b31_60, b61_90, b90_plus }
   }, [openClaimsList])
 
+  // Open claims are listed from submission, so only the approved ones can actually be closed.
+  const readyToClose = openClaimsList.filter((c) => c.workflowStatus === 'APPROVED').length
+
   return (
     <div>
       <h2 style={{ fontSize: '1.1rem', color: 'var(--navy)' }}>Finance Manager overview</h2>
@@ -346,7 +356,9 @@ function Overview({
           <div style={{ ...card, borderTop: '3px solid var(--purple, #6B3FA0)' }}>
             <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>Open claims</div>
             <div style={{ fontSize: '1.4rem', fontWeight: 800, marginTop: 4 }}>{openClaimsList.length}</div>
-            <div style={{ fontSize: '0.76rem', color: 'var(--faint)' }}>awaiting your close</div>
+            <div style={{ fontSize: '0.76rem', color: 'var(--faint)' }}>
+              {readyToClose} ready to close · {openClaimsList.length - readyToClose} awaiting approval
+            </div>
           </div>
         )}
       </div>
@@ -418,6 +430,9 @@ function FmDetail(props: {
 
   const isOpenClaim = !!receipt && receipt.isClaim && wf === 'APPROVED' && !receipt.settledViaClaimClose
   const isClosedClaim = !!receipt && receipt.settledViaClaimClose
+  // A claim is visible from submission, but closing needs the money approved first
+  // (AGENT.md closing-rule #3) — say so rather than leaving the FM guessing.
+  const claimPendingApproval = !!receipt && receipt.isClaim && wf !== 'APPROVED' && !receipt.settledViaClaimClose
 
   async function run(fn: () => Promise<unknown>, message: string, keepOpen = false) {
     setBusy(true)
@@ -467,6 +482,14 @@ function FmDetail(props: {
               ? `Overridden · Final — ${receipt.claimOverrideReason ?? ''}`
               : 'Paid in full as invoiced — no override.'}
           </div>
+        </div>
+      )}
+
+      {claimPendingApproval && (
+        <div style={{ ...card, background: 'var(--amber-bg, #FEF3C7)', borderColor: '#FDE68A', marginBottom: 14, fontSize: '0.82rem' }}>
+          <strong>Open claim · not closable yet.</strong> This is a warranty / AMC / CG claim, but its
+          receipt is {wf.toLowerCase()}. Every receipt on the claim must be approved before it can be
+          closed{canApprove ? ' — approve it below.' : '.'}
         </div>
       )}
 
