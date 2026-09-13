@@ -227,15 +227,19 @@ public class ReviewService {
         List<ReviewQueueItem> awaiting = toReceiptItems(orgId, receiveDocumentRepo
             .findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(orgId, WorkflowStatus.VERIFIED));
 
-        // Open claims: an APPROVED receipt on a claim-category job card that has not been closed.
-        // One row per job card (a job card may own several documents over its life).
-        List<ReceiveDocument> approved = receiveDocumentRepo
-            .findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(orgId, WorkflowStatus.APPROVED);
-        Map<Long, JobCard> jcById = jobCardsById(orgId, approved.stream().map(ReceiveDocument::getJobCardId).toList());
+        // Open claims: a claim-type job card whose receipt has entered the review workflow and
+        // has not been closed (AGENT.md closing-rule #3 — visibility starts at submission, while
+        // closing still needs every doc APPROVED). DRAFT and REJECTED are not live claims.
+        // One row per job card (a job card may own several documents over its life), oldest
+        // submission first so the aging badge measures the claim, not its newest document.
+        List<ReceiveDocument> live = receiveDocumentRepo
+            .findByOrgIdAndWorkflowStatusInOrderBySubmittedAtAscIdAsc(orgId, List.of(
+                WorkflowStatus.SUBMITTED, WorkflowStatus.QUERIED, WorkflowStatus.VERIFIED, WorkflowStatus.APPROVED));
+        Map<Long, JobCard> jcById = jobCardsById(orgId, live.stream().map(ReceiveDocument::getJobCardId).toList());
         Set<Long> closedJcIds = new java.util.HashSet<>(claimCloseRepo.findJobCardIdsByOrgId(orgId));
         Set<Long> seenJobCards = new LinkedHashSet<>();
         List<ReceiveDocument> openClaimDocs = new ArrayList<>();
-        for (ReceiveDocument d : approved) {
+        for (ReceiveDocument d : live) {
             if (!seenJobCards.add(d.getJobCardId()) || closedJcIds.contains(d.getJobCardId())) {
                 continue;
             }

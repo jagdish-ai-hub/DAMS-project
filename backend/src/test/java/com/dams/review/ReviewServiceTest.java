@@ -14,8 +14,10 @@ import com.dams.expense.entity.ExpenseWorkflowStatus;
 import com.dams.expense.repository.ExpenseDocumentRepository;
 import com.dams.expense.repository.ExpenseLineRepository;
 import com.dams.expense.service.ExpenseDocumentService;
+import com.dams.jobcard.entity.JobCard;
 import com.dams.jobcard.repository.ClaimCloseRepository;
 import com.dams.jobcard.repository.JobCardRepository;
+import com.dams.review.dto.ReviewQueueItem;
 import com.dams.masters.repository.ExpenseCategoryRepository;
 import com.dams.masters.repository.ReceiveCategoryRepository;
 import com.dams.receive.entity.ReceiveDocument;
@@ -409,6 +411,41 @@ class ReviewServiceTest {
         assertThat(result.get(0).id()).isEqualTo(R_ID);
     }
 
+    /**
+     * rev 40: a claim is an open claim from the moment its receipt enters the workflow — it must
+     * not sit indistinguishable among ordinary receipts in "awaiting final approval" just because
+     * the FM has not approved it yet. (Closing still requires APPROVED — ClaimCloseService.)
+     */
+    @Test
+    void fmReceiptQueue_listsAVerifiedClaimAsAnOpenClaim_notOnlyApprovedOnes() {
+        ReceiveDocument verifiedClaim = receiveDoc(WorkflowStatus.VERIFIED);
+        when(receiveDocumentRepo.findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(ORG, WorkflowStatus.VERIFIED))
+            .thenReturn(java.util.List.of(verifiedClaim));
+        when(receiveDocumentRepo.findByOrgIdAndWorkflowStatusInOrderBySubmittedAtAscIdAsc(
+            eq(ORG), eq(java.util.List.of(WorkflowStatus.SUBMITTED, WorkflowStatus.QUERIED,
+                WorkflowStatus.VERIFIED, WorkflowStatus.APPROVED))))
+            .thenReturn(java.util.List.of(verifiedClaim));
+        when(jobCardRepo.findByOrgIdAndIdIn(ORG, java.util.List.of(11L))).thenReturn(java.util.List.of(claimJobCard()));
+
+        var queue = service.fmReceiptQueue();
+
+        assertThat(queue.openClaims()).extracting(ReviewQueueItem::id).containsExactly(R_ID);
+        assertThat(queue.openClaims().get(0).workflowStatus()).isEqualTo("VERIFIED");
+        // still needs approval too — it belongs in both lists, for two different actions
+        assertThat(queue.awaitingApproval()).extracting(ReviewQueueItem::id).containsExactly(R_ID);
+    }
+
+    @Test
+    void fmReceiptQueue_excludesAClaimWhoseJobCardIsAlreadyClosed() {
+        ReceiveDocument approvedClaim = receiveDoc(WorkflowStatus.APPROVED);
+        when(receiveDocumentRepo.findByOrgIdAndWorkflowStatusInOrderBySubmittedAtAscIdAsc(eq(ORG), any()))
+            .thenReturn(java.util.List.of(approvedClaim));
+        when(jobCardRepo.findByOrgIdAndIdIn(ORG, java.util.List.of(11L))).thenReturn(java.util.List.of(claimJobCard()));
+        when(claimCloseRepo.findJobCardIdsByOrgId(ORG)).thenReturn(java.util.List.of(11L));
+
+        assertThat(service.fmReceiptQueue().openClaims()).isEmpty();
+    }
+
     // ---------------------------------------------------- fixtures
 
     private static AppUser actor(Role role) {
@@ -416,6 +453,19 @@ class ReviewServiceTest {
         ReflectionTestUtils.setField(u, "id", ACTOR_ID);
         u.setRole(role);
         return u;
+    }
+
+    /** The job card behind {@link #receiveDoc}, carrying a claim type (AMC). */
+    private static JobCard claimJobCard() {
+        JobCard jc = new JobCard();
+        ReflectionTestUtils.setField(jc, "id", 11L);
+        jc.setOrgId(ORG);
+        jc.setBranchId(BRANCH);
+        jc.setCustomerId(21L);
+        jc.setCategoryId(5L);
+        jc.setBusinessStatusId(6L);
+        jc.setClaimTypeId(4L);
+        return jc;
     }
 
     private static ReceiveDocument receiveDoc(WorkflowStatus status) {

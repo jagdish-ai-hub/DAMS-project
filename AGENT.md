@@ -115,6 +115,15 @@ has `org_id = null`.
    accepting Eicher's partial payment as final). That override is
    permanent and must be visibly marked "Overridden · Final" everywhere
    the record is shown afterward.
+   **Visibility vs closing are separate.** A claim becomes visible in the
+   FM's open-claims list as soon as its receipt enters the review workflow
+   (SUBMITTED / QUERIED / VERIFIED / APPROVED) and stays there until it is
+   closed — a claim must never sit invisible among ordinary receipts just
+   because nobody has approved it yet. **Closing** still requires every
+   live receive document on the job card to be APPROVED: money goes through
+   maker-checker before a claim is finalised. The list therefore shows each
+   claim's workflow status, and the Close Claim action stays unavailable
+   (with the reason shown) until the claim is approved.
 
 ### "Add Payment" behavior
 Adding a payment against an existing job card **always appends a new

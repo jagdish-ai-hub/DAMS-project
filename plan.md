@@ -7,6 +7,32 @@
 
 ## Revision log
 
+- **rev 40 (2026-09-13)** — Claims are open claims from submission, not only once approved
+  (dealership report: an AMC ₹65,000 job and a Warranty job both sat in the FM's "Awaiting
+  final approval" list looking exactly like ordinary receipts, with "Open warranty / AMC / CG
+  claims" showing 0). **Spec changed first** — AGENT.md closing-rule #3 now separates
+  *visibility* from *closing*, and this file's FM-queue definition follows it. `ReviewService
+  .fmReceiptQueue()` built open claims from `WorkflowStatus.APPROVED` only; it now reads
+  SUBMITTED / QUERIED / VERIFIED / APPROVED (never DRAFT or REJECTED), keeping the one-row-per-
+  job-card dedupe on the oldest submission so the aging badge still measures the claim rather
+  than its newest document, and keeping the `claim_close` exclusion. **Closing is unchanged**:
+  `ClaimCloseService` still refuses unless every live doc is APPROVED, so the Close Claim
+  button stays gated — the queue row now says "Needs approval · VERIFIED" vs "Ready to close",
+  the overview card splits the count both ways, and opening an unapproved claim explains why it
+  cannot be closed yet instead of "No action needed from you right now". The Owner dashboard's
+  `outstanding` list deliberately keeps its APPROVED-only rule so money figures there do not
+  double-count claims still in review.
+  Also fixed the ₹0 claim line **at the second entry point**: rev 35 relaxed the rule on
+  `NewReceiptPage` only, while `AddPaymentModal` still hard-refused with "Enter an amount above
+  0" and had no idea whether the job card was a claim — it now takes `isClaim` (passed from
+  `CashierHomePage`) and allows ₹0 there too, which is why a Warranty demo had to be entered at
+  ₹1. (The Accountant's line-*override* path stays > 0 — `LineOverrideRequest` is `@Positive`
+  server-side, so frontend and backend agree.)
+  Tests: `fmReceiptQueue_listsAVerifiedClaimAsAnOpenClaim_notOnlyApprovedOnes`,
+  `fmReceiptQueue_excludesAClaimWhoseJobCardIsAlreadyClosed`.
+  Verified: `mvn test` 186 green (0 failures/errors, 4 pre-existing Docker-only skips);
+  `tsc`/`eslint`/`vitest` clean; production build succeeds.
+
 - **rev 39 (2026-09-12)** — Fixed the shared `Modal` component (`shell/ui.tsx`) opening
   clipped-at-the-top / anchored toward the bottom of the screen for tall content (e.g. the
   Accountant "pending vs verified" drill-down with a long table) on shorter viewports —
@@ -1381,6 +1407,14 @@ Each stage adds its own indexes for the query paths it introduces (search, my-en
 
 - **V19** — `audit_event.branch_id` (nullable), backfilled; index for the override-audit query. See rev 14.
 - **FM queue = every VERIFIED receipt and expense** ("Awaiting Final Approval"), plus (receipts) open claims + recently closed. `GET /api/v1/review/fm/{receipts,expenses}`.
+  **Open claims (rev 40) = a claim-type job card with a live receive document in
+  SUBMITTED / QUERIED / VERIFIED / APPROVED (never DRAFT or REJECTED) and no `claim_close`** —
+  visible from the moment the receipt enters the workflow, not only once approved, so a claim
+  is never indistinguishable from an ordinary receipt in the awaiting list. One row per job
+  card, aged from the oldest submission. Each row carries its workflow status; **closing still
+  requires every live doc APPROVED** (AGENT.md closing-rule #3 — unchanged). The Owner
+  dashboard's `outstanding` list keeps its own APPROVED-only rule, so money figures there do
+  not double-count claims still in review.
 - Endpoints: `POST /api/v1/{receipts,expenses}/{id}/approve`; `query` / `reject` now dispatch on role (Accountant SUBMITTED→QUERIED/REJECTED, FM VERIFIED→QUERIED/REJECTED); `POST /api/v1/job-cards/{id}/close-claim {finalAmount, reason?}` (FM only, claim category, all receive docs APPROVED, one txn: immutable `claim_close` + `settled=true` on every open doc + freeze + SETTLED/CLOSED audit; reason required when `finalAmount ≠ Σ lines`).
 - Post-close locks (now test-covered): `PATCH /job-cards` category/status → 409, `POST /receipts` → 409, `pending_amount` = 0.
 - **Override Audit** — `GET /api/v1/override-audit?userId=&branchId=&from=&to=` (OWNER + FM). Merges Accountant line overrides (`OVERRIDE` audit rows) **and** FM claim-close overrides (`claim_close.overridden`, `kind: "claim"`) in one newest-first feed; 90-day default.
