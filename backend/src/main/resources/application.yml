@@ -9,16 +9,26 @@ spring:
     password: ${SPRING_DATASOURCE_PASSWORD:}
     hikari:
       # Neon is remote Postgres; establishing a fresh connection costs ~0.5-2.4s (TLS +
-      # backend spin-up), so the pool must NEVER let a warm connection go and re-pay that.
-      #  - fixed size (minimum-idle == maximum-pool-size): the pool never shrinks, so an
-      #    idle-period click reuses a live socket instead of reconnecting.
-      #  - keepalive < Neon's idle socket drop, so connections are validated/kept alive.
-      #  - max-lifetime long (25 min): retire connections rarely; each retirement = one
-      #    reconnect. (Neon's own server-side limit is generous on the pooled path.)
+      # backend spin-up). This pool used to be fixed-size (minimum-idle == maximum-pool-size
+      # == 8) to never pay that cost — but that also meant 8 connections stayed open to Neon
+      # 24/7, which pins the compute permanently active and burns free-tier compute hours
+      # even with nobody using the app (rev 42, plan.md). So:
+      #  - minimum-idle 0: during genuine inactivity the pool can drain to zero connections,
+      #    letting Neon's own autosuspend actually see an idle compute. Real traffic still
+      #    scales the pool up to maximum-pool-size within one request's connection-timeout.
+      #  - idle-timeout below Neon's suspend window: connections above the (now 0) floor
+      #    retire once truly idle, rather than sitting warm forever waiting to be reused.
+      #  - keepalive-time < idle-timeout, so a connection still in the pool stays valid on
+      #    Neon's side right up until Hikari itself retires it.
+      #  - max-lifetime long (25 min): retire connections rarely otherwise; each retirement
+      #    is one reconnect. (Neon's own server-side limit is generous on the pooled path.)
+      # Trade-off accepted: the first request after a real idle stretch (e.g. overnight, no
+      # cashier active) pays one reconnect/wake cost instead of being instant.
       auto-commit: false
       maximum-pool-size: 8
-      minimum-idle: 8
+      minimum-idle: 0
       connection-timeout: 15000
+      idle-timeout: 300000
       keepalive-time: 60000
       max-lifetime: 1500000
   jpa:
