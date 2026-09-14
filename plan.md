@@ -7,6 +7,51 @@
 
 ## Revision log
 
+- **rev 42 (2026-09-14)** — Stopped pinning the Neon compute permanently active, which was
+  burning the free-tier compute-hour allowance: `active_time_seconds` on the `dams` project
+  was ~321 hours over ~16 days since creation — essentially 100% uptime, confirmed via the
+  Neon MCP (`describe_project` / `list_branch_computes`). Root cause was two settings
+  compounding: (1) the Neon endpoint's own `suspend_timeout_seconds: 0` ("never autosuspend"),
+  and (2) `application.yml`'s HikariCP pool — `minimum-idle: 8` equal to `maximum-pool-size: 8`
+  — which meant the backend itself held 8 connections open to Postgres 24/7 regardless of
+  actual traffic. (2) matters independent of (1): even with a real Neon suspend timeout,
+  autosuspend only fires when the connection count reaches zero, and the old pool config never
+  let it.
+  **Attempted to fix (1) via `mcp__Neon__update_postgres_endpoint`; the API refused —
+  "modifying the suspend interval is not permitted on this account."** This looks like a
+  free-tier (`free_v3`) restriction on customizing autosuspend via API. Unresolved: whether the
+  Neon console UI allows it directly, or whether this plan is locked to always-on regardless —
+  needs checking on neon.tech, or contacting Neon support/upgrading, if compute hours keep
+  draining after (2) below.
+  Fixed (2): `minimum-idle: 0` (was 8) so the pool can drain to zero connections during genuine
+  inactivity — real traffic still scales it back up to `maximum-pool-size: 8` within one
+  request. Added `idle-timeout: 300000` (5 min, below `max-lifetime`) so idle connections
+  above the new zero floor actually retire instead of sitting warm forever.
+  Trade-off accepted: the first request after a real idle stretch (e.g. overnight) now pays a
+  one-time reconnect cost (~0.5–2.4s, the same number the old fixed-pool comment cited) instead
+  of being instant — preferable to the whole app going down mid-month when free-tier compute
+  hours run out (`consumption_period_end`: 2026-10-01).
+  Verified: `mvn test` 186 green (0 failures/errors, 4 pre-existing Docker-only skips); config
+  change only, no code path touched.
+
+- **rev 41 (2026-09-13)** — **Real** root cause of "the hamburger still shows on desktop",
+  reported three times and wrongly diagnosed twice (rev 32 moved the breakpoint `lg`→`sm`;
+  rev 37 blamed browser caching). Neither could ever have worked: the button carried
+  `className="flex sm:hidden"` *and* `display: 'flex'` in its inline `style` prop, and an
+  inline style outranks every stylesheet rule — so `sm:hidden` was a dead no-op at every
+  breakpoint and the hamburger was hard-wired visible on all screen sizes. Fix: drop `display`
+  from the inline style and let the classes own it. Verified in the **built bundle**, not just
+  the source — `@media (min-width: 640px){.sm\:hidden{display:none}}` is emitted, and the
+  button's compiled style object no longer contains `display:"flex"`. Audited every other
+  responsive display class in the app for the same defect: `HelpDrawer`'s mobile "← Back"
+  button had it too (inline `display: mobileView === 'reader' ? 'flex' : 'none'` beating
+  `sm:hidden`, leaking it onto desktop) — now rendered conditionally instead. The `<nav>`,
+  the drawer backdrop, and the `lg:hidden` back-buttons in the FM/Accountant queues set no
+  inline `display` and were already correct.
+  Lesson recorded: when a UI fix "doesn't take", check the built artifact before blaming
+  caching or deployment.
+  Verified: `tsc`/`eslint`/`vitest` clean; production build succeeds.
+
 - **rev 40 (2026-09-13)** — Claims are open claims from submission, not only once approved
   (dealership report: an AMC ₹65,000 job and a Warranty job both sat in the FM's "Awaiting
   final approval" list looking exactly like ordinary receipts, with "Open warranty / AMC / CG

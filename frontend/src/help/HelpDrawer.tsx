@@ -87,20 +87,23 @@ export default function HelpDrawer({ role, open, onClose, initialSlug }: {
           padding: '10px 16px', borderBottom: '1px solid var(--line)', flexShrink: 0, minHeight: 52,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {/* Mobile back to article list button (< 640px) */}
-            <button
-              type="button"
-              onClick={() => setMobileView('list')}
-              className="sm:hidden"
-              style={{
-                display: mobileView === 'reader' ? 'flex' : 'none',
-                alignItems: 'center', gap: 4, background: 'none', border: 'none',
-                color: 'var(--navy)', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer',
-                padding: '6px 8px', borderRadius: 6,
-              }}
-            >
-              ← Back
-            </button>
+            {/* Mobile back to article list button (< 640px). Rendered conditionally rather than
+                toggled with an inline `display`, which would outrank `sm:hidden` and leak the
+                button onto desktop — the same defect that kept the AppShell hamburger visible. */}
+            {mobileView === 'reader' && (
+              <button
+                type="button"
+                onClick={() => setMobileView('list')}
+                className="flex sm:hidden"
+                style={{
+                  alignItems: 'center', gap: 4, background: 'none', border: 'none',
+                  color: 'var(--navy)', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer',
+                  padding: '6px 8px', borderRadius: 6,
+                }}
+              >
+                ← Back
+              </button>
+            )}
             <strong style={{ fontSize: '0.95rem', color: 'var(--navy)' }}>Help Center</strong>
           </div>
           <button
