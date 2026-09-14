@@ -29,7 +29,13 @@ services:
     ports:
       - "127.0.0.1:8082:8080"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      # liveness, not the plain /actuator/health: the plain endpoint's DataSource check pings
+      # Neon on every hit, and this fires every 10s forever -- that alone kept the Neon compute
+      # permanently active around the clock, defeating autosuspend regardless of app traffic
+      # (rev 43, plan.md). Liveness only asks "is the JVM alive", no DB round-trip. Postgres
+      # reachability is still verified where it matters -- once per deploy, in ci.yml's health
+      # check against the plain /actuator/health.
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health/liveness"]
       interval: 10s
       timeout: 3s
       retries: 12
