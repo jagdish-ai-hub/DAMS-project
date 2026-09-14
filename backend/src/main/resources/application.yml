@@ -61,6 +61,17 @@ spring:
 server:
   port: 8080
 
+management:
+  endpoint:
+    health:
+      # /actuator/health/liveness reports only "is the JVM alive" — no DataSource check —
+      # so Docker's every-10s container healthcheck stops pinging Neon around the clock
+      # (rev 43, plan.md). The one-shot deploy-time check in ci.yml still hits the plain
+      # /actuator/health (DB included), which is the right place to verify Postgres is
+      # actually reachable before calling a deploy healthy.
+      probes:
+        enabled: true
+
 springdoc:
   api-docs:
     path: /api-docs

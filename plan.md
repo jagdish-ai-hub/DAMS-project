@@ -7,6 +7,42 @@
 
 ## Revision log
 
+- **rev 43 (2026-09-14)** — Found the **actual** reason the Neon compute never slept, after
+  rev 42's HikariCP fix (deployed, confirmed live via GitHub Actions) still didn't let it
+  suspend — verified with a clean ~25 minute Neon API check where nothing, including this
+  session, touched the database, and the compute was still `active` with `last_active`
+  moving every few minutes. Root cause: `compose.prod.yml`'s Docker `healthcheck:` on the
+  backend container hits plain `/actuator/health` every **10 seconds**, forever, for as long
+  as the container runs — and Spring Boot Actuator auto-registers a DataSource health
+  indicator that pings Postgres on every call to that endpoint. 10s intervals mean the DB
+  gets touched ~6 times/minute, 24/7, which resets any idle clock long before Neon's ~5–10
+  min default autosuspend window could ever be reached — independent of the connection-pool
+  fix in rev 42, which only helps once the health check itself stops hitting the database.
+  (Confirmed en route that a Neon `suspend_timeout_seconds: 0` does **not** mean "never
+  suspend" as rev 42 assumed — a manually-created child branch with the same value had
+  genuinely suspended after ~9 minutes idle. Also confirmed, by attempting to create a brand
+  new project with an explicit override, that the "not permitted on this account" API error
+  is account-wide, not project-specific — recreating the project would not have helped.)
+  Fix: enabled Spring Boot's liveness/readiness probe groups
+  (`management.endpoint.health.probes.enabled: true`) and pointed the **recurring** Docker
+  healthcheck in both `compose.prod.yml` and the local `docker-compose.yml` at
+  `/actuator/health/liveness` — reports only "is the JVM alive," no DataSource round-trip.
+  `SecurityConfig`'s public-route matcher widened from the exact path `/actuator/health` to
+  `/actuator/health/**` so the new sub-path stays reachable without a JWT (Docker's `wget`
+  carries none). The **one-shot** deploy-time health check in `ci.yml` — which only runs a
+  handful of times a day, at deploy — is deliberately left pointed at the plain
+  `/actuator/health`, since that is exactly the place a real Postgres-reachability check
+  belongs: verifying a deploy before declaring it healthy.
+  Verified: `mvn test` 186 green (0 failures/errors, 4 pre-existing Docker-only skips).
+  **Not verified**: an actual running container's Docker-reported health status against
+  `/actuator/health/liveness` — this sandbox has no Docker/Postgres to boot the full app
+  against. `management.endpoint.health.probes.enabled` and the liveness group excluding `db`
+  by default are both stable, documented Spring Boot Actuator behavior with no custom code
+  involved, but the concrete next check once deployed is `docker inspect --format='{{json
+  .State.Health}}' dams-backend-1` on the VPS to confirm the container reports healthy under
+  the new check, and a repeat of the clean ~25-minute Neon idle check from rev 42/43 to
+  confirm the compute now actually suspends.
+
 - **rev 42 (2026-09-14)** — Stopped pinning the Neon compute permanently active, which was
   burning the free-tier compute-hour allowance: `active_time_seconds` on the `dams` project
   was ~321 hours over ~16 days since creation — essentially 100% uptime, confirmed via the

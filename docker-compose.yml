@@ -21,7 +21,8 @@ services:
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:5173}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      # liveness, not the plain /actuator/health — see compose.prod.yml for why.
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health/liveness"]
       interval: 10s
       timeout: 3s
       retries: 10
