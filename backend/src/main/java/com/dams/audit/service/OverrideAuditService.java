@@ -80,20 +80,25 @@ public class OverrideAuditService {
 
         List<OverrideAuditEntry> out = new ArrayList<>();
         out.addAll(lineOverrides(orgId, from, to, branchId, actorId, branchCodes, userNames));
+        out.addAll(invoiceOverrides(orgId, from, to, branchId, actorId, branchCodes, userNames));
         out.addAll(claimOverrides(orgId, from, to, branchId, actorId, branchCodes, userNames));
         out.sort(Comparator.comparing(OverrideAuditEntry::at).reversed());
         return out;
     }
 
-    // ---- Accountant line overrides (OVERRIDE audit events) ----
+    // ---- Accountant line overrides (OVERRIDE audit events on a receipt/expense) ----
 
     private List<OverrideAuditEntry> lineOverrides(Long orgId, Instant from, Instant to, Long branchId, Long actorId,
                                                    Map<Long, String> branchCodes, Map<Long, String> userNames) {
         List<AuditEvent> events = auditEventRepo.findForOverrideAudit(orgId, EventType.OVERRIDE, from, to, branchId, actorId);
-        List<OverrideAuditEntry> out = new ArrayList<>(events.size());
+        List<OverrideAuditEntry> out = new ArrayList<>();
         for (AuditEvent e : events) {
-            Map<String, Object> d = detail(e);
             boolean receipt = "ReceiveDocument".equals(e.getEntityType());
+            boolean expense = "ExpenseDocument".equals(e.getEntityType());
+            if (!receipt && !expense) {
+                continue;   // a JobCard invoice-amount override — see invoiceOverrides()
+            }
+            Map<String, Object> d = detail(e);
             String documentNo = receipt
                 ? receiveDocumentRepo.findByIdAndOrgId(e.getEntityId(), orgId).map(x -> x.getDocumentNo()).orElse(null)
                 : expenseDocumentRepo.findByIdAndOrgId(e.getEntityId(), orgId).map(x -> x.getDocumentNo()).orElse(null);
@@ -105,6 +110,32 @@ public class OverrideAuditService {
                 branchCode(orgId, e.getBranchId(), branchCodes),
                 documentNo,
                 str(d.get("lineId")),
+                num(d.get("amountBefore")),
+                num(d.get("amountAfter")),
+                str(d.get("reason"))));
+        }
+        return out;
+    }
+
+    // ---- Accountant invoice-amount overrides (OVERRIDE audit events on a JobCard) ----
+
+    private List<OverrideAuditEntry> invoiceOverrides(Long orgId, Instant from, Instant to, Long branchId, Long actorId,
+                                                       Map<Long, String> branchCodes, Map<Long, String> userNames) {
+        List<AuditEvent> events = auditEventRepo.findForOverrideAudit(orgId, EventType.OVERRIDE, from, to, branchId, actorId);
+        List<OverrideAuditEntry> out = new ArrayList<>();
+        for (AuditEvent e : events) {
+            if (!"JobCard".equals(e.getEntityType())) {
+                continue;
+            }
+            Map<String, Object> d = detail(e);
+            out.add(new OverrideAuditEntry(
+                e.getCreatedAt(),
+                "invoice",
+                actorName(e.getActorId(), userNames),
+                e.getBranchId(),
+                branchCode(orgId, e.getBranchId(), branchCodes),
+                str(d.get("documentNo")),
+                null,
                 num(d.get("amountBefore")),
                 num(d.get("amountAfter")),
                 str(d.get("reason"))));

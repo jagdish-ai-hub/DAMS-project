@@ -4,6 +4,7 @@ export interface OrgSettings {
   id: number
   name: string
   multiBranchCashierAccess: boolean
+  accountantDirectApproveCash: boolean
   active: boolean
   createdAt: string
 }
@@ -11,6 +12,7 @@ export interface OrgSettings {
 export interface OrgSettingsRequest {
   name?: string
   multiBranchCashierAccess?: boolean
+  accountantDirectApproveCash?: boolean
 }
 
 export const orgSettingsApi = {

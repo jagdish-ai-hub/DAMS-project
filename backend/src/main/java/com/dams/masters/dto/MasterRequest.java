@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * One request shape for all eight masters. Only the fields relevant to the target type
@@ -43,4 +44,14 @@ public class MasterRequest {
     // upi-vpas only
     @Size(max = 120, message = "UPI ID must be at most 120 characters")
     private String vpa;
+
+    // receive-statuses only
+    private Boolean deprecated;
+
+    /**
+     * Which roles may set this status (CASHIER / ACCOUNTANT / FINANCE_MANAGER). Replaces
+     * the existing grants wholesale. Omitted on update means "leave the mapping alone";
+     * omitted on create means all three, matching how pre-V26 statuses were treated.
+     */
+    private List<String> allowedRoles;
 }

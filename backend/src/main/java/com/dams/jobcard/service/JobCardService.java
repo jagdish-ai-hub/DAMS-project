@@ -23,6 +23,7 @@ import com.dams.masters.entity.ReceiveCategory;
 import com.dams.masters.repository.ClaimTypeRepository;
 import com.dams.masters.repository.ReceiveBusinessStatusRepository;
 import com.dams.masters.repository.ReceiveCategoryRepository;
+import com.dams.masters.service.ReceiveStatusAccessService;
 import com.dams.user.entity.AppUser;
 import com.dams.user.entity.Role;
 import com.dams.user.repository.AppUserRepository;
@@ -42,10 +43,16 @@ import java.util.Map;
  * derived fields, and PATCH.
  *
  * PATCH rules (plan.md): invoice_no / invoice_amount / dbm_id are editable at any time;
- * category_id / business_status_id are editable only while the job card has no ClaimClose
- * row — that table arrives in Stage 8, so {@link #hasClaimClose} is a stub returning false
- * for now, and the 409 path it guards is unreachable this stage but already wired. A
+ * category_id / claim_type_id are editable only while the job card has no ClaimClose row. A
  * category change writes a CATEGORY_CHANGED audit event with the before/after ids.
+ *
+ * business_status_id is the exception to that freeze: the Finance Manager can still change
+ * it after a claim is closed, because their half of the status list (Closed / Claim
+ * Received / Claim Pending) describes what happened to the claim money, which is only known
+ * once the claim is settled. Everyone else is frozen out at close as before.
+ *
+ * Which statuses a given role may set at all is org data, not code — see
+ * {@link ReceiveStatusAccessService}.
  */
 @Service
 public class JobCardService {
@@ -66,6 +73,7 @@ public class JobCardService {
     private final PendingAmountCalculator pendingAmountCalculator;
     private final ClaimCloseRepository claimCloseRepo;
     private final ReceivePaymentGuard paymentGuard;
+    private final ReceiveStatusAccessService statusAccess;
 
     public JobCardService(JobCardRepository jobCardRepo,
                           CustomerRepository customerRepo,
@@ -79,7 +87,8 @@ public class JobCardService {
                           AuditService auditService,
                           PendingAmountCalculator pendingAmountCalculator,
                           ClaimCloseRepository claimCloseRepo,
-                          ReceivePaymentGuard paymentGuard) {
+                          ReceivePaymentGuard paymentGuard,
+                          ReceiveStatusAccessService statusAccess) {
         this.jobCardRepo = jobCardRepo;
         this.customerRepo = customerRepo;
         this.vehicleRepo = vehicleRepo;
@@ -93,6 +102,7 @@ public class JobCardService {
         this.pendingAmountCalculator = pendingAmountCalculator;
         this.claimCloseRepo = claimCloseRepo;
         this.paymentGuard = paymentGuard;
+        this.statusAccess = statusAccess;
     }
 
     @Transactional(readOnly = true)
@@ -110,6 +120,7 @@ public class JobCardService {
 
         ReceiveCategory category = requireActiveCategory(orgId, request.getCategoryId());
         ReceiveBusinessStatus status = requireActiveStatus(orgId, request.getBusinessStatusId());
+        statusAccess.requireMaySet(orgId, branchScope.currentRole(), status);
         ClaimType claimType = request.getClaimTypeId() == null ? null
             : requireActiveClaimType(orgId, request.getClaimTypeId());
 
@@ -189,9 +200,16 @@ public class JobCardService {
         boolean wantsClaimTypeChange = request.getClaimTypeId() != null
             && !request.getClaimTypeId().equals(jc.getClaimTypeId() != null ? jc.getClaimTypeId() : 0L);
 
-        if ((wantsCategoryChange || wantsStatusChange || wantsClaimTypeChange) && hasClaimClose(jc.getId())) {
+        boolean claimClosed = hasClaimClose(jc.getId());
+        if ((wantsCategoryChange || wantsClaimTypeChange) && claimClosed) {
             throw DamsException.conflict(
-                "This job card's claim is closed — category, claim type and business status can no longer be changed");
+                "This job card's claim is closed — category and claim type can no longer be changed");
+        }
+        // Finance keeps the status editable after close: Closed / Claim Received / Claim
+        // Pending record how the claim settled, which nobody knows until after closing.
+        if (wantsStatusChange && claimClosed && branchScope.currentRole() != Role.FINANCE_MANAGER) {
+            throw DamsException.conflict(
+                "This job card's claim is closed — only a Finance Manager can change its business status now");
         }
 
         if (wantsCategoryChange) {
@@ -218,6 +236,7 @@ public class JobCardService {
         }
         if (wantsStatusChange) {
             ReceiveBusinessStatus next = requireActiveStatus(orgId, request.getBusinessStatusId());
+            statusAccess.requireMaySet(orgId, branchScope.currentRole(), next);
             jc.setBusinessStatusId(next.getId());
         }
 

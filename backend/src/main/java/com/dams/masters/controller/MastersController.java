@@ -40,6 +40,16 @@ public class MastersController {
         return mastersService.list(MasterType.fromSlug(type), expenseCategoryId);
     }
 
+    /**
+     * Declared before /{id} for readability only — Spring already prefers the literal
+     * segment over the path variable.
+     */
+    @GetMapping("/mine")
+    @Operation(summary = "List the rows the signed-in user may pick (role-filtered for receive-statuses)")
+    public List<MasterResponse> listSelectable(@PathVariable String type) {
+        return mastersService.listSelectable(MasterType.fromSlug(type));
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Get one master row")
     public MasterResponse get(@PathVariable String type, @PathVariable Long id) {

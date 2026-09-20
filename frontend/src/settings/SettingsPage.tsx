@@ -154,7 +154,7 @@ function OrgSettingsForm() {
     orgSettingsApi.get().then((r) => setSettings(r.data)).catch((e) => setError(apiError(e, 'Could not load settings.')))
   }, [])
 
-  async function save(patch: { name?: string; multiBranchCashierAccess?: boolean }, key: string) {
+  async function save(patch: { name?: string; multiBranchCashierAccess?: boolean; accountantDirectApproveCash?: boolean }, key: string) {
     setError('')
     setSavingKey(key)
     try {
@@ -203,6 +203,25 @@ function OrgSettingsForm() {
           <div style={{ color: 'var(--muted)', fontSize: '0.8rem', marginTop: 2 }}>
             When on, cashiers can search and see customers &amp; job cards across all branches.
             It never changes which branch a cashier's own documents post under. Default off.
+          </div>
+        </span>
+      </label>
+
+      <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: '0.85rem' }}>
+        <input
+          type="checkbox"
+          checked={settings.accountantDirectApproveCash}
+          disabled={savingKey === 'directApprove'}
+          onChange={(e) => save({ accountantDirectApproveCash: e.target.checked }, 'directApprove')}
+          style={{ marginTop: 3 }}
+        />
+        <span>
+          <strong>Accountant direct-approve (cash receipts)</strong>
+          <div style={{ color: 'var(--muted)', fontSize: '0.8rem', marginTop: 2 }}>
+            When on, an Accountant can approve a submitted receipt directly — skipping the
+            Finance Manager — as long as it's not a claim, its status isn't "Credit", and every
+            line is cash-mode. Everything else still needs Finance Manager approval as usual.
+            Default off.
           </div>
         </span>
       </label>

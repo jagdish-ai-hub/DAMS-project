@@ -5,10 +5,12 @@ import java.time.Instant;
 
 /**
  * One amount override, for the org-wide Override Audit screen (AGENT.md decision #4). Covers
- * both kinds of override in the system:
+ * every kind of override in the system:
  *
  *   - {@code kind = "receipt"} / {@code "expense"} — an Accountant's provisional line override;
  *     {@code documentNo} is the document, {@code lineId} the line.
+ *   - {@code kind = "invoice"} — an Accountant's provisional job-card invoice-amount override;
+ *     {@code documentNo} is the receipt being reviewed when it was made, {@code lineId} is null.
  *   - {@code kind = "claim"} — the Finance Manager's final, locked claim-close override;
  *     {@code documentNo} is the job-card reference, {@code lineId} is null, {@code amountBefore}
  *     is what was actually received and {@code amountAfter} the figure it was closed at.

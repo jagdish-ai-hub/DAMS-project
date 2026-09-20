@@ -45,6 +45,17 @@ public class ExportController {
             .body(csv);
     }
 
+    @GetMapping("/receipts/by-id")
+    @Operation(summary = "Export exactly the given receipts to Tally/Excel compatible CSV — used by the Accountant's Direct Approve list")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT')")
+    public ResponseEntity<byte[]> exportReceiptsByIds(@RequestParam(name = "ids") java.util.List<Long> ids) {
+        byte[] csv = exportService.exportReceiptsCsvByIds(ids);
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"receipts-export-selected.csv\"")
+            .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
+            .body(csv);
+    }
+
     @GetMapping("/expenses")
     @Operation(summary = "Export expenses ledger to Tally/Excel compatible CSV")
     @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT')")

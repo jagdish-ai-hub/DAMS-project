@@ -5,6 +5,7 @@ import { customersApi } from '../api/customers'
 import { jobCardsApi } from '../api/jobCards'
 import { receiptsApi, type CreateReceiptRequest, type DocumentHistoryEntry, type ReceiveDocument } from '../api/receipts'
 import { card, ErrorBanner, inr, primaryBtn, ghostBtn, inputStyle, Spinner, istToday } from '../shell/ui'
+import { BusinessStatusSelect } from '../shared/BusinessStatusSelect'
 import AttachmentsPanel, { type LineTarget } from './AttachmentsPanel'
 import { Printer, QrCode } from 'lucide-react'
 import PrintReceiptModal from './PrintReceiptModal'
@@ -84,7 +85,8 @@ export default function NewReceiptPage() {
     let live = true
     Promise.all([
       mastersApi.list('receive-categories'),
-      mastersApi.list('receive-statuses'),
+      // Role-filtered: a cashier only ever sees the statuses they may set.
+      mastersApi.listSelectable('receive-statuses'),
       mastersApi.list('settlement-modes'),
       mastersApi.list('banks'),
       mastersApi.list('claim-types'),
@@ -600,9 +602,11 @@ export default function NewReceiptPage() {
                 </span>
               </Row>
               <Row label="Status">
-                <select value={businessStatusId} onChange={(e) => setBusinessStatusId(Number(e.target.value))} style={inputStyle}>
-                  {statuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
+                <BusinessStatusSelect
+                  statuses={statuses}
+                  value={businessStatusId}
+                  onChange={setBusinessStatusId}
+                />
               </Row>
               <Row label="Customer Type">
                 <div style={{ display: 'flex', border: '1.5px solid var(--line)', borderRadius: 7, overflow: 'hidden', width: 'fit-content' }}>

@@ -7,6 +7,7 @@ import com.dams.masters.entity.ExpenseCategory;
 import com.dams.masters.entity.ExpenseMode;
 import com.dams.masters.entity.ExpenseSubCategory;
 import com.dams.masters.entity.ReceiveBusinessStatus;
+import com.dams.masters.entity.ReceiveBusinessStatusRole;
 import com.dams.masters.entity.ReceiveCategory;
 import com.dams.masters.entity.SettlementMode;
 import com.dams.masters.repository.BankRepository;
@@ -16,8 +17,10 @@ import com.dams.masters.repository.ExpenseCategoryRepository;
 import com.dams.masters.repository.ExpenseModeRepository;
 import com.dams.masters.repository.ExpenseSubCategoryRepository;
 import com.dams.masters.repository.ReceiveBusinessStatusRepository;
+import com.dams.masters.repository.ReceiveBusinessStatusRoleRepository;
 import com.dams.masters.repository.ReceiveCategoryRepository;
 import com.dams.masters.repository.SettlementModeRepository;
+import com.dams.user.entity.Role;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -44,6 +47,7 @@ public class MasterProvisioningService {
 
     private final ReceiveCategoryRepository receiveCategoryRepo;
     private final ReceiveBusinessStatusRepository receiveBusinessStatusRepo;
+    private final ReceiveBusinessStatusRoleRepository receiveBusinessStatusRoleRepo;
     private final SettlementModeRepository settlementModeRepo;
     private final ExpenseCategoryRepository expenseCategoryRepo;
     private final ExpenseSubCategoryRepository expenseSubCategoryRepo;
@@ -54,6 +58,7 @@ public class MasterProvisioningService {
 
     public MasterProvisioningService(ReceiveCategoryRepository receiveCategoryRepo,
                                      ReceiveBusinessStatusRepository receiveBusinessStatusRepo,
+                                     ReceiveBusinessStatusRoleRepository receiveBusinessStatusRoleRepo,
                                      SettlementModeRepository settlementModeRepo,
                                      ExpenseCategoryRepository expenseCategoryRepo,
                                      ExpenseSubCategoryRepository expenseSubCategoryRepo,
@@ -63,6 +68,7 @@ public class MasterProvisioningService {
                                      ClaimTypeRepository claimTypeRepo) {
         this.receiveCategoryRepo = receiveCategoryRepo;
         this.receiveBusinessStatusRepo = receiveBusinessStatusRepo;
+        this.receiveBusinessStatusRoleRepo = receiveBusinessStatusRoleRepo;
         this.settlementModeRepo = settlementModeRepo;
         this.expenseCategoryRepo = expenseCategoryRepo;
         this.expenseSubCategoryRepo = expenseSubCategoryRepo;
@@ -88,14 +94,9 @@ public class MasterProvisioningService {
             named(new ClaimType(), orgId, "Warranty", 2),
             named(new ClaimType(), orgId, "Goodwill", 3)));
 
-        receiveBusinessStatusRepo.saveAll(List.of(
-            named(new ReceiveBusinessStatus(), orgId, "Hold", 1),
-            named(new ReceiveBusinessStatus(), orgId, "AMC", 2),
-            named(new ReceiveBusinessStatus(), orgId, "CG", 3),
-            named(new ReceiveBusinessStatus(), orgId, "WIP", 4),
-            named(new ReceiveBusinessStatus(), orgId, "Warranty", 5),
-            named(new ReceiveBusinessStatus(), orgId, "Credit", 6),
-            named(new ReceiveBusinessStatus(), orgId, "Close", 7)));
+        // A new org starts on the role-mapped list only — the pre-V26 statuses exist just to
+        // keep older orgs' job cards readable, so there is nothing to carry forward here.
+        provisionReceiveStatuses(orgId);
 
         settlementModeRepo.saveAll(List.of(
             settlementMode(orgId, "Cash", false, false, true, 1),
@@ -186,6 +187,33 @@ public class MasterProvisioningService {
         m.setRequiresRef(requiresRef);
         m.setCash(cash);
         return m;
+    }
+
+    /**
+     * The seven job-card statuses and who may set each: the Cashier works the first three,
+     * the Accountant adds Transfer to Claim, Finance owns the claim-settlement end. Mirrors
+     * V26 — change both together, or a new org and an existing one drift apart.
+     */
+    private void provisionReceiveStatuses(Long orgId) {
+        grantStatus(orgId, "Received", 1, Role.CASHIER, Role.ACCOUNTANT, Role.FINANCE_MANAGER);
+        grantStatus(orgId, "Waiting for Claim", 2, Role.CASHIER, Role.ACCOUNTANT, Role.FINANCE_MANAGER);
+        grantStatus(orgId, "Credit", 3, Role.CASHIER, Role.ACCOUNTANT, Role.FINANCE_MANAGER);
+        grantStatus(orgId, "Transfer to Claim", 4, Role.ACCOUNTANT, Role.FINANCE_MANAGER);
+        grantStatus(orgId, "Closed", 5, Role.FINANCE_MANAGER);
+        grantStatus(orgId, "Claim Received", 6, Role.FINANCE_MANAGER);
+        grantStatus(orgId, "Claim Pending", 7, Role.FINANCE_MANAGER);
+    }
+
+    private void grantStatus(Long orgId, String name, int sort, Role... roles) {
+        ReceiveBusinessStatus status =
+            receiveBusinessStatusRepo.save(named(new ReceiveBusinessStatus(), orgId, name, sort));
+        for (Role role : roles) {
+            ReceiveBusinessStatusRole grant = new ReceiveBusinessStatusRole();
+            grant.setOrgId(orgId);
+            grant.setStatusId(status.getId());
+            grant.setRole(role);
+            receiveBusinessStatusRoleRepo.save(grant);
+        }
     }
 
     private static ExpenseBusinessStatus expenseBusinessStatus(Long orgId, String name, boolean triggersClaim, int sort) {

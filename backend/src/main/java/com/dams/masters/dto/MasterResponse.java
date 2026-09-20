@@ -5,11 +5,14 @@ import com.dams.masters.MasterType;
 import com.dams.masters.entity.ExpenseBusinessStatus;
 import com.dams.masters.entity.ExpenseMode;
 import com.dams.masters.entity.ExpenseSubCategory;
+import com.dams.masters.entity.ReceiveBusinessStatus;
 import com.dams.masters.entity.SettlementMode;
 import com.dams.masters.entity.UpiVpa;
+import com.dams.user.entity.Role;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /** Master row. Type-specific fields are omitted from JSON when they don't apply. */
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -25,10 +28,20 @@ public record MasterResponse(
     Boolean triggersClaim,
     Long expenseCategoryId,
     BigDecimal limitAmount,
-    String vpa
+    String vpa,
+    Boolean deprecated,
+    List<String> allowedRoles
 ) {
 
     public static MasterResponse of(MasterType type, OrgMaster m) {
+        return of(type, m, null);
+    }
+
+    /**
+     * @param roles which roles may set this row, for receive-statuses only; null for every
+     *              other master, where the concept doesn't exist.
+     */
+    public static MasterResponse of(MasterType type, OrgMaster m, List<Role> roles) {
         Boolean requiresBank = null;
         Boolean requiresRef = null;
         Boolean isCash = null;
@@ -36,6 +49,7 @@ public record MasterResponse(
         Long expenseCategoryId = null;
         BigDecimal limitAmount = null;
         String vpa = null;
+        Boolean deprecated = null;
 
         if (m instanceof SettlementMode sm) {
             requiresBank = sm.isRequiresBank();
@@ -52,10 +66,15 @@ public record MasterResponse(
             limitAmount = esc.getLimitAmount();
         } else if (m instanceof UpiVpa uv) {
             vpa = uv.getVpa();
+        } else if (m instanceof ReceiveBusinessStatus rbs) {
+            deprecated = rbs.isDeprecated();
         }
+
+        List<String> allowedRoles = roles == null ? null : roles.stream().map(Enum::name).sorted().toList();
 
         return new MasterResponse(
             m.getId(), type.slug(), m.getName(), m.isActive(), m.getSortOrder(),
-            requiresBank, requiresRef, isCash, triggersClaim, expenseCategoryId, limitAmount, vpa);
+            requiresBank, requiresRef, isCash, triggersClaim, expenseCategoryId, limitAmount, vpa,
+            deprecated, allowedRoles);
     }
 }

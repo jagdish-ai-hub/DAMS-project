@@ -346,14 +346,15 @@ function CustomerDrawer({ customerId, onClose }: { customerId: number; onClose: 
               {data.timeline.map((t) => (
                 <div key={t.lineId} style={{
                   display: 'flex', gap: 10, padding: '7px 0', borderTop: '1px dashed var(--line)', fontSize: '0.8rem',
+                  minWidth: 0,
                 }}>
                   <span style={{ width: 84, color: 'var(--faint)', fontSize: '0.74rem', flexShrink: 0 }}>
                     {fmtDateShort(t.date)}
                   </span>
-                  <span style={{ flex: 1, color: 'var(--muted)' }}>
+                  <span style={{ flex: 1, minWidth: 0, color: 'var(--muted)', overflowWrap: 'anywhere' }}>
                     {t.description}{t.mode ? ` · ${t.mode}` : ''}
                   </span>
-                  <span style={{ fontWeight: 700, color: 'var(--green)', fontVariantNumeric: 'tabular-nums' }}>
+                  <span style={{ fontWeight: 700, color: 'var(--green)', fontVariantNumeric: 'tabular-nums', flexShrink: 0, whiteSpace: 'nowrap' }}>
                     {inr(t.amount)}
                   </span>
                 </div>
@@ -369,6 +370,7 @@ function CustomerDrawer({ customerId, onClose }: { customerId: number; onClose: 
           subtitle={docs.subtitle}
           frozen={docs.frozen}
           onClose={() => setDocs(null)}
+          zIndex={60}
         />
       )}
     </>

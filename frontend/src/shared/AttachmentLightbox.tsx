@@ -19,7 +19,12 @@ export default function AttachmentLightbox({ url, filename, contentType, onClose
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        // Stop here so the parent receipts/payment modal underneath stays open
+        // with its typed content intact.
+        e.stopPropagation()
+        onClose()
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

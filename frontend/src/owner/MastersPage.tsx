@@ -1,16 +1,26 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { mastersApi, type MasterRow, type MasterRequest, type MasterTypeSlug } from '../api/masters'
+import { mastersApi, type MasterRow, type MasterRequest, type MasterTypeSlug, type StatusRole } from '../api/masters'
 import {
   Badge, ErrorBanner, Field, Modal, TextInput,
-  card, ghostBtn, inputStyle, primaryBtn, td, th,
+  card, ghostBtn, inputStyle, primaryBtn, td, th, inr,
 } from '../shell/ui'
 import AiMastersStrip from './AiMastersStrip'
 import ReceiversSection from './ReceiversSection'
 
-type Extra = 'mode' | 'sub' | 'upi' | undefined
+type Extra = 'mode' | 'sub' | 'upi' | 'roles' | undefined
+
+/** Only these roles ever set a job-card status; the Owner is read-only on transactions. */
+const STATUS_ROLES: { value: StatusRole; label: string }[] = [
+  { value: 'CASHIER', label: 'Cashier' },
+  { value: 'ACCOUNTANT', label: 'Accountant' },
+  { value: 'FINANCE_MANAGER', label: 'Finance' },
+]
+
+const roleLabel = (r: StatusRole) => STATUS_ROLES.find((x) => x.value === r)?.label ?? r
+
 const TABS: { slug: MasterTypeSlug; label: string; extra: Extra }[] = [
   { slug: 'receive-categories', label: 'Transaction types', extra: undefined },
-  { slug: 'receive-statuses', label: 'Receipt statuses', extra: undefined },
+  { slug: 'receive-statuses', label: 'Receipt statuses', extra: 'roles' },
   { slug: 'claim-types', label: 'Claim types', extra: undefined },
   { slug: 'settlement-modes', label: 'Settlement modes', extra: 'mode' },
   { slug: 'expense-categories', label: 'Expense departments', extra: undefined },
@@ -128,20 +138,35 @@ export default function MastersPage() {
                   {tab.extra === 'mode' && <th style={th}>Requires</th>}
                   {tab.extra === 'sub' && <th style={th}>Limit</th>}
                   {tab.extra === 'upi' && <th style={th}>UPI ID</th>}
+                  {tab.extra === 'roles' && <th style={th}>Can be set by</th>}
                   <th style={th}>Status</th><th style={th}></th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id}>
-                    <td style={td}>{r.name}</td>
+                    <td style={td}>
+                      {r.name}
+                      {r.deprecated && (
+                        <span style={{ marginLeft: 8, fontSize: '0.68rem', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase' }}>
+                          Deprecated
+                        </span>
+                      )}
+                    </td>
                     {tab.extra === 'mode' && (
                       <td style={td}>
                         {[r.requiresBank && 'bank', r.requiresRef && 'ref'].filter(Boolean).join(' + ') || '—'}
                       </td>
                     )}
-                    {tab.extra === 'sub' && <td style={td}>{r.limitAmount != null ? `₹${r.limitAmount}` : '—'}</td>}
+                    {tab.extra === 'sub' && <td style={td}>{r.limitAmount != null ? inr(r.limitAmount) : '—'}</td>}
                     {tab.extra === 'upi' && <td style={{ ...td, fontFamily: 'Consolas, monospace', fontSize: '0.78rem' }}>{r.vpa}</td>}
+                    {tab.extra === 'roles' && (
+                      <td style={td}>
+                        {r.allowedRoles?.length
+                          ? r.allowedRoles.map(roleLabel).join(', ')
+                          : <span style={{ color: 'var(--amber)' }}>Nobody</span>}
+                      </td>
+                    )}
                     <td style={td}>{r.active ? <Badge tone="green">Active</Badge> : <Badge>Inactive</Badge>}</td>
                     <td style={{ ...td, textAlign: 'right' }}>
                       <button style={{ ...ghostBtn, minHeight: 36, padding: '4px 12px' }} onClick={() => setModal({ editing: r })}>Edit</button>
@@ -187,8 +212,17 @@ function MasterModal(props: {
   const [requiresRef, setRequiresRef] = useState(editing?.requiresRef ?? false)
   const [limitAmount, setLimitAmount] = useState(editing?.limitAmount != null ? String(editing.limitAmount) : '')
   const [vpa, setVpa] = useState(editing?.vpa ?? '')
+  // A new status starts available to everyone, matching how the pre-role-mapping
+  // statuses were treated — the Owner narrows it from there.
+  const [roles, setRoles] = useState<StatusRole[]>(
+    editing?.allowedRoles ?? STATUS_ROLES.map((r) => r.value))
+  const [deprecated, setDeprecated] = useState(editing?.deprecated ?? false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+
+  function toggleRole(role: StatusRole) {
+    setRoles((prev) => prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role])
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -204,6 +238,15 @@ function MasterModal(props: {
         body.limitAmount = limitAmount === '' ? null : Number(limitAmount)
       }
       if (tab.extra === 'upi') body.vpa = vpa.trim()
+      if (tab.extra === 'roles') {
+        if (roles.length === 0) {
+          setError('Pick at least one role — a status nobody can set would never appear.')
+          setSaving(false)
+          return
+        }
+        body.allowedRoles = roles
+        body.deprecated = deprecated
+      }
       if (editing) await mastersApi.update(tab.slug, editing.id, body)
       else await mastersApi.create(tab.slug, body)
       props.onSaved()
@@ -246,6 +289,28 @@ function MasterModal(props: {
           <Field label="Per-line limit (₹)" hint="Optional — over this, the expense is flagged (not blocked)">
             <TextInput value={limitAmount} onChange={setLimitAmount} type="number" placeholder="e.g. 2000" />
           </Field>
+        )}
+        {tab.extra === 'roles' && (
+          <>
+            <Field label="Can be set by" hint="Only these roles see this status in their dropdown">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {STATUS_ROLES.map((r) => (
+                  <label key={r.value} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.85rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={roles.includes(r.value)}
+                      onChange={() => toggleRole(r.value)}
+                    />
+                    {r.label}
+                  </label>
+                ))}
+              </div>
+            </Field>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.85rem' }}>
+              <input type="checkbox" checked={deprecated} onChange={(e) => setDeprecated(e.target.checked)} />
+              Deprecated — still works, but shown last and marked
+            </label>
+          </>
         )}
 
         {editing && (

@@ -1,4 +1,5 @@
 import { type CSSProperties, type ReactNode, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 
 /** Small shared building blocks in the same inline-style idiom as the rest of the app. */
 
@@ -190,7 +191,7 @@ export function ErrorBanner({ message }: { message: string }) {
   )
 }
 
-export function Modal(props: { title: string; subtitle?: string; onClose: () => void; children: ReactNode; footer?: ReactNode; maxWidth?: number }) {
+export function Modal(props: { title: string; subtitle?: string; onClose: () => void; children: ReactNode; footer?: ReactNode; maxWidth?: number; zIndex?: number }) {
   const { onClose } = props
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -203,7 +204,11 @@ export function Modal(props: { title: string; subtitle?: string; onClose: () => 
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  return (
+  // Portalled to document.body so a Modal opened from inside another popup
+  // (history drawer → View documents, etc.) escapes the parent card's entrance
+  // transform — a transformed ancestor would otherwise trap `position:fixed`
+  // descendants and clip their shadow/window. Same look, just correct stacking.
+  return createPortal(
     <div
       className="dams-anim-backdrop"
       role="dialog"
@@ -213,7 +218,7 @@ export function Modal(props: { title: string; subtitle?: string; onClose: () => 
       style={{
         position: 'fixed', inset: 0, background: 'rgba(16,24,40,.45)',
         display: 'flex', justifyContent: 'center',
-        padding: 'clamp(12px, 3vh, 32px) clamp(10px, 3vw, 16px)', zIndex: 50, overflowY: 'auto',
+        padding: 'clamp(12px, 3vh, 32px) clamp(10px, 3vw, 16px)', zIndex: props.zIndex ?? 50, overflowY: 'auto',
       }}
     >
       <div
@@ -261,7 +266,8 @@ export function Modal(props: { title: string; subtitle?: string; onClose: () => 
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

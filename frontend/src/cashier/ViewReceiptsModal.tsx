@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { receiptsApi, type Attachment } from '../api/receipts'
 import { Modal, ErrorBanner, ghostBtn, dangerBtn, SkeletonRows, Spinner } from '../shell/ui'
 import AttachmentLightbox from '../shared/AttachmentLightbox'
@@ -15,6 +16,7 @@ export default function ViewReceiptsModal(props: {
   frozen: boolean
   onClose: () => void
   onChanged?: () => void
+  zIndex?: number
 }) {
   const { receiptId, lineNo } = props
   const [items, setItems] = useState<Attachment[] | null>(null)
@@ -74,6 +76,7 @@ export default function ViewReceiptsModal(props: {
       title="Receipts"
       subtitle={props.subtitle}
       onClose={props.onClose}
+      zIndex={props.zIndex}
       footer={
         <button type="button" onClick={props.onClose} style={{ ...ghostBtn, minHeight: 36 }}>Close</button>
       }
@@ -140,13 +143,14 @@ export default function ViewReceiptsModal(props: {
         </label>
       )}
 
-      {lightbox && (
+      {lightbox && createPortal(
         <AttachmentLightbox
           url={lightbox.url}
           filename={lightbox.filename}
           contentType={lightbox.contentType}
           onClose={() => setLightbox(null)}
-        />
+        />,
+        document.body,
       )}
     </Modal>
   )

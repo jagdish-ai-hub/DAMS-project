@@ -46,6 +46,12 @@ export interface BulkVerifyResponse {
   skippedIds: number[]
 }
 
+export interface BulkApproveResponse {
+  approvedCount: number
+  approvedIds: number[]
+  skippedReasons: string[]
+}
+
 export const reviewApi = {
   receiptQueue() {
     return api.get<ReviewQueueItem[]>('/api/v1/review/receipts')
@@ -73,7 +79,7 @@ export const reviewApi = {
     return api.post<AnyReviewDoc>(`${base(t)}/${id}/verify`)
   },
   bulkVerify(t: 'receipt' | 'expense', ids: number[]) {
-    return api.post<BulkVerifyResponse>(`${base(t)}/bulk-verify`, { documentIds: ids })
+    return api.post<BulkVerifyResponse>(`${base(t)}/bulk-verify`, { ids })
   },
   approve(t: ReviewType, id: number) {
     return api.post<AnyReviewDoc>(`${base(t)}/${id}/approve`)
@@ -86,6 +92,20 @@ export const reviewApi = {
   },
   overrideLine(t: ReviewType, id: number, lineNo: number, amount: number, reason: string) {
     return api.post<ReceiveDocument | ExpenseDocument>(`${base(t)}/${id}/lines/${lineNo}/override`, { amount, reason })
+  },
+  /** Receipts only — the job card's invoice amount, not a settlement line. */
+  overrideInvoiceAmount(id: number, amount: number, reason: string) {
+    return api.post<ReceiveDocument>(`/api/v1/receipts/${id}/override-invoice-amount`, { amount, reason })
+  },
+  /** SUBMITTED receipts an Accountant may approve directly (org opt-in) — no claim, status ≠ Credit, all-cash lines. */
+  directApproveEligibleReceipts() {
+    return api.get<ReviewQueueItem[]>('/api/v1/review/receipts/direct-approve-eligible')
+  },
+  directApproveReceipt(id: number) {
+    return api.post<ReceiveDocument>(`/api/v1/receipts/${id}/direct-approve`)
+  },
+  bulkDirectApproveReceipts(ids: number[]) {
+    return api.post<BulkApproveResponse>('/api/v1/receipts/direct-approve', { ids })
   },
   closeExpense(id: number) {
     return api.post<ExpenseDocument>(`/api/v1/expenses/${id}/close`)

@@ -115,7 +115,12 @@ export default function AppShell() {
         background: 'var(--navy)', color: '#fff', padding: '0 clamp(10px, 2.5vw, 20px)',
       }}>
         {/* Row 1: hamburger (phone only, < 640px) + logo + right-side actions — always one line. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(10px, 2vw, 22px)', height: 52 }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 'clamp(10px, 2vw, 22px)', height: 52,
+          // A crowded row (Owner/FM: Ask + Help + account) must swipe inside the
+          // header on a 360px phone, never push the whole page sideways.
+          overflowX: 'auto', scrollbarWidth: 'none', minWidth: 0,
+        }}>
           <button
             type="button"
             onClick={() => setNavOpen(!navOpen)}
@@ -146,18 +151,18 @@ export default function AppShell() {
             </svg>
           </button>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, minWidth: 0 }}>
             <div style={{
               width: 28, height: 28, borderRadius: 7, background: 'rgba(255,255,255,.14)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontWeight: 700, fontSize: '0.72rem',
+              fontWeight: 700, fontSize: '0.72rem', flexShrink: 0,
             }}>
               DA
             </div>
-            <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>DAMS</span>
+            <span style={{ fontWeight: 700, fontSize: '0.95rem', whiteSpace: 'nowrap' }}>DAMS</span>
           </div>
 
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
             {canAsk && (
               <button
                 type="button"
@@ -166,7 +171,7 @@ export default function AppShell() {
                 style={{
                   background: 'rgba(255,255,255,.14)', color: '#fff', border: 'none', borderRadius: 7,
                   padding: '6px 12px', fontSize: '0.83rem', fontWeight: 600, cursor: 'pointer',
-                  minHeight: 32, display: 'flex', alignItems: 'center',
+                  minHeight: 32, display: 'flex', alignItems: 'center', whiteSpace: 'nowrap',
                 }}
               >
                 ✦ Ask DAMS
@@ -175,13 +180,13 @@ export default function AppShell() {
             <button
               type="button"
               onClick={() => setHelpOpen(true)}
-              style={{
-                background: 'rgba(255,255,255,.14)', color: '#fff', border: 'none', borderRadius: 7,
-                padding: '6px 12px', fontSize: '0.83rem', fontWeight: 600, cursor: 'pointer',
-                minHeight: 32, display: 'flex', alignItems: 'center',
-              }}
-            >
-              ? Help
+                style={{
+                  background: 'rgba(255,255,255,.14)', color: '#fff', border: 'none', borderRadius: 7,
+                  padding: '6px 12px', fontSize: '0.83rem', fontWeight: 600, cursor: 'pointer',
+                  minHeight: 32, display: 'flex', alignItems: 'center', whiteSpace: 'nowrap',
+                }}
+              >
+                ? Help
             </button>
 
             <AccountMenu />

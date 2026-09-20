@@ -4,6 +4,7 @@ import { expensesApi } from '../api/expenses'
 import { cashApi, type CashDocument } from '../api/cash'
 import { reviewApi, type FmQueue, type ReviewQueueItem, type ReviewType } from '../api/review'
 import { jobCardsApi } from '../api/jobCards'
+import { mastersApi, type MasterRow } from '../api/masters'
 import { card, Badge, ErrorBanner, ghostBtn, primaryBtn, inputStyle, Modal, Skeleton, SkeletonRows, inr } from '../shell/ui'
 import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, type AnyDoc } from '../review/reviewShared'
 import GlobalSearch from '../shared/GlobalSearch'
@@ -420,6 +421,16 @@ function FmDetail(props: {
   const [box, setBox] = useState<'query' | null>(null)
   const [boxText, setBoxText] = useState('')
   const [claimModal, setClaimModal] = useState(false)
+  const [statusOptions, setStatusOptions] = useState<MasterRow[]>([])
+
+  useEffect(() => {
+    if (!receipt) return
+    let live = true
+    mastersApi.listSelectable('receive-statuses')
+      .then(({ data }) => live && setStatusOptions(data))
+      .catch((e) => live && setError(apiError(e, 'Could not load the status list.')))
+    return () => { live = false }
+  }, [receipt != null])
 
   const { user } = useAuth()
   // Maker-checker mirror (claim close needs none — an FM can never be a maker by
@@ -469,7 +480,21 @@ function FmDetail(props: {
       <ErrorBanner message={error} />
       {cash
         ? <CashRecordCard doc={doc as CashDocument} />
-        : <RecordCard doc={doc as AnyDoc} canOverride={false} busy={busy} onError={setError} onOverride={async () => {}} />}
+        : (
+          <RecordCard
+            doc={doc as AnyDoc}
+            canOverride={false}
+            busy={busy}
+            onError={setError}
+            onOverride={async () => {}}
+            statusOptions={receipt && statusOptions.length ? statusOptions : undefined}
+            onStatusChange={receipt
+              ? (statusId) => run(
+                () => jobCardsApi.patch(receipt.jobCardId, { businessStatusId: statusId }),
+                `${docNo} — status updated`, true)
+              : undefined}
+          />
+        )}
 
       {isClosedClaim && receipt && (
         <div style={{ ...card, background: 'var(--purple-bg, #EFE7FB)', borderColor: '#D9C7EF', marginBottom: 14 }}>

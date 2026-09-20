@@ -41,10 +41,13 @@ public class OrgSettingsService {
         if (request.getMultiBranchCashierAccess() != null) {
             org.setMultiBranchCashierAccess(request.getMultiBranchCashierAccess());
         }
+        if (request.getAccountantDirectApproveCash() != null) {
+            org.setAccountantDirectApproveCash(request.getAccountantDirectApproveCash());
+        }
         orgRepo.save(org);
 
-        log.info("Org settings updated: orgId={} multiBranchCashierAccess={}",
-            org.getId(), org.isMultiBranchCashierAccess());
+        log.info("Org settings updated: orgId={} multiBranchCashierAccess={} accountantDirectApproveCash={}",
+            org.getId(), org.isMultiBranchCashierAccess(), org.isAccountantDirectApproveCash());
         return OrgSettingsResponse.of(org);
     }
 

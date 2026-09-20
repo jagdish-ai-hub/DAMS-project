@@ -29,6 +29,15 @@ public class Organization {
     @Column(name = "multi_branch_cashier_access", nullable = false)
     private boolean multiBranchCashierAccess = false;
 
+    /**
+     * When true, an Accountant may approve a SUBMITTED receipt directly — no claim type,
+     * business status not "Credit", every settlement line cash-mode — skipping the Finance
+     * Manager. Default OFF: a carve-out from "FM gives final approval on every entry"
+     * (AGENT.md) that an org must opt into. See ReviewService#directApproveReceipt.
+     */
+    @Column(name = "accountant_direct_approve_cash", nullable = false)
+    private boolean accountantDirectApproveCash = false;
+
     @Column(nullable = false)
     private boolean active = true;
 

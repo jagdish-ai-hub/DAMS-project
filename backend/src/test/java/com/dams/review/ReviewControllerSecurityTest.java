@@ -149,6 +149,20 @@ class ReviewControllerSecurityTest {
     }
 
     @Test
+    void overrideInvoiceAmount_okForAccountant_forbiddenForFinanceManager() throws Exception {
+        stubToken("acct-token", 6L, 1L, Role.ACCOUNTANT);
+        when(reviewService.overrideInvoiceAmount(any(), any(), any())).thenReturn(mock(ReceiveDocumentResponse.class));
+        mockMvc.perform(post("/api/v1/receipts/1/override-invoice-amount").header("Authorization", "Bearer acct-token")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"amount\":10,\"reason\":\"r\"}"))
+            .andExpect(status().isOk());
+
+        stubToken("fm-token", 8L, 1L, Role.FINANCE_MANAGER);
+        mockMvc.perform(post("/api/v1/receipts/1/override-invoice-amount").header("Authorization", "Bearer fm-token")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"amount\":10,\"reason\":\"r\"}"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
     void jobCardGet_okForOwner_patchForbiddenForOwner() throws Exception {
         stubToken("owner-token", 5L, 1L, Role.OWNER);
         when(jobCardService.get(9L)).thenReturn(mock(JobCardResponse.class));
@@ -182,6 +196,57 @@ class ReviewControllerSecurityTest {
 
         stubToken("cashier-token", 7L, 1L, Role.CASHIER);
         mockMvc.perform(get("/api/v1/export/receipts").header("Authorization", "Bearer cashier-token"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void exportReceiptsByIds_okForAccountant_forbiddenForCashier() throws Exception {
+        stubToken("acct-token", 6L, 1L, Role.ACCOUNTANT);
+        when(exportService.exportReceiptsCsvByIds(any())).thenReturn(new byte[0]);
+        mockMvc.perform(get("/api/v1/export/receipts/by-id?ids=1,2").header("Authorization", "Bearer acct-token"))
+            .andExpect(status().isOk());
+
+        stubToken("cashier-token", 7L, 1L, Role.CASHIER);
+        mockMvc.perform(get("/api/v1/export/receipts/by-id?ids=1,2").header("Authorization", "Bearer cashier-token"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void directApproveReceipt_okForAccountant_forbiddenForFinanceManager() throws Exception {
+        stubToken("acct-token", 6L, 1L, Role.ACCOUNTANT);
+        when(reviewService.directApproveReceipt(any())).thenReturn(mock(ReceiveDocumentResponse.class));
+        mockMvc.perform(post("/api/v1/receipts/1/direct-approve").header("Authorization", "Bearer acct-token"))
+            .andExpect(status().isOk());
+
+        stubToken("fm-token", 8L, 1L, Role.FINANCE_MANAGER);
+        mockMvc.perform(post("/api/v1/receipts/1/direct-approve").header("Authorization", "Bearer fm-token"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void directApproveEligibleReceipts_okForAccountant_forbiddenForFinanceManager() throws Exception {
+        stubToken("acct-token", 6L, 1L, Role.ACCOUNTANT);
+        when(reviewService.directApproveEligibleReceipts()).thenReturn(List.of());
+        mockMvc.perform(get("/api/v1/review/receipts/direct-approve-eligible").header("Authorization", "Bearer acct-token"))
+            .andExpect(status().isOk());
+
+        stubToken("fm-token", 8L, 1L, Role.FINANCE_MANAGER);
+        mockMvc.perform(get("/api/v1/review/receipts/direct-approve-eligible").header("Authorization", "Bearer fm-token"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void bulkDirectApproveReceipts_okForAccountant_forbiddenForFinanceManager() throws Exception {
+        stubToken("acct-token", 6L, 1L, Role.ACCOUNTANT);
+        when(reviewService.bulkDirectApproveReceipts(any()))
+            .thenReturn(new com.dams.review.dto.BulkApproveResponse(0, List.of(), List.of()));
+        mockMvc.perform(post("/api/v1/receipts/direct-approve").header("Authorization", "Bearer acct-token")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"ids\":[1]}"))
+            .andExpect(status().isOk());
+
+        stubToken("fm-token", 8L, 1L, Role.FINANCE_MANAGER);
+        mockMvc.perform(post("/api/v1/receipts/direct-approve").header("Authorization", "Bearer fm-token")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"ids\":[1]}"))
             .andExpect(status().isForbidden());
     }
 

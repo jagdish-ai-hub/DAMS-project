@@ -552,15 +552,15 @@ function CustomerHistoryView(props: {
                 data.timeline.map((t) => (
                   <div key={t.lineId} style={{
                     display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0',
-                    borderBottom: '1px dashed var(--line)', fontSize: '0.83rem',
+                    borderBottom: '1px dashed var(--line)', fontSize: '0.83rem', minWidth: 0,
                   }}>
                     <span style={{ width: 96, color: 'var(--faint)', fontSize: '0.76rem', flexShrink: 0 }}>
                       {fmtDateShort(t.date)}
                     </span>
-                    <span style={{ flex: 1, color: 'var(--muted)' }}>
+                    <span style={{ flex: 1, minWidth: 0, color: 'var(--muted)', overflowWrap: 'anywhere' }}>
                       {t.description}{t.mode ? ` · ${t.mode}` : ''} · {t.lineId}
                     </span>
-                    <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--green)' }}>
+                    <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--green)', flexShrink: 0, whiteSpace: 'nowrap' }}>
                       {inr(t.amount)}
                     </span>
                   </div>

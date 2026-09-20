@@ -7,6 +7,126 @@
 
 ## Revision log
 
+- **rev 47 (2026-09-20)** — High-severity UI bug-hunt fixes, frontend-only, same design
+  throughout (no entities, migrations, endpoints, or visual redesign). Popup stack:
+  shared `Modal` now portals to `document.body` with an optional `zIndex` (nested
+  View-Receipts in the search drawer uses 60), so nested popups escape the parent
+  card's entrance transform that clipped their shadow/window; UPI QR and Print
+  modals also portal (z 70), scroll on short screens (`dvh`-capped), lost their
+  `overflow-hidden` shadow clip and undefined `var(--surface-muted)`/`var(--text)`
+  headers, and stop Escape propagation so the parent keeps typed input; QR loading
+  uses `SkeletonRows`; lightbox Escape no longer closes the parent underneath.
+  Print-blank fixed: the printable receipt now renders as a print-only portal copy
+  directly under body (outside the `.no-print{display:none}` chrome). Reviewer:
+  detail-load failure shows an in-pane error + Retry instead of an endless shimmer.
+  Layout: header row 1 swipes inside itself on 360px phones instead of pushing the
+  page sideways; payment timelines wrap (`minWidth:0` + `overflowWrap`) with
+  non-shrinking dates/amounts. Data: dashboard cash alerts use branch-local
+  `istToday()` (was UTC, flipped a day for IST) with calendar-day parsing; masters
+  sub-category limits use `inr()` grouping. Also installed the missing
+  `qrcode.react` dep (rev 33 import, never installed) — `tsc`, `eslint` (0 errors),
+  `vitest`, and production `vite build` all green; printable receipt verified in
+  the built bundle.
+- **rev 46 (2026-09-20)** — Accountant direct-approve for eligible cash receipts — a
+  deliberate, opt-in exception to "FM gives final approval on every entry" (AGENT.md,
+  updated alongside this). New org toggle `accountant_direct_approve_cash`
+  (`V27__accountant_direct_approve_toggle.sql`, default OFF, same shape as
+  `multi_branch_cashier_access`), Owner-editable in Settings → Organization.
+  Eligibility (server-enforced on every call, never trusted from a list the client already
+  has): the job card carries no `claim_type_id`, its business status isn't "Credit" (looked
+  up by name, not hardcoded id), and every settlement line's mode has `is_cash = true` (the
+  same flag the Cash-page drawer already uses — respects however modes are actually named).
+  One click, one atomic `SUBMITTED → APPROVED` transition — no intermediate VERIFIED row —
+  audited as a single `EventType.APPROVED` event tagged `directByAccountant: true`.
+  New `ReviewService.directApproveEligibleReceipts()` / `directApproveReceipt(id)` /
+  `bulkDirectApproveReceipts(ids)`; new `POST /receipts/{id}/direct-approve`,
+  `POST /receipts/direct-approve` (bulk, reuses `BulkVerifyRequest`), and
+  `GET /review/receipts/direct-approve-eligible`. New `BulkApproveResponse` DTO (accurate
+  field names — `approvedCount`/`approvedIds`, not a relabelled `BulkVerifyResponse`).
+  Export: `ExportService` gains `exportReceiptsCsvByIds` (new repository query keyed by
+  explicit receipt ids instead of a branch/date window), sharing every column/CSV/BOM
+  helper with the existing ledger export — same "Excel-compatible" format, just scoped to
+  a selection. New `GET /export/receipts/by-id?ids=`.
+  Frontend: Accountant's `ReviewQueuePage` gets a "Direct Approve" toggle on the Receipts
+  tab that swaps the list source to the eligible-only endpoint and repoints the existing
+  bulk-select bar at bulk-direct-approve instead of bulk-verify (same select-all/select-one
+  UI, no new component) — plus an Export button that downloads exactly what's
+  selected. Single-item approval is just "select one, click the same button" — no separate
+  per-row action needed. Finance Manager's queue is untouched; nothing eligible ever reaches
+  it once this is on.
+  Verified: `mvn test` 215 green (0 failures/errors, 4 pre-existing Docker-only skips),
+  including 8 new `ReviewServiceTest` cases and 4 new `ReviewControllerSecurityTest` cases;
+  `tsc --noEmit`, `eslint`, and `vitest` all clean (2 pre-existing warnings from rev 44,
+  unrelated). Production `vite build` still blocked by a pre-existing, unrelated gap —
+  `qrcode.react` (rev 33) was never `npm install`ed in this environment; confirmed via
+  `git status` showing no package.json changes and `node_modules/qrcode.react` absent.
+  **Found but not fixed (flagged, not in scope):** `ReviewQueuePage`'s existing bulk-verify
+  call posts `{documentIds: ids}` to an endpoint whose DTO field is `ids` — the existing
+  Bulk Verify button likely 400s in production today. Did not touch it this pass; new
+  bulk-direct-approve code posts the correct `{ids}` shape.
+
+- **rev 45 (2026-09-20)** — Accountant can override a job card's invoice amount. Same gap
+  as rev 44's status fix: `JobCardService.patch` already let CASHIER/ACCOUNTANT/
+  FINANCE_MANAGER write `invoiceAmount` freely, but no screen ever exposed it to
+  Accounts — the review queue showed it as a plain read-only line — and the field carried
+  **no audit trail at all**, unlike category/status/claim-type changes.
+  New `ReviewService.overrideInvoiceAmount(receiptId, amount, reason)` — Accountant-only,
+  gated exactly like `overrideReceiptLine` (the receipt under review must be SUBMITTED,
+  never by whoever created/last-modified it). New endpoint
+  `POST /receipts/{id}/override-invoice-amount`, reusing `LineOverrideRequest` — no new
+  DTO. Recorded as an `EventType.OVERRIDE` audit row on the **JobCard**, not the receipt
+  (invoice amount outlives any one receipt).
+  `OverrideAuditService` gains a 4th feed, `kind = "invoice"`, alongside receipt/expense
+  line overrides and FM claim-close overrides. Tightened `lineOverrides()` to explicitly
+  require `entityType` in `{ReceiveDocument, ExpenseDocument}` — before this change an
+  OVERRIDE event on any other entity would have silently fallen into the "expense" branch
+  and looked up the wrong document; a regression test pins this
+  (`list_includesInvoiceAmountOverride_asItsOwnKind_notMisfiledAsAnExpense`).
+  Frontend: the "Invoice amount" row in `RecordCard` gets the same inline Override
+  affordance settlement lines already have (amount + required reason, amber box),
+  gated by the same `canOverride` the line overrides use. Accountant's `ReviewQueuePage`
+  wires it up; Finance's `FmQueuePage` deliberately does not (Accountant-only, per
+  decision). Cashier's own edit path (`NewReceiptPage` → `PATCH /job-cards/{id}`) is
+  untouched — additive, nothing taken away from the cashier.
+  Verified: `mvn test` 204 green (0 failures/errors, 4 pre-existing Docker-only skips),
+  including 6 new `ReviewServiceTest` cases and 1 new `ReviewControllerSecurityTest`
+  case; `tsc --noEmit` / `eslint` clean (2 pre-existing warnings from rev 44, unrelated).
+
+- **rev 44 (2026-09-18)** — Job-card business status becomes role-mapped, and Accounts /
+  Finance can finally change it. Two problems: the status list was one flat set anyone
+  could pick from, and in practice **only** the Cashier ever set it — no Accountant or
+  Finance screen exposed the field at all, so it was frozen at whatever was chosen when
+  the receipt was created. The dealership's real process splits the list by role.
+  New status set, cumulative by role — **Cashier**: Received / Waiting for Claim /
+  Credit; **Accountant**: those three + Transfer to Claim; **Finance**: all of those +
+  Closed / Claim Received / Claim Pending. Nothing auto-sets on Close Claim (asked and
+  confirmed) — Finance picks the settlement status by hand. The earlier statuses
+  (Hold / AMC / CG / WIP / Warranty / Close) are **not** removed: they stay selectable by
+  every role but carry a new `deprecated` flag that sorts them below the live list and
+  marks them in the dropdown, so existing job cards keep working. `Credit` is the one
+  name carried over — the original row is reused, so job cards pointing at it are
+  untouched.
+  `V26__receive_status_role_access.sql`: `receive_business_status` += `deprecated`; new
+  `receive_business_status_role` (status_id, role) where **absence of a row is the
+  denial**. Every pre-existing status — including any an org added itself — is mapped to
+  all three roles first, so nothing silently becomes unpickable.
+  The mapping is org data, editable by the Owner in **Masters → Receipt statuses**
+  (role checkboxes + a deprecated toggle, "Can be set by" column), never a hard-coded
+  list. `GET /masters/{type}/mine` returns just the rows the caller's own role may pick,
+  driven by the JWT — the dropdowns call this, so the UI and the API can't disagree.
+  `JobCardService` enforces it on both create and PATCH.
+  **One deliberate change to a prior rule:** PATCH used to freeze `business_status_id`
+  along with category and claim type once a `ClaimClose` row existed. Finance is now
+  exempt for the status specifically, because Closed / Claim Received / Claim Pending
+  describe how the claim money actually settled — only knowable *after* closing. Category
+  and claim type stay frozen for everyone, Accountant and Cashier stay frozen out of the
+  status at close.
+  Verified: `mvn test` 197 green (0 failures/errors, 4 pre-existing Docker-only skips),
+  including 7 new `ReceiveStatusAccessServiceTest` cases, 3 new job-card PATCH cases
+  (role rejection, accountant frozen after close, FM allowed), and a purge-order case
+  proving role grants are deleted before the statuses they point at; `tsc --noEmit`
+  clean.
+
 - **rev 43 (2026-09-14)** — Found the **actual** reason the Neon compute never slept, after
   rev 42's HikariCP fix (deployed, confirmed live via GitHub Actions) still didn't let it
   suspend — verified with a clean ~25 minute Neon API check where nothing, including this
@@ -1097,7 +1217,7 @@
 ### Platform-level (no `org_id`)
 
 **Organization**
-`id` BIGINT PK, `name`, `multi_branch_cashier_access` BOOL DEFAULT false, `active` BOOL, `created_at`
+`id` BIGINT PK, `name`, `multi_branch_cashier_access` BOOL DEFAULT false, `accountant_direct_approve_cash` BOOL DEFAULT false *(rev 46)*, `active` BOOL, `created_at`
 
 **User** (`app_user` in DB — `user` is reserved in Postgres)
 `id` BIGINT PK, `org_id` BIGINT nullable (null = SUPER_ADMIN), `home_branch_id` BIGINT nullable (**NOT NULL in practice for CASHIER**, null for every other role — the branch every document this cashier creates posts under), `name`, `email` UNIQUE, `password_hash` nullable (null until invite accepted), `role` ENUM(SUPER_ADMIN / OWNER / FINANCE_MANAGER / ACCOUNTANT / CASHIER), `active` BOOL, `invite_token` nullable, `invite_expires_at` nullable, `created_at`
@@ -1134,8 +1254,11 @@ Unique: `(org_id, vehicle_no)`
 
 **ReceiveCategory** — `id`, `org_id`, `name`, `is_claim` BOOL, `active`, `sort_order`
 
-**ReceiveBusinessStatus** — `id`, `org_id`, `name`, `active`, `sort_order`
-*(seed values from the mockups: Hold / AMC / CG / WIP / Warranty / Credit / Close — "Close" here is a user-set business status, distinct from the computed `ReceiveDocument.settled` flag)*
+**ReceiveBusinessStatus** — `id`, `org_id`, `name`, `active`, `sort_order`, `deprecated` BOOL *(rev 44)*
+*(seed values: Received / Waiting for Claim / Credit / Transfer to Claim / Closed / Claim Received / Claim Pending. "Closed" here is a user-set business status, distinct from the computed `ReceiveDocument.settled` flag. The pre-rev-44 values — Hold / AMC / CG / WIP / Warranty / Close — are kept, flagged `deprecated`, and sorted last rather than removed.)*
+
+**ReceiveBusinessStatusRole** *(rev 44)* — `id`, `org_id`, `status_id` → `receive_business_status`, `role`
+*(which roles may **set** a status; absence of a row is the denial. Owner-editable in Masters. `deprecated` ≠ `active`: an inactive status leaves the dropdown, a deprecated one still works and still shows, just last and marked.)*
 
 **SettlementMode** — `id`, `org_id`, `name`, `requires_bank` BOOL, `requires_ref` BOOL, `active`, `sort_order`
 

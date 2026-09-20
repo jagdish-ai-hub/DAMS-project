@@ -15,6 +15,7 @@ import com.dams.receive.service.ReceivePaymentGuard;
 import com.dams.masters.repository.ClaimTypeRepository;
 import com.dams.masters.repository.ReceiveBusinessStatusRepository;
 import com.dams.masters.repository.ReceiveCategoryRepository;
+import com.dams.masters.service.ReceiveStatusAccessService;
 import com.dams.user.repository.AppUserRepository;
 import com.dams.vehicle.repository.VehicleRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -52,6 +53,7 @@ class JobCardBranchScopeTest {
     @Mock private PendingAmountCalculator pendingAmountCalculator;
     @Mock private ClaimCloseRepository claimCloseRepo;
     @Mock private ReceivePaymentGuard paymentGuard;
+    @Mock private ReceiveStatusAccessService statusAccess;
 
     private JobCardService service;
 
@@ -59,7 +61,7 @@ class JobCardBranchScopeTest {
     void setUp() {
         service = new JobCardService(jobCardRepo, customerRepo, vehicleRepo, branchRepo,
             categoryRepo, statusRepo, claimTypeRepo, userRepo, branchScope, auditService,
-            pendingAmountCalculator, claimCloseRepo, paymentGuard);
+            pendingAmountCalculator, claimCloseRepo, paymentGuard, statusAccess);
         TenantContext.setOrgId(ORG);
     }
 

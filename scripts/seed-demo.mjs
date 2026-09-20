@@ -81,21 +81,31 @@ const vno = (code, i) => `${RTO[code] || 'OD00'}${'ABCDEFGH'[i % 8]}${String(100
 const gst = (i) => `21ABCDE${String(1000 + i)}F1Z${i % 9}`
 
 // 12 job cards / branch across 8 customers. [category, status, invoice, mode, payFraction, disposition]
+//
+// Statuses are the rev-44 role-mapped list (plan.md rev 44), set at creation by the
+// cashier — so only their three (Received / Waiting for Claim / Credit) appear here.
+// Transfer to Claim / Claim Received / Claim Pending are set later, by the Accountant
+// and Finance Manager respectively, in the review/approve phases below — that's the
+// actual feature this seed is meant to exercise, not just a status rename.
+//
+// The two claim entries also carry `claim`, a claim_type name (AMC / Warranty) — claim-ness
+// lives on the job card via claim_type_id since the V23 redesign, not on the category, so
+// their `cat` is a normal transaction type ('Workshop') like everything else.
 function jobCardPlan(branchIndex) {
   const b2bOrReject = branchIndex === 0 ? 'reject' : 'approve'
   return [
-    { c: 0, cat: 'Workshop',        st: 'WIP',      inv: 18500, mode: 'Cash',     pay: 1.0,  d: 'approve' },
-    { c: 1, cat: 'Breakdown',       st: 'WIP',      inv: 9200,  mode: 'QR / UPI', pay: 1.0,  d: 'approve' },
-    { c: 2, cat: 'Workshop',        st: 'WIP',      inv: 26000, mode: 'Bank',     pay: 1.0,  d: 'verify' },
-    { c: 3, cat: 'Spare / Counter', st: 'Close',    inv: 4300,  mode: 'Cash',     pay: 1.0,  d: 'approve' },
-    { c: 4, cat: 'Advance',         st: 'Hold',     inv: 7000,  mode: 'Adv-Cash', pay: 0.55, d: 'submitted' },
-    { c: 5, cat: 'Workshop',        st: 'WIP',      inv: 14800, mode: 'Cash',     pay: 0.6,  d: 'query' },
-    { c: 0, cat: 'AMC',             st: 'AMC',      inv: 21000, mode: 'Cash',     pay: 1.0,  d: 'claimExact' },
-    { c: 1, cat: 'Warranty',        st: 'Warranty', inv: 16500, mode: 'Cash',     pay: 1.0,  d: 'claimShort' },
-    { c: 6, cat: 'Workshop',        st: 'WIP',      inv: 12000, mode: 'Cash',     pay: 1.0,  d: 'approve' },
-    { c: 7, cat: 'B2B Credit',      st: 'Credit',   inv: 33000, mode: 'Bank',     pay: 0.4,  d: b2bOrReject },
-    { c: 2, cat: 'Workshop',        st: 'WIP',      inv: 6800,  mode: 'Cash',     pay: 1.0,  d: 'approve' },
-    { c: 3, cat: 'Breakdown',       st: 'WIP',      inv: 5200,  mode: 'Cash',     pay: 0.0,  d: 'draft' },
+    { c: 0, cat: 'Workshop',                     st: 'Received',         inv: 18500, mode: 'Cash',     pay: 1.0,  d: 'approve' },
+    { c: 1, cat: 'Breakdown',                    st: 'Received',         inv: 9200,  mode: 'QR / UPI', pay: 1.0,  d: 'approve' },
+    { c: 2, cat: 'Workshop',                     st: 'Received',         inv: 26000, mode: 'Bank',     pay: 1.0,  d: 'verify' },
+    { c: 3, cat: 'Spare / Counter',              st: 'Received',         inv: 4300,  mode: 'Cash',     pay: 1.0,  d: 'approve' },
+    { c: 4, cat: 'Advance',                      st: 'Received',         inv: 7000,  mode: 'Adv-Cash', pay: 0.55, d: 'submitted' },
+    { c: 5, cat: 'Workshop',                     st: 'Received',         inv: 14800, mode: 'Cash',     pay: 0.6,  d: 'query' },
+    { c: 0, cat: 'Workshop', claim: 'AMC',       st: 'Waiting for Claim', inv: 21000, mode: 'Cash',    pay: 1.0,  d: 'claimExact' },
+    { c: 1, cat: 'Workshop', claim: 'Warranty',  st: 'Waiting for Claim', inv: 16500, mode: 'Cash',    pay: 1.0,  d: 'claimShort' },
+    { c: 6, cat: 'Workshop',                     st: 'Received',         inv: 12000, mode: 'Cash',     pay: 1.0,  d: 'approve' },
+    { c: 7, cat: 'B2B Credit',                   st: 'Credit',           inv: 33000, mode: 'Bank',     pay: 0.4,  d: b2bOrReject },
+    { c: 2, cat: 'Workshop',                     st: 'Received',         inv: 6800,  mode: 'Cash',     pay: 1.0,  d: 'approve' },
+    { c: 3, cat: 'Breakdown',                    st: 'Received',         inv: 5200,  mode: 'Cash',     pay: 0.0,  d: 'draft' },
   ]
 }
 
@@ -118,7 +128,7 @@ const CASH_PLAN = [
 // ─── masters ─────────────────────────────────────────────────────────
 async function loadMasters() {
   const idx = {}
-  for (const slug of ['receive-categories', 'receive-statuses', 'settlement-modes', 'expense-categories', 'expense-modes', 'expense-statuses', 'banks']) {
+  for (const slug of ['receive-categories', 'receive-statuses', 'claim-types', 'settlement-modes', 'expense-categories', 'expense-modes', 'expense-statuses', 'banks']) {
     const rows = await GET(`/api/v1/masters/${slug}`)
     idx[slug] = Object.fromEntries(rows.map((r) => [r.name, r]))
   }
@@ -157,7 +167,7 @@ async function topup() {
   }
   const M = await loadMasters()
   const cat = must(M, 'receive-categories', 'Workshop')
-  const st = must(M, 'receive-statuses', 'WIP')
+  const st = must(M, 'receive-statuses', 'Received')
   const cash = must(M, 'settlement-modes', 'Cash')
   const ec = must(M, 'expense-categories', 'Service')
   const es = must(M, 'expense-statuses', 'In Progress')
@@ -261,6 +271,10 @@ async function run() {
   }
 
   const M = await loadMasters()
+  // rev-44 statuses the Accountant / Finance Manager set later — loaded once up front.
+  const transferToClaim = must(M, 'receive-statuses', 'Transfer to Claim')
+  const claimReceived = must(M, 'receive-statuses', 'Claim Received')
+  const claimPending = must(M, 'receive-statuses', 'Claim Pending')
 
   // ── phase 1: cashiers create everything ───────────────────────────
   const world = []
@@ -297,6 +311,7 @@ async function run() {
       const isFirm = p.c >= 6
       const rc = must(M, 'receive-categories', p.cat)
       const rs = must(M, 'receive-statuses', p.st)
+      const ct = p.claim ? must(M, 'claim-types', p.claim) : null
       const sm = must(M, 'settlement-modes', p.mode)
       const draft = p.d === 'draft'
       const lineAmt = Math.round(p.inv * p.pay)
@@ -312,6 +327,7 @@ async function run() {
         vehicleId: custVeh[p.c][0],
         categoryId: rc.id,
         businessStatusId: rs.id,
+        ...(ct ? { claimTypeId: ct.id } : {}),
         dbmId: String(4000000000 + bi * 10000 + stats.jobCards),
         invoiceNo: String(7731122600000 + bi * 1000 + stats.jobCards),
         invoiceAmount: p.inv,
@@ -386,6 +402,11 @@ async function run() {
         await tryStep(`override R${jc.recId}`, () =>
           POST(`/api/v1/receipts/${jc.recId}/lines/${jc.lineNo}/override`, { amount: 9500, reason: 'Corrected to match the signed workshop invoice.' }))
       }
+      // rev-44: Transfer to Claim is Accountant-and-up only — exercise the new access here.
+      if (jc.d === 'claimExact' || jc.d === 'claimShort') {
+        await tryStep(`transfer-to-claim JC${jc.jcId}`, () =>
+          PATCH(`/api/v1/job-cards/${jc.jcId}`, { businessStatusId: transferToClaim.id }))
+      }
       await POST(`/api/v1/receipts/${jc.recId}/verify`)
     }
     for (const e of B.expenses) {
@@ -417,6 +438,10 @@ async function run() {
             finalAmount,
             ...(jc.d === 'claimShort' ? { reason: 'Eicher settled short of the claimed amount; accepted as final.' } : {}),
           }))
+        // rev-44: business_status stays editable for Finance alone after a claim closes —
+        // Claim Received / Claim Pending record how the money actually settled.
+        await tryStep(`set-claim-status JC${jc.jcId}`, () =>
+          PATCH(`/api/v1/job-cards/${jc.jcId}`, { businessStatusId: (jc.d === 'claimExact' ? claimReceived : claimPending).id }))
         stats.claimsClosed++
       }
     }

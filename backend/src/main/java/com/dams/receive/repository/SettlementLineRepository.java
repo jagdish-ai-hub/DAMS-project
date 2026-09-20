@@ -171,6 +171,25 @@ public interface SettlementLineRepository extends JpaRepository<SettlementLine, 
         @Param("to") java.time.LocalDate to);
 
     /**
+     * Same shape as {@link #findLinesForExport}, keyed by explicit receipt ids instead of a
+     * branch/date window — the Accountant's "export exactly what I selected" on the Direct
+     * Approve list. Still org-scoped; ids outside the org or outside the caller's branch
+     * access are filtered by the caller before this is invoked.
+     */
+    @Query("""
+        select l, d, j
+        from SettlementLine l, ReceiveDocument d, JobCard j
+        where l.receiveDocumentId = d.id
+          and d.jobCardId = j.id
+          and l.orgId = :orgId
+          and d.id in :receiptIds
+        order by l.transactionDate desc, l.id desc
+        """)
+    List<Object[]> findLinesForExportByReceiptIds(
+        @Param("orgId") Long orgId,
+        @Param("receiptIds") java.util.Collection<Long> receiptIds);
+
+    /**
      * Line-level detail behind {@link #dashboardCollections} — same APPROVED-only filter, so
      * a reconciliation breakdown always sums to exactly the KPI it explains.
      */

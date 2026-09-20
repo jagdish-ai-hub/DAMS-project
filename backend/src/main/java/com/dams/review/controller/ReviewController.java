@@ -3,6 +3,7 @@ package com.dams.review.controller;
 import com.dams.cash.dto.CashDocumentResponse;
 import com.dams.expense.dto.ExpenseDocumentResponse;
 import com.dams.receive.dto.ReceiveDocumentResponse;
+import com.dams.review.dto.BulkApproveResponse;
 import com.dams.review.dto.BulkVerifyRequest;
 import com.dams.review.dto.BulkVerifyResponse;
 import com.dams.review.dto.FmQueue;
@@ -76,6 +77,13 @@ public class ReviewController {
         return reviewService.verifiedCashQueue();
     }
 
+    @GetMapping("/review/receipts/direct-approve-eligible")
+    @Operation(summary = "SUBMITTED receipts an Accountant may approve directly — no claim, status ≠ Credit, all-cash lines (org opt-in required)")
+    @PreAuthorize("hasAuthority('ACCOUNTANT')")
+    public List<ReviewQueueItem> directApproveEligibleReceipts() {
+        return reviewService.directApproveEligibleReceipts();
+    }
+
     @GetMapping("/review/fm/receipts")
     @Operation(summary = "Finance Manager receipt queue — awaiting approval, open claims, recently closed")
     @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
@@ -120,6 +128,20 @@ public class ReviewController {
         return reviewService.bulkVerifyReceipts(request.ids());
     }
 
+    @PostMapping("/receipts/{id}/direct-approve")
+    @Operation(summary = "Accountant: approve an eligible submitted receipt directly, skipping the Finance Manager (org opt-in required)")
+    @PreAuthorize("hasAuthority('ACCOUNTANT')")
+    public ReceiveDocumentResponse directApproveReceipt(@PathVariable Long id) {
+        return reviewService.directApproveReceipt(id);
+    }
+
+    @PostMapping("/receipts/direct-approve")
+    @Operation(summary = "Accountant: bulk direct-approve eligible submitted receipts (org opt-in required)")
+    @PreAuthorize("hasAuthority('ACCOUNTANT')")
+    public BulkApproveResponse bulkDirectApproveReceipts(@Valid @RequestBody BulkVerifyRequest request) {
+        return reviewService.bulkDirectApproveReceipts(request.ids());
+    }
+
     @PostMapping("/receipts/{id}/query")
     @Operation(summary = "Query a receipt back to the cashier — Accountant (submitted) or FM (verified)")
     @PreAuthorize("hasAnyAuthority('ACCOUNTANT','FINANCE_MANAGER')")
@@ -140,6 +162,13 @@ public class ReviewController {
     public ReceiveDocumentResponse overrideReceiptLine(@PathVariable Long id, @PathVariable Integer lineNo,
                                                        @Valid @RequestBody LineOverrideRequest request) {
         return reviewService.overrideReceiptLine(id, lineNo, request.amount(), request.reason().trim());
+    }
+
+    @PostMapping("/receipts/{id}/override-invoice-amount")
+    @Operation(summary = "Override the job card's invoice amount (provisional — reason required)")
+    @PreAuthorize("hasAuthority('ACCOUNTANT')")
+    public ReceiveDocumentResponse overrideInvoiceAmount(@PathVariable Long id, @Valid @RequestBody LineOverrideRequest request) {
+        return reviewService.overrideInvoiceAmount(id, request.amount(), request.reason().trim());
     }
 
     @PostMapping("/receipts/{id}/approve")

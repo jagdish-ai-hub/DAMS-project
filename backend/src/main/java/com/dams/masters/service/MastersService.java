@@ -2,21 +2,25 @@ package com.dams.masters.service;
 
 import com.dams.common.entity.OrgMaster;
 import com.dams.common.exception.DamsException;
+import com.dams.common.security.BranchScope;
 import com.dams.config.TenantContext;
 import com.dams.masters.MasterType;
 import com.dams.masters.dto.MasterRequest;
 import com.dams.masters.dto.MasterResponse;
 import com.dams.masters.entity.*;
 import com.dams.masters.repository.*;
+import com.dams.user.entity.Role;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.EnumMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -35,6 +39,9 @@ public class MastersService {
     private final Map<MasterType, Supplier<? extends OrgMaster>> factories = new EnumMap<>(MasterType.class);
     private final ExpenseSubCategoryRepository subCategoryRepo;
     private final ExpenseCategoryRepository expenseCategoryRepo;
+    private final ReceiveBusinessStatusRoleRepository receiveStatusRoleRepo;
+    private final ReceiveStatusAccessService statusAccess;
+    private final BranchScope branchScope;
 
     public MastersService(ReceiveCategoryRepository receiveCategoryRepo,
                           ReceiveBusinessStatusRepository receiveStatusRepo,
@@ -45,9 +52,15 @@ public class MastersService {
                           ExpenseBusinessStatusRepository expenseStatusRepo,
                           BankRepository bankRepo,
                           ClaimTypeRepository claimTypeRepo,
-                          UpiVpaRepository upiVpaRepo) {
+                          UpiVpaRepository upiVpaRepo,
+                          ReceiveBusinessStatusRoleRepository receiveStatusRoleRepo,
+                          ReceiveStatusAccessService statusAccess,
+                          BranchScope branchScope) {
         this.subCategoryRepo = subCategoryRepo;
         this.expenseCategoryRepo = expenseCategoryRepo;
+        this.receiveStatusRoleRepo = receiveStatusRoleRepo;
+        this.statusAccess = statusAccess;
+        this.branchScope = branchScope;
 
         repos.put(MasterType.RECEIVE_CATEGORIES, receiveCategoryRepo);
         repos.put(MasterType.RECEIVE_STATUSES, receiveStatusRepo);
@@ -82,12 +95,36 @@ public class MastersService {
         } else {
             rows = repos.get(type).findByOrgIdOrderBySortOrderAscIdAsc(orgId);
         }
-        return rows.stream().map(m -> MasterResponse.of(type, m)).toList();
+        return withRoles(type, orgId, rows);
+    }
+
+    /**
+     * The rows the signed-in user may actually choose, for the dropdowns. Only
+     * receive-statuses is role-mapped today; every other list returns its active rows,
+     * because for those "what I may pick" and "what is active" are the same thing.
+     */
+    @Transactional(readOnly = true)
+    public List<MasterResponse> listSelectable(MasterType type) {
+        Long orgId = TenantContext.requireOrgId();
+
+        if (type == MasterType.RECEIVE_STATUSES) {
+            List<ReceiveBusinessStatus> allowed = statusAccess.selectableBy(orgId, branchScope.currentRole());
+            return withRoles(type, orgId, allowed);
+        }
+        return repos.get(type).findByOrgIdOrderBySortOrderAscIdAsc(orgId).stream()
+            .filter(m -> ((OrgMaster) m).isActive())
+            .map(m -> MasterResponse.of(type, (OrgMaster) m))
+            .toList();
     }
 
     @Transactional(readOnly = true)
     public MasterResponse get(MasterType type, Long id) {
-        return MasterResponse.of(type, load(type, id));
+        OrgMaster row = load(type, id);
+        if (type == MasterType.RECEIVE_STATUSES) {
+            Long orgId = TenantContext.requireOrgId();
+            return MasterResponse.of(type, row, statusAccess.rolesFor(orgId, row.getId()));
+        }
+        return MasterResponse.of(type, row);
     }
 
     @Transactional
@@ -105,6 +142,16 @@ public class MastersService {
         checkNameFree(type, orgId, entity, name, null);
 
         OrgMaster saved = (OrgMaster) repos.get(type).save(entity);
+
+        if (type == MasterType.RECEIVE_STATUSES) {
+            Set<Role> roles = request.getAllowedRoles() == null
+                ? ReceiveStatusAccessService.ASSIGNABLE_ROLES
+                : parseRoles(request.getAllowedRoles());
+            statusAccess.replaceRoles(orgId, saved.getId(), roles);
+            log.info("Master created: orgId={} type={} id={} name='{}'", orgId, type.slug(), saved.getId(), name);
+            return MasterResponse.of(type, saved, statusAccess.rolesFor(orgId, saved.getId()));
+        }
+
         log.info("Master created: orgId={} type={} id={} name='{}'", orgId, type.slug(), saved.getId(), name);
         return MasterResponse.of(type, saved);
     }
@@ -127,6 +174,17 @@ public class MastersService {
         }
 
         OrgMaster saved = (OrgMaster) repos.get(type).save(entity);
+
+        if (type == MasterType.RECEIVE_STATUSES) {
+            // Omitted means "leave the mapping alone" — a rename shouldn't silently widen access.
+            if (request.getAllowedRoles() != null) {
+                statusAccess.replaceRoles(orgId, saved.getId(), parseRoles(request.getAllowedRoles()));
+            }
+            log.info("Master updated: orgId={} type={} id={} name='{}' active={}",
+                orgId, type.slug(), saved.getId(), saved.getName(), saved.isActive());
+            return MasterResponse.of(type, saved, statusAccess.rolesFor(orgId, saved.getId()));
+        }
+
         log.info("Master updated: orgId={} type={} id={} name='{}' active={}",
             orgId, type.slug(), saved.getId(), saved.getName(), saved.isActive());
         return MasterResponse.of(type, saved);
@@ -138,8 +196,10 @@ public class MastersService {
      */
     @Transactional
     public void purgeOrg(long orgId) {
-        // expense_sub_category has an FK to expense_category — delete the children first,
-        // whatever order the EnumMap iterates in.
+        // receive_business_status_role has an FK to receive_business_status, and
+        // expense_sub_category one to expense_category — delete both sets of children
+        // first, whatever order the EnumMap iterates in.
+        receiveStatusRoleRepo.deleteByOrgId(orgId);
         subCategoryRepo.deleteByOrgId(orgId);
         repos.forEach((type, repo) -> {
             if (type != MasterType.EXPENSE_SUB_CATEGORIES) {
@@ -149,6 +209,29 @@ public class MastersService {
     }
 
     // --- helpers ---
+
+    /** Attaches each row's role grants, for receive-statuses only. */
+    private List<MasterResponse> withRoles(MasterType type, Long orgId, List<? extends OrgMaster> rows) {
+        if (type != MasterType.RECEIVE_STATUSES) {
+            return rows.stream().map(m -> MasterResponse.of(type, m)).toList();
+        }
+        Map<Long, List<Role>> byStatus = statusAccess.rolesByStatusId(orgId);
+        return rows.stream()
+            .map(m -> MasterResponse.of(type, m, byStatus.getOrDefault(m.getId(), List.of())))
+            .toList();
+    }
+
+    private Set<Role> parseRoles(List<String> names) {
+        Set<Role> roles = new LinkedHashSet<>();
+        for (String name : names) {
+            try {
+                roles.add(Role.valueOf(name.trim().toUpperCase()));
+            } catch (IllegalArgumentException e) {
+                throw DamsException.badRequest("'" + name + "' is not a role");
+            }
+        }
+        return roles;
+    }
 
     private OrgMaster load(MasterType type, Long id) {
         Long orgId = TenantContext.requireOrgId();
@@ -193,6 +276,10 @@ public class MastersService {
                 esc.setExpenseCategoryId(parentId);
             }
             esc.setLimitAmount(req.getLimitAmount());
+        } else if (entity instanceof ReceiveBusinessStatus rbs) {
+            if (req.getDeprecated() != null) {
+                rbs.setDeprecated(req.getDeprecated());
+            }
         } else if (type.isUpiVpa() && entity instanceof UpiVpa uv) {
             String vpa = req.getVpa() != null ? req.getVpa().trim() : null;
             if (isCreate && (vpa == null || vpa.isEmpty())) {

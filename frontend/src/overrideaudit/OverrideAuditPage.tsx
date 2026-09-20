@@ -19,6 +19,7 @@ function apiError(err: unknown, fallback: string) {
 const KIND_LABEL: Record<OverrideAuditEntry['kind'], string> = {
   receipt: 'Receipt line',
   expense: 'Expense line',
+  invoice: 'Invoice amount',
   claim: 'Claim — final',
 }
 

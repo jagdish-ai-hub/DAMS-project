@@ -2,6 +2,8 @@ import { useState, type ReactNode } from 'react'
 import type { ReceiveDocument, SettlementLine } from '../api/receipts'
 import type { ExpenseDocument, ExpenseLine } from '../api/expenses'
 import type { CashDocument } from '../api/cash'
+import type { MasterRow } from '../api/masters'
+import { BusinessStatusSelect } from '../shared/BusinessStatusSelect'
 import { card, Badge, ghostBtn, primaryBtn, inputStyle, inr, fmtDate, fmtDateTime } from '../shell/ui'
 
 /** Shared pieces for the Accountant review queue and the Finance Manager queue. */
@@ -46,6 +48,14 @@ const lcell = { padding: '8px 6px', borderTop: '1px solid var(--line)', fontSize
 /**
  * The record body every reviewer sees — header, lines (with an inline Override box when
  * {@code canOverride}), totals and history. The action bar is supplied by the caller.
+ *
+ * Pass {@code statusOptions} + {@code onStatusChange} to make the job-card business status
+ * editable in place. Receive documents only: an expense's status is a different master list
+ * with its own workflow, so it stays a read-only badge here.
+ *
+ * Pass {@code onOverrideInvoice} to add the same Override affordance to the invoice amount
+ * that settlement lines already have. Receive documents only — an expense has no invoice
+ * amount. Gated by {@code canOverride}, same as line overrides.
  */
 export function RecordCard(props: {
   doc: AnyDoc
@@ -53,6 +63,9 @@ export function RecordCard(props: {
   busy: boolean
   onOverride: (lineNo: number, amount: number, reason: string) => Promise<void>
   onError: (msg: string) => void
+  statusOptions?: MasterRow[]
+  onStatusChange?: (statusId: number) => Promise<void>
+  onOverrideInvoice?: (amount: number, reason: string) => Promise<void>
 }) {
   const { doc } = props
   const expense = isExpense(doc)
@@ -64,6 +77,23 @@ export function RecordCard(props: {
   const [editLine, setEditLine] = useState<number | null>(null)
   const [editAmt, setEditAmt] = useState('')
   const [editReason, setEditReason] = useState('')
+  const [savingStatus, setSavingStatus] = useState(false)
+  const [editingInvoice, setEditingInvoice] = useState(false)
+  const [invoiceAmt, setInvoiceAmt] = useState('')
+  const [invoiceReason, setInvoiceReason] = useState('')
+
+  const canEditStatus = !expense && props.statusOptions != null && props.onStatusChange != null
+  const canOverrideInvoice = !expense && props.canOverride && props.onOverrideInvoice != null
+
+  async function changeStatus(statusId: number) {
+    if (!props.onStatusChange) return
+    setSavingStatus(true)
+    try {
+      await props.onStatusChange(statusId)
+    } finally {
+      setSavingStatus(false)
+    }
+  }
 
   async function save(lineNo: number) {
     const amount = Number(editAmt)
@@ -71,6 +101,15 @@ export function RecordCard(props: {
     if (!editReason.trim()) { props.onError('A reason is required to override the amount'); return }
     await props.onOverride(lineNo, amount, editReason.trim())
     setEditLine(null)
+  }
+
+  async function saveInvoice() {
+    const amount = Number(invoiceAmt)
+    if (!(amount > 0)) { props.onError('Enter an amount greater than 0'); return }
+    if (!invoiceReason.trim()) { props.onError('A reason is required to override the amount'); return }
+    if (!props.onOverrideInvoice) return
+    await props.onOverrideInvoice(amount, invoiceReason.trim())
+    setEditingInvoice(false)
   }
 
   return (
@@ -81,15 +120,57 @@ export function RecordCard(props: {
           <span style={{ fontFamily: 'Consolas, monospace', fontSize: '0.78rem', color: 'var(--navy2)' }}>{docNo}</span>
           <span style={{ flex: 1 }} />
           <Badge tone={wfTone(doc.workflowStatus)}>{doc.workflowStatus}</Badge>
-          <Badge tone="gray">{doc.businessStatusName ?? '—'}</Badge>
+          {canEditStatus
+            ? (
+              <BusinessStatusSelect
+                statuses={props.statusOptions ?? []}
+                value={doc.businessStatusId}
+                disabled={props.busy || savingStatus}
+                onChange={changeStatus}
+                style={{ ...inputStyle, width: 'auto', minWidth: 170, padding: '5px 9px', fontSize: '0.78rem' }}
+              />
+            )
+            : <Badge tone="gray">{doc.businessStatusName ?? '—'}</Badge>}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '2px 26px' }}>
           <Kv k={expense ? 'Expenses category' : 'Category'} v={expense ? doc.expenseCategoryName ?? '—' : doc.categoryName ?? '—'} />
           <Kv k={expense ? 'Job ID / PO / SO' : 'Job card'} v={doc.jobCardReference ?? '—'} />
           <Kv k="Branch" v={doc.branchCode ?? '—'} />
-          {expense
-            ? <Kv k="Entered" v={fmtDate(doc.createdAt)} />
-            : <Kv k="Invoice amount" v={doc.invoiceAmount != null ? inr(doc.invoiceAmount) : '—'} />}
+          {expense ? (
+            <Kv k="Entered" v={fmtDate(doc.createdAt)} />
+          ) : (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '6px 0', borderBottom: '1px dashed var(--line)', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>Invoice amount</span>
+              {!editingInvoice ? (
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: '0.83rem', fontWeight: 600 }}>{doc.invoiceAmount != null ? inr(doc.invoiceAmount) : '—'}</span>
+                  {canOverrideInvoice && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingInvoice(true)
+                        setInvoiceAmt(doc.invoiceAmount != null ? String(doc.invoiceAmount) : '')
+                        setInvoiceReason('')
+                        props.onError('')
+                      }}
+                      style={{ ...ghostBtn, padding: '3px 8px', fontSize: '0.7rem', minHeight: 26 }}
+                    >
+                      Override
+                    </button>
+                  )}
+                </span>
+              ) : (
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', background: 'var(--amber-bg)', border: '1px solid #EAD3AE', borderRadius: 8, padding: 8, flexWrap: 'wrap', width: '100%' }}>
+                  <input type="number" value={invoiceAmt} onChange={(e) => setInvoiceAmt(e.target.value)}
+                    style={{ ...inputStyle, width: 100, padding: '5px 8px' }} />
+                  <input value={invoiceReason} onChange={(e) => setInvoiceReason(e.target.value)} placeholder="Reason (required)"
+                    style={{ ...inputStyle, flex: 1, minWidth: 140, padding: '5px 8px' }} />
+                  <button type="button" onClick={saveInvoice} disabled={props.busy} style={{ ...primaryBtn(props.busy), padding: '5px 10px', fontSize: '0.76rem', minHeight: 32 }}>Save</button>
+                  <button type="button" onClick={() => setEditingInvoice(false)} style={{ ...ghostBtn, padding: '5px 9px', fontSize: '0.76rem', minHeight: 32 }}>Cancel</button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
         {expense && doc.overLimit && (
           <div style={{ fontSize: '0.76rem', color: 'var(--amber)', marginTop: 10 }}>

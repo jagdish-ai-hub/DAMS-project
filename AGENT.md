@@ -27,12 +27,19 @@ accountants, plus the owner's live window into branch operations.
   Adds branches, adds users, assigns roles and branch access. Read-only on
   transactions; never edits them.
 - **FINANCE_MANAGER** — all branches within their org. Final approval on
-  every entry. Closes Warranty/AMC/CG claims, with override authority that
-  is final and locked once used.
+  every entry, **except** the carve-out below. Closes Warranty/AMC/CG
+  claims, with override authority that is final and locked once used.
 - **ACCOUNTANT** — one or more assigned branches within their org. Verifies
   submitted entries, can override amounts (provisional — still needs FM
-  approval downstream), queries or rejects with a reason. Closes Expense
-  documents explicitly.
+  approval downstream) or the job card's invoice amount, queries or rejects
+  with a reason. Closes Expense documents explicitly.
+  **Direct approval (org opt-in, default OFF — rev 45):** when an Owner
+  turns on `accountant_direct_approve_cash` in Settings, an Accountant may
+  approve a SUBMITTED receipt directly — one click, straight to APPROVED,
+  skipping the Finance Manager — but only when it is not a claim (no
+  `claim_type_id`), its business status isn't "Credit", and every
+  settlement line is cash-mode. Everything else still requires FM approval
+  as usual. See plan.md rev 45.
 - **CASHIER** — exactly one branch. Creates Receive and Expense entries,
   adds payments against existing job cards, does daily cash closing.
 
@@ -272,6 +279,10 @@ flag the conflict and ask rather than silently working around it.
    sub-categories, settlement/payment modes, expense limits, business
    status lists, bank list, receivers/vendors. Every dropdown the app
    shows comes from these tables, never from hard-coded lists.
+   **Job-card business statuses are additionally role-mapped**: each status
+   records which roles may set it, so a role's dropdown shows only its own
+   statuses. The mapping is Owner-editable data, not code — see plan.md
+   rev 44 for the current split and the `deprecated` vs `active` distinction.
 4. **Org-wide Override Audit view** (Owner + FM): one screen listing every
    amount override across the organization — who, when, original → new
    value, reason, document/line ID — filterable by user, branch, and date.
@@ -395,7 +406,7 @@ auth, like an S3 presigned URL), `/swagger-ui.html`, `/swagger-ui/**`,
 | Branches | `branch/controller/BranchController` | `GET /branches`, `GET /branches/{id}`, `POST /branches`, `PATCH /branches/{id}` |
 | Users | `user/controller/UserController` | `GET /users`, `GET /users/{id}`, `POST /users`, `PATCH /users/{id}` |
 | Org settings | `organization/controller/OrgSettingsController` | `GET /organization`, `PATCH /organization` |
-| Masters | `masters/controller/MastersController` | `GET /masters/{type}`, `GET /masters/{type}/{id}`, `POST /masters/{type}` (Owner), `PATCH /masters/{type}/{id}` (Owner) |
+| Masters | `masters/controller/MastersController` | `GET /masters/{type}`, `GET /masters/{type}/mine` (rows the caller's role may pick — role-filtered for `receive-statuses`), `GET /masters/{type}/{id}`, `POST /masters/{type}` (Owner), `PATCH /masters/{type}/{id}` (Owner) |
 | Receivers | `receiver/controller/ReceiverController` | `GET /receivers`, `GET /receivers/{id}`, `POST /receivers`, `PATCH /receivers/{id}` |
 | Customers | `customer/controller/CustomerController` | `GET /customers`, `GET /customers/{id}`, `GET /customers/{id}/history`, `POST /customers`, `PATCH /customers/{id}` |
 | Vehicles | `vehicle/controller/VehicleController` | `GET /vehicles`, `POST /vehicles` (lookup + deduped create; number normalised) |
@@ -404,7 +415,7 @@ auth, like an S3 presigned URL), `/swagger-ui.html`, `/swagger-ui/**`,
 | Expenses | `expense/controller/ExpenseDocumentController` | `POST /expenses`, `GET /expenses/{id}`, `PATCH /expenses/{id}`, `POST /expenses/{id}/submit`, `POST /expenses/{id}/resubmit`, `POST /expenses/{id}/transfer-to-claim`, `POST /expenses/{id}/lines`, `PATCH /expenses/{id}/lines/{lineNo}`, `DELETE /expenses/{id}/lines/{lineNo}`, `POST|GET /expenses/{id}/attachments`, `POST|GET /expenses/{id}/lines/{lineNo}/attachments` |
 | Cash docs | `cash/controller/CashDocumentController` | `POST /cash-documents`, `GET /cash-documents`, `GET /cash-documents/{id}`, `PATCH /cash-documents/{id}`, `POST /cash-documents/{id}/submit`, `POST /cash-documents/{id}/resubmit`, `DELETE /cash-documents/{id}` |
 | Cash day | `cash/controller/CashController` | `GET /cash/drawer`, `POST /cash/opening`, `POST|GET /cash/close-day` |
-| Review | `review/controller/ReviewController` | `GET /review/receipts|expenses|cash`, `GET /review/fm/receipts|expenses|cash`, `POST /receipts/{id}/verify|query|reject`, `POST /receipts/{id}/lines/{lineNo}/override`, `POST /receipts/{id}/approve`, `POST /expenses/{id}/verify|query|reject`, `POST /expenses/{id}/lines/{lineNo}/override`, `POST /expenses/{id}/close`, `POST /expenses/{id}/approve`, `POST /cash-documents/{id}/verify|approve|query|reject` |
+| Review | `review/controller/ReviewController` | `GET /review/receipts|expenses|cash`, `GET /review/receipts/direct-approve-eligible`, `GET /review/fm/receipts|expenses|cash`, `POST /receipts/{id}/verify|query|reject`, `POST /receipts/{id}/lines/{lineNo}/override`, `POST /receipts/{id}/override-invoice-amount`, `POST /receipts/{id}/direct-approve`, `POST /receipts/direct-approve` (bulk), `POST /receipts/{id}/approve`, `POST /expenses/{id}/verify|query|reject`, `POST /expenses/{id}/lines/{lineNo}/override`, `POST /expenses/{id}/close`, `POST /expenses/{id}/approve`, `POST /cash-documents/{id}/verify|approve|query|reject` |
 | Search | `search/controller/SearchController` | `GET /search?q=` |
 | AI assistant | `ai/controller/AiController` | `POST /ai/ask`, `GET /ai/brief`, `GET /ai/benchmark`, `GET /ai/anomalies`, `GET /ai/risk`, `GET /ai/queries/roots`, `GET /ai/claims/insights`, `GET /ai/cash/advice`, `GET /ai/close/checklist`, `GET /ai/receivers/duplicates`, `GET /ai/masters/health`, `GET /ai/limits/advice`, `GET /ai/search` (all read-only; only write is `ai_query_log` trace row) |
 | My Entries | `myentries/controller/MyEntriesController` | `GET /my-entries` |

@@ -20,6 +20,22 @@ export const exportApi = {
     window.URL.revokeObjectURL(url)
   },
 
+  /** Exactly the given receipts — the Accountant's Direct Approve list export. */
+  downloadReceiptsByIds: async (ids: number[]) => {
+    const response = await api.get(`/export/receipts/by-id?ids=${ids.join(',')}`, {
+      responseType: 'blob',
+    })
+    const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `receipts-export-selected-${ids.length}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+  },
+
   downloadExpenses: async (branchId?: number | '', from?: string, to?: string) => {
     const params = new URLSearchParams()
     if (branchId) params.append('branchId', String(branchId))

@@ -90,7 +90,28 @@ public class ExportService {
         LocalDate to = toDate != null ? toDate : LocalDate.now();
 
         List<Object[]> rows = settlementLineRepo.findLinesForExport(orgId, branches, from, to);
+        return renderReceiptsCsv(orgId, rows);
+    }
 
+    /**
+     * Same receipt export, keyed by explicit receipt ids instead of a branch/date window —
+     * the Accountant's "export exactly what's selected" on the Direct Approve list. Rows
+     * outside the caller's branch access are dropped rather than erroring, since the id list
+     * came from a query the caller's own access already filtered.
+     */
+    @Transactional(readOnly = true)
+    public byte[] exportReceiptsCsvByIds(Collection<Long> receiptIds) {
+        Long orgId = TenantContext.requireOrgId();
+        if (receiptIds == null || receiptIds.isEmpty()) {
+            return renderReceiptsCsv(orgId, List.of());
+        }
+        List<Object[]> rows = settlementLineRepo.findLinesForExportByReceiptIds(orgId, receiptIds).stream()
+            .filter(r -> branchScope.canSeeBranch(((ReceiveDocument) r[1]).getBranchId()))
+            .toList();
+        return renderReceiptsCsv(orgId, rows);
+    }
+
+    private byte[] renderReceiptsCsv(Long orgId, List<Object[]> rows) {
         Map<Long, String> branchCodes = branchRepo.findByOrgIdOrderByCodeAsc(orgId).stream()
             .collect(Collectors.toMap(Branch::getId, Branch::getCode, (a, b) -> a));
         Map<Long, String> modes = settlementModeRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId).stream()

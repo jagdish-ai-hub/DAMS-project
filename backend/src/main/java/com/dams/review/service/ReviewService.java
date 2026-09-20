@@ -26,9 +26,15 @@ import com.dams.jobcard.entity.JobCard;
 import com.dams.jobcard.repository.ClaimCloseRepository;
 import com.dams.jobcard.repository.JobCardRepository;
 import com.dams.masters.entity.ExpenseCategory;
+import com.dams.masters.entity.ReceiveBusinessStatus;
 import com.dams.masters.entity.ReceiveCategory;
+import com.dams.masters.entity.SettlementMode;
 import com.dams.masters.repository.ExpenseCategoryRepository;
+import com.dams.masters.repository.ReceiveBusinessStatusRepository;
 import com.dams.masters.repository.ReceiveCategoryRepository;
+import com.dams.masters.repository.SettlementModeRepository;
+import com.dams.organization.entity.Organization;
+import com.dams.organization.repository.OrganizationRepository;
 import com.dams.receive.dto.ReceiveDocumentResponse;
 import com.dams.receive.entity.ReceiveDocument;
 import com.dams.receive.entity.SettlementLine;
@@ -38,6 +44,7 @@ import com.dams.receive.repository.SettlementLineRepository;
 import com.dams.receive.service.ReceiveDocumentService;
 import com.dams.receiver.entity.Receiver;
 import com.dams.receiver.repository.ReceiverRepository;
+import com.dams.review.dto.BulkApproveResponse;
 import com.dams.review.dto.BulkVerifyResponse;
 import com.dams.review.dto.FmQueue;
 import com.dams.review.dto.ReviewQueueItem;
@@ -58,6 +65,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * The review step: the Accountant's verify / query / reject / line-override / close-expense,
@@ -101,6 +109,9 @@ public class ReviewService {
     private final ExpenseDocumentService expenseDocumentService;
     private final CashDocumentRepository cashDocumentRepo;
     private final CashDocumentService cashDocumentService;
+    private final OrganizationRepository organizationRepo;
+    private final SettlementModeRepository settlementModeRepo;
+    private final ReceiveBusinessStatusRepository receiveBusinessStatusRepo;
 
     public ReviewService(ReceiveDocumentRepository receiveDocumentRepo,
                          SettlementLineRepository settlementLineRepo,
@@ -120,7 +131,10 @@ public class ReviewService {
                          ReceiveDocumentService receiveDocumentService,
                          ExpenseDocumentService expenseDocumentService,
                          CashDocumentRepository cashDocumentRepo,
-                         CashDocumentService cashDocumentService) {
+                         CashDocumentService cashDocumentService,
+                         OrganizationRepository organizationRepo,
+                         SettlementModeRepository settlementModeRepo,
+                         ReceiveBusinessStatusRepository receiveBusinessStatusRepo) {
         this.receiveDocumentRepo = receiveDocumentRepo;
         this.settlementLineRepo = settlementLineRepo;
         this.expenseDocumentRepo = expenseDocumentRepo;
@@ -140,6 +154,9 @@ public class ReviewService {
         this.expenseDocumentService = expenseDocumentService;
         this.cashDocumentRepo = cashDocumentRepo;
         this.cashDocumentService = cashDocumentService;
+        this.organizationRepo = organizationRepo;
+        this.settlementModeRepo = settlementModeRepo;
+        this.receiveBusinessStatusRepo = receiveBusinessStatusRepo;
     }
 
     // ============================================================ accountant queue
@@ -394,6 +411,147 @@ public class ReviewService {
         return new BulkVerifyResponse(verifiedIds.size(), verifiedIds, skippedReasons);
     }
 
+    // ============================================================ accountant: direct approve
+    //
+    // Org opt-in (organization.accountant_direct_approve_cash, default OFF — see V27): lets
+    // an Accountant approve a SUBMITTED receipt directly, skipping the Finance Manager. This
+    // is a deliberate carve-out from "FM gives final approval on every entry" (AGENT.md),
+    // scoped tightly to the lowest-risk receipts: no claim type, business status isn't
+    // "Credit" (deferred payment — still needs FM eyes), and every settlement line is
+    // cash-mode (bank/UPI lines still need FM's usual reconciliation path). One click, one
+    // atomic SUBMITTED -> APPROVED transition — no intermediate VERIFIED row — tagged
+    // directByAccountant in the audit trail so it's always visible how an entry got approved.
+
+    @Transactional(readOnly = true)
+    public List<ReviewQueueItem> directApproveEligibleReceipts() {
+        Long orgId = TenantContext.requireOrgId();
+        guard.requireAccountant();
+        requireDirectApproveEnabled(orgId);
+        Set<Long> branchIds = branchScope.allowedBranchIds().orElseGet(Set::of);
+        if (branchIds.isEmpty()) {
+            return List.of();
+        }
+        List<ReceiveDocument> docs = receiveDocumentRepo
+            .findByOrgIdAndWorkflowStatusAndBranchIdInOrderBySubmittedAtAscIdAsc(orgId, WorkflowStatus.SUBMITTED, branchIds);
+        if (docs.isEmpty()) {
+            return List.of();
+        }
+
+        Map<Long, JobCard> jobCards = jobCardsById(orgId, docs.stream().map(ReceiveDocument::getJobCardId).toList());
+        Long creditStatusId = creditStatusId(orgId);
+        Set<Long> cashModeIds = cashModeIds(orgId);
+        Map<Long, List<SettlementLine>> linesByDoc = groupSettlementLines(orgId, docs.stream().map(ReceiveDocument::getId).toList());
+
+        List<ReceiveDocument> eligible = docs.stream()
+            .filter(d -> isDirectApproveEligible(jobCards.get(d.getJobCardId()), creditStatusId, cashModeIds,
+                linesByDoc.getOrDefault(d.getId(), List.of())))
+            .toList();
+        return toReceiptItems(orgId, eligible);
+    }
+
+    @Transactional
+    public ReceiveDocumentResponse directApproveReceipt(Long id) {
+        Long orgId = TenantContext.requireOrgId();
+        AppUser me = guard.requireAccountant();
+        requireDirectApproveEnabled(orgId);
+        ReceiveDocument doc = loadReceipt(orgId, id);
+        requireState(me, doc.getBranchId(), doc.getCreatedBy(), doc.getLastModifiedBy(), describe(doc),
+            doc.getWorkflowStatus() == WorkflowStatus.SUBMITTED, doc.getWorkflowStatus());
+        requireDirectApproveEligible(orgId, doc);
+
+        doc.setWorkflowStatus(WorkflowStatus.APPROVED);
+        receiveDocumentRepo.save(doc);
+        auditService.recordUserEvent(RECEIVE, doc.getId(), doc.getBranchId(), EventType.APPROVED, me.getId(),
+            detail("directByAccountant", true));
+        log.info("Receipt direct-approved by accountant: orgId={} docId={} by={}", orgId, doc.getId(), me.getId());
+        return receiveDocumentService.get(id);
+    }
+
+    @Transactional
+    public BulkApproveResponse bulkDirectApproveReceipts(List<Long> ids) {
+        Long orgId = TenantContext.requireOrgId();
+        AppUser me = guard.requireAccountant();
+        requireDirectApproveEnabled(orgId);
+        List<Long> approvedIds = new ArrayList<>();
+        List<String> skippedReasons = new ArrayList<>();
+
+        if (ids == null || ids.isEmpty()) {
+            return new BulkApproveResponse(0, List.of(), List.of("No documents selected"));
+        }
+
+        for (Long id : ids) {
+            try {
+                ReceiveDocument doc = loadReceipt(orgId, id);
+                String label = describe(doc);
+                guard.requireCanReview(me, doc.getBranchId(), doc.getCreatedBy(), doc.getLastModifiedBy(), label);
+                if (doc.getWorkflowStatus() != WorkflowStatus.SUBMITTED) {
+                    skippedReasons.add(label + " is " + doc.getWorkflowStatus() + " (needs SUBMITTED)");
+                    continue;
+                }
+                if (!isDirectApproveEligible(orgId, doc)) {
+                    skippedReasons.add(label + " is not eligible (claim, Credit status, or a non-cash line)");
+                    continue;
+                }
+                doc.setWorkflowStatus(WorkflowStatus.APPROVED);
+                receiveDocumentRepo.save(doc);
+                auditService.recordUserEvent(RECEIVE, doc.getId(), doc.getBranchId(), EventType.APPROVED, me.getId(),
+                    detail("documentNo", doc.getDocumentNo(), "directByAccountant", true, "bulk", true));
+                approvedIds.add(doc.getId());
+                log.info("Bulk direct-approved receipt: orgId={} docId={} by={}", orgId, doc.getId(), me.getId());
+            } catch (Exception e) {
+                skippedReasons.add("#" + id + ": " + e.getMessage());
+            }
+        }
+        return new BulkApproveResponse(approvedIds.size(), approvedIds, skippedReasons);
+    }
+
+    private void requireDirectApproveEnabled(Long orgId) {
+        Organization org = organizationRepo.findById(orgId)
+            .orElseThrow(() -> DamsException.notFound("Organization", orgId));
+        if (!org.isAccountantDirectApproveCash()) {
+            throw DamsException.forbidden(
+                "Accountant direct-approval is off for this organization — an Owner can turn it on in Settings");
+        }
+    }
+
+    private void requireDirectApproveEligible(Long orgId, ReceiveDocument doc) {
+        if (!isDirectApproveEligible(orgId, doc)) {
+            throw DamsException.conflict("Document " + describe(doc)
+                + " is not eligible for direct approval — it's a claim, marked Credit, or has a non-cash line");
+        }
+    }
+
+    private boolean isDirectApproveEligible(Long orgId, ReceiveDocument doc) {
+        JobCard jc = jobCardRepo.findByIdAndOrgId(doc.getJobCardId(), orgId).orElse(null);
+        List<SettlementLine> lines = settlementLineRepo.findByOrgIdAndReceiveDocumentIdInOrderByLineNoAsc(orgId, List.of(doc.getId()));
+        return isDirectApproveEligible(jc, creditStatusId(orgId), cashModeIds(orgId), lines);
+    }
+
+    /** No claim type, business status isn't "Credit", every settlement line is cash-mode. */
+    private static boolean isDirectApproveEligible(JobCard jc, Long creditStatusId, Set<Long> cashModeIds,
+                                                    List<SettlementLine> lines) {
+        if (jc == null || jc.getClaimTypeId() != null) {
+            return false;
+        }
+        if (creditStatusId != null && creditStatusId.equals(jc.getBusinessStatusId())) {
+            return false;
+        }
+        if (lines.isEmpty()) {
+            return false;   // nothing settled yet — nothing to approve
+        }
+        return lines.stream().allMatch(l -> cashModeIds.contains(l.getSettlementModeId()));
+    }
+
+    private Long creditStatusId(Long orgId) {
+        return receiveBusinessStatusRepo.findByOrgIdAndNameIgnoreCase(orgId, "Credit")
+            .map(ReceiveBusinessStatus::getId).orElse(null);
+    }
+
+    private Set<Long> cashModeIds(Long orgId) {
+        return settlementModeRepo.findByOrgIdAndCashTrue(orgId).stream()
+            .map(SettlementMode::getId).collect(Collectors.toSet());
+    }
+
     /** Query back to the cashier — from the Accountant (SUBMITTED) or the FM (VERIFIED). */
     @Transactional
     public ReceiveDocumentResponse queryReceipt(Long id, String note) {
@@ -450,6 +608,40 @@ public class ReviewService {
         receiveDocumentService.refreshSettlement(id);
         log.info("SettlementLine overridden: orgId={} docId={} lineNo={} {}->{} by={}",
             orgId, doc.getId(), lineNo, before, newAmount, me.getId());
+        return receiveDocumentService.get(id);
+    }
+
+    /**
+     * An Accountant's provisional correction to the job card's invoice amount — the figure
+     * that drives pending-amount everywhere. Gated exactly like {@link #overrideReceiptLine}:
+     * only while the receipt the accountant is reviewing sits SUBMITTED, and never by whoever
+     * created or last touched it. Recorded on the JobCard's own audit trail (entityType
+     * "JobCard") rather than the receipt's, since invoice amount is a job-card field that can
+     * outlive any one receipt.
+     */
+    @Transactional
+    public ReceiveDocumentResponse overrideInvoiceAmount(Long id, BigDecimal newAmount, String reason) {
+        Long orgId = TenantContext.requireOrgId();
+        AppUser me = guard.requireAccountant();
+        ReceiveDocument doc = loadReceipt(orgId, id);
+        requireState(me, doc.getBranchId(), doc.getCreatedBy(), doc.getLastModifiedBy(), describe(doc),
+            doc.getWorkflowStatus() == WorkflowStatus.SUBMITTED, doc.getWorkflowStatus());
+
+        JobCard jc = jobCardRepo.findByIdAndOrgId(doc.getJobCardId(), orgId)
+            .orElseThrow(() -> DamsException.notFound("Job card", doc.getJobCardId()));
+        BigDecimal before = jc.getInvoiceAmount();
+        if (before != null && before.compareTo(newAmount) == 0) {
+            throw DamsException.badRequest("The override amount is the same as the current invoice amount");
+        }
+        jc.setInvoiceAmount(newAmount);
+        jobCardRepo.save(jc);
+
+        auditService.recordUserEvent("JobCard", jc.getId(), jc.getBranchId(), EventType.OVERRIDE, me.getId(),
+            detail("amountBefore", before, "amountAfter", newAmount, "reason", reason,
+                "receiptId", doc.getId(), "documentNo", doc.getDocumentNo(),
+                "summary", overrideSummary(describe(doc), null, before, newAmount, reason)));
+        log.info("JobCard invoice amount overridden: orgId={} jobCardId={} receiptId={} {}->{} by={}",
+            orgId, jc.getId(), doc.getId(), before, newAmount, me.getId());
         return receiveDocumentService.get(id);
     }
 
@@ -857,7 +1049,8 @@ public class ReviewService {
     }
 
     private static String money(BigDecimal n) {
-        return "₹" + n.stripTrailingZeros().toPlainString();
+        // null only happens for an invoice-amount override starting from "no invoice yet".
+        return n == null ? "—" : "₹" + n.stripTrailingZeros().toPlainString();
     }
 
     /** Ordered detail map that drops entries with a null key or null value (audit detail is small JSON). */

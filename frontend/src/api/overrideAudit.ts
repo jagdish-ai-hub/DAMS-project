@@ -1,9 +1,9 @@
 import api from './axios'
 
-/** One amount override — an Accountant line override ('receipt' / 'expense') or an FM claim close ('claim'). */
+/** One amount override — an Accountant line ('receipt' / 'expense') or invoice-amount ('invoice') override, or an FM claim close ('claim'). */
 export interface OverrideAuditEntry {
   at: string
-  kind: 'receipt' | 'expense' | 'claim'
+  kind: 'receipt' | 'expense' | 'invoice' | 'claim'
   actorName: string
   branchId: number | null
   branchCode: string | null

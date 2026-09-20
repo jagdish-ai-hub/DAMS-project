@@ -22,6 +22,7 @@ import com.dams.masters.entity.ReceiveCategory;
 import com.dams.masters.repository.ClaimTypeRepository;
 import com.dams.masters.repository.ReceiveBusinessStatusRepository;
 import com.dams.masters.repository.ReceiveCategoryRepository;
+import com.dams.masters.service.ReceiveStatusAccessService;
 import com.dams.user.entity.AppUser;
 import com.dams.user.entity.Role;
 import com.dams.user.repository.AppUserRepository;
@@ -42,6 +43,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -72,6 +74,7 @@ class JobCardServiceTest {
     @Mock private PendingAmountCalculator pendingAmountCalculator;
     @Mock private ClaimCloseRepository claimCloseRepo;
     @Mock private ReceivePaymentGuard paymentGuard;
+    @Mock private ReceiveStatusAccessService statusAccess;
 
     private JobCardService service;
 
@@ -79,7 +82,7 @@ class JobCardServiceTest {
     void setUp() {
         service = new JobCardService(jobCardRepo, customerRepo, vehicleRepo, branchRepo,
             categoryRepo, statusRepo, claimTypeRepo, userRepo, branchScope, auditService,
-            pendingAmountCalculator, claimCloseRepo, paymentGuard);
+            pendingAmountCalculator, claimCloseRepo, paymentGuard, statusAccess);
         TenantContext.setOrgId(ORG);
         lenient().when(branchScope.currentUserId()).thenReturn(CASHIER_ID);
         // Reads and patches now honour branch access — default the fixtures to visible.
@@ -235,7 +238,69 @@ class JobCardServiceTest {
         assertThat(existing.getInvoiceNo()).isEqualTo("INV-1");
     }
 
+    @Test
+    void patch_statusOutsideTheCallersRole_isRejected() {
+        JobCard existing = openJobCardOnStatus(4L);
+        when(jobCardRepo.findByIdAndOrgId(100L, ORG)).thenReturn(Optional.of(existing));
+        when(statusRepo.findByIdAndOrgId(9L, ORG)).thenReturn(Optional.of(status(9L, "Claim Received")));
+        when(branchScope.currentRole()).thenReturn(Role.CASHIER);
+        doThrow(DamsException.forbidden("Business status 'Claim Received' cannot be set by a CASHIER."))
+            .when(statusAccess).requireMaySet(eq(ORG), eq(Role.CASHIER), any(ReceiveBusinessStatus.class));
+
+        JobCardPatchRequest patch = new JobCardPatchRequest();
+        patch.setBusinessStatusId(9L);
+
+        assertThatThrownBy(() -> service.patch(100L, patch))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("Claim Received");
+        assertThat(existing.getBusinessStatusId()).isEqualTo(4L);
+    }
+
+    @Test
+    void patch_statusChangeOnAClosedClaim_isRejectedForAnAccountant() {
+        JobCard existing = openJobCardOnStatus(4L);
+        when(jobCardRepo.findByIdAndOrgId(100L, ORG)).thenReturn(Optional.of(existing));
+        when(claimCloseRepo.existsByOrgIdAndJobCardId(ORG, 100L)).thenReturn(true);
+        when(branchScope.currentRole()).thenReturn(Role.ACCOUNTANT);
+
+        JobCardPatchRequest patch = new JobCardPatchRequest();
+        patch.setBusinessStatusId(9L);
+
+        assertThatThrownBy(() -> service.patch(100L, patch))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("only a Finance Manager");
+        assertThat(existing.getBusinessStatusId()).isEqualTo(4L);
+    }
+
+    /** Closed / Claim Received / Claim Pending are only knowable after the claim settles. */
+    @Test
+    void patch_statusChangeOnAClosedClaim_isAllowedForTheFinanceManager() {
+        JobCard existing = openJobCardOnStatus(4L);
+        when(jobCardRepo.findByIdAndOrgId(100L, ORG)).thenReturn(Optional.of(existing));
+        when(claimCloseRepo.existsByOrgIdAndJobCardId(ORG, 100L)).thenReturn(true);
+        when(branchScope.currentRole()).thenReturn(Role.FINANCE_MANAGER);
+        when(statusRepo.findByIdAndOrgId(9L, ORG)).thenReturn(Optional.of(status(9L, "Claim Received")));
+
+        JobCardPatchRequest patch = new JobCardPatchRequest();
+        patch.setBusinessStatusId(9L);
+
+        service.patch(100L, patch);
+
+        assertThat(existing.getBusinessStatusId()).isEqualTo(9L);
+    }
+
     // --- fixtures ---
+
+    private static JobCard openJobCardOnStatus(long statusId) {
+        JobCard jc = new JobCard();
+        ReflectionTestUtils.setField(jc, "id", 100L);
+        jc.setOrgId(ORG);
+        jc.setBranchId(HOME_BRANCH);
+        jc.setCustomerId(42L);
+        jc.setCategoryId(3L);
+        jc.setBusinessStatusId(statusId);
+        return jc;
+    }
 
     private static AppUser cashierWithHomeBranch() {
         AppUser u = new AppUser();

@@ -73,7 +73,8 @@ export default function DashboardPage() {
 
   const cashAlerts = useMemo(() => {
     if (!summary) return []
-    const todayStr = new Date().toISOString().slice(0, 10)
+    // Branch-local calendar day (IST). UTC `toISOString` flips a day early/late for IST.
+    const todayStr = istToday()
     const list: { branchCode: string; message: string; severity: 'warning' | 'critical' }[] = []
     for (const b of summary.branchComparison) {
       if (!b.lastClosed) {
@@ -83,7 +84,7 @@ export default function DashboardPage() {
           severity: 'warning',
         })
       } else if (b.lastClosed < todayStr) {
-        const days = Math.max(1, Math.floor((new Date(todayStr).getTime() - new Date(b.lastClosed).getTime()) / (1000 * 60 * 60 * 24)))
+        const days = Math.max(1, Math.floor((new Date(`${todayStr}T00:00:00`).getTime() - new Date(`${b.lastClosed}T00:00:00`).getTime()) / (1000 * 60 * 60 * 24)))
         if (days >= 1) {
           list.push({
             branchCode: b.branchCode,

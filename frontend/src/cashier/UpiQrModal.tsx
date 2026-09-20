@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import { mastersApi, type MasterRow } from '../api/masters'
-import { inr, ghostBtn } from '../shell/ui'
+import { inr, ghostBtn, SkeletonRows } from '../shell/ui'
 import { QrCode, Copy, Check, X, ShieldCheck } from 'lucide-react'
 
 interface Props {
@@ -32,39 +33,80 @@ export default function UpiQrModal({ amount, docRef = 'SERVICE', customerName, o
     return () => { live = false }
   }, [])
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        onClose()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   const cleanAmount = Number(amount) > 0 ? Number(amount).toFixed(2) : '0.00'
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-[var(--surface)] border border-[var(--line)] rounded-xl max-w-lg w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+  // Portalled to body (escapes the parent Modal's entrance transform), elevated
+  // above the parent dim (z 70 vs 50), scrollable on short screens. No
+  // `overflow-hidden` on the card so the lift shadow is never hard-clipped.
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Instant UPI Payment QR"
+      onMouseDown={onClose}
+      className="dams-anim-backdrop"
+      style={{
+        position: 'fixed', inset: 0, zIndex: 70, background: 'rgba(16,24,40,.55)',
+        display: 'flex', justifyContent: 'center', padding: 'clamp(12px, 3vh, 32px) clamp(10px, 3vw, 16px)',
+        overflowY: 'auto',
+      }}
+    >
+      <div
+        onMouseDown={(e) => e.stopPropagation()}
+        className="dams-anim-modal"
+        style={{
+          background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12,
+          boxShadow: 'var(--shadow-lift)', width: '100%', maxWidth: 512, margin: 'auto 0',
+          maxHeight: 'min(calc(100dvh - 32px), 720px)', display: 'flex', flexDirection: 'column',
+        }}
+      >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--line)] bg-[var(--surface-muted)]">
+        <div
+          className="flex items-center justify-between px-5 py-4 border-b border-[var(--line)]"
+          style={{ background: 'var(--surface)', borderTopLeftRadius: 12, borderTopRightRadius: 12, flexShrink: 0 }}
+        >
           <div className="flex items-center gap-2">
-            <QrCode className="w-5 h-5 text-[var(--purple,#6B3FA0)]" />
-            <h3 className="text-base font-bold text-[var(--text)]">Instant UPI Payment QR</h3>
+            <QrCode className="w-5 h-5" style={{ color: 'var(--purple)' }} />
+            <h3 className="text-base font-bold" style={{ color: 'var(--ink)' }}>Instant UPI Payment QR</h3>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-md text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--line)] transition-colors"
+            aria-label="Close"
+            className="rounded-md transition-colors"
+            style={{
+              minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer',
+            }}
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-6 text-center">
-          <div className="text-2xl font-extrabold text-[var(--text)] tabular-nums mb-1">
+        <div className="p-6 text-center" style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
+          <div className="text-2xl font-extrabold tabular-nums mb-1" style={{ color: 'var(--ink)' }}>
             {inr(Number(cleanAmount))}
           </div>
-          <div className="flex items-center justify-center gap-1.5 text-xs text-[var(--green,#2E7D32)] font-medium mb-4">
+          <div className="flex items-center justify-center gap-1.5 text-xs font-medium mb-4" style={{ color: 'var(--green)' }}>
             <ShieldCheck className="w-4 h-4" />
             <span>Exact amount pre-filled · Zero typo risk</span>
           </div>
 
-          {error && <p className="text-sm text-[var(--red,#B91C1C)] mb-2">{error}</p>}
+          {error && <p className="text-sm mb-2" style={{ color: 'var(--red)' }}>{error}</p>}
 
           {vpas == null && !error && (
-            <p className="text-sm text-[var(--muted)] py-6">Loading UPI IDs…</p>
+            <div style={{ padding: '12px 0' }}><SkeletonRows rows={2} height={120} /></div>
           )}
 
           {vpas != null && vpas.length === 0 && (
@@ -82,13 +124,14 @@ export default function UpiQrModal({ amount, docRef = 'SERVICE', customerName, o
           )}
 
           {docRef && (
-            <div className="mt-4 text-[11px] font-mono bg-[var(--bg)] px-2.5 py-1 rounded border border-[var(--line)] text-[var(--muted)] inline-block">
+            <div className="mt-4 text-[11px] font-mono px-2.5 py-1 rounded border border-[var(--line)] inline-block" style={{ background: 'var(--bg)', color: 'var(--muted)' }}>
               Ref: {docRef}
             </div>
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { receiptsApi } from '../api/receipts'
+import { receiptsApi, type ReceiveDocument } from '../api/receipts'
 import { expensesApi } from '../api/expenses'
+import { mastersApi, type MasterRow } from '../api/masters'
+import { jobCardsApi } from '../api/jobCards'
 import { cashApi, type CashDocument } from '../api/cash'
 import { reviewApi, type ReviewQueueItem, type ReviewType } from '../api/review'
+import { exportApi } from '../api/export'
 import { card, ErrorBanner, ghostBtn, primaryBtn, Modal, Badge, Skeleton, SkeletonRows, inr, inputStyle, th, td } from '../shell/ui'
 import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, type AnyDoc } from '../review/reviewShared'
 import GlobalSearch from '../shared/GlobalSearch'
@@ -41,15 +44,22 @@ export default function ReviewQueuePage() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [doc, setDoc] = useState<DetailDoc | null>(null)
   const [error, setError] = useState('')
+  const [detailError, setDetailError] = useState('')
   const [flash, setFlash] = useState('')
   const [tick, setTick] = useState(0)
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [bulkBusy, setBulkBusy] = useState(false)
+  const [exportBusy, setExportBusy] = useState(false)
   const [sortMode, setSortMode] = useState<SortMode>('all')
   const [drilldown, setDrilldown] = useState(false)
+  // Receipts only: a separate list of SUBMITTED receipts an Accountant may approve directly
+  // (org opt-in — see Settings). Not a filter over `items`, a different endpoint/action.
+  const [directMode, setDirectMode] = useState(false)
+  const [directItems, setDirectItems] = useState<ReviewQueueItem[] | null>(null)
 
   const reload = useCallback(() => setTick((n) => n + 1), [])
   const riskMap = useRiskMap(type)
+  const activeItems = type === 'receipt' && directMode ? directItems : items
 
   useEffect(() => {
     let live = true
@@ -61,21 +71,41 @@ export default function ReviewQueuePage() {
   }, [type, tick])
 
   useEffect(() => {
-    if (selectedId == null) { setDoc(null); return }
+    if (type !== 'receipt' || !directMode) return
     let live = true
+    reviewApi.directApproveEligibleReceipts()
+      .then((r) => { if (live) setDirectItems(r.data) })
+      .catch((e) => { if (live) setError(apiError(e, 'Could not load the direct-approve list. Is it turned on in Settings?')) })
+    return () => { live = false }
+  }, [type, directMode, tick])
+
+  useEffect(() => {
+    if (selectedId == null) { setDoc(null); setDetailError(''); return }
+    let live = true
+    setDoc(null)
+    setDetailError('')
     detailFor(type, selectedId)
       .then(({ data }) => { if (live) setDoc(data as DetailDoc) })
-      .catch((e) => { if (live) setError(apiError(e, 'Could not load that document.')) })
+      .catch((e) => { if (live) setDetailError(apiError(e, 'Could not load that document.')) })
     return () => { live = false }
   }, [selectedId, type, tick])
 
   function pickType(t: ReviewType) {
     setType(t)
+    setDirectMode(false)
     setSelectedId(null)
     setSelectedIds([])
     setDoc(null)
     setFlash('')
     setDrilldown(false)
+  }
+
+  function toggleDirectMode() {
+    setDirectMode((v) => !v)
+    setSelectedId(null)
+    setSelectedIds([])
+    setDoc(null)
+    setFlash('')
   }
 
   async function handleBulkVerify() {
@@ -96,6 +126,38 @@ export default function ReviewQueuePage() {
     }
   }
 
+  async function handleBulkDirectApprove() {
+    if (selectedIds.length === 0) return
+    setBulkBusy(true)
+    setError('')
+    try {
+      const res = await reviewApi.bulkDirectApproveReceipts(selectedIds)
+      const data = res.data
+      setFlash(`Directly approved ${data.approvedCount} receipt${data.approvedCount === 1 ? '' : 's'}.${data.skippedReasons.length > 0 ? ` (${data.skippedReasons.length} skipped)` : ''}`)
+      setTimeout(() => setFlash(''), 4000)
+      setSelectedIds([])
+      reload()
+    } catch (e) {
+      setError(apiError(e, 'Could not bulk direct-approve items.'))
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  async function handleExportSelected() {
+    const ids = selectedIds.length > 0 ? selectedIds : (directItems ?? []).map((it) => it.id)
+    if (ids.length === 0) return
+    setExportBusy(true)
+    setError('')
+    try {
+      await exportApi.downloadReceiptsByIds(ids)
+    } catch (e) {
+      setError(apiError(e, 'Could not export.'))
+    } finally {
+      setExportBusy(false)
+    }
+  }
+
   function toggleSelect(id: number) {
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
@@ -103,12 +165,12 @@ export default function ReviewQueuePage() {
   }
 
   function toggleSelectAll() {
-    if (!items || items.length === 0) return
-    const allSelected = items.every((it) => selectedIds.includes(it.id))
+    if (!activeItems || activeItems.length === 0) return
+    const allSelected = activeItems.every((it) => selectedIds.includes(it.id))
     if (allSelected) {
       setSelectedIds([])
     } else {
-      setSelectedIds(items.map((it) => it.id))
+      setSelectedIds(activeItems.map((it) => it.id))
     }
   }
 
@@ -145,7 +207,7 @@ export default function ReviewQueuePage() {
         <div className={selectedId != null ? 'hidden lg:flex flex-col overflow-y-auto' : 'flex flex-col overflow-y-auto'}>
           <QueuePane
             type={type}
-            items={items}
+            items={activeItems}
             sortMode={sortMode}
             selectedId={selectedId}
             onType={pickType}
@@ -155,8 +217,13 @@ export default function ReviewQueuePage() {
             onToggleSelect={toggleSelect}
             onToggleSelectAll={toggleSelectAll}
             onClearSelected={() => setSelectedIds([])}
-            onBulkVerify={handleBulkVerify}
+            bulkActionLabel={directMode ? 'Approve' : 'Verify'}
+            onBulkAction={directMode ? handleBulkDirectApprove : handleBulkVerify}
             bulkBusy={bulkBusy}
+            directMode={directMode}
+            onToggleDirectMode={toggleDirectMode}
+            onExportSelected={directMode ? handleExportSelected : undefined}
+            exportBusy={exportBusy}
           />
         </div>
         <div className={selectedId == null ? 'hidden lg:block border-t lg:border-t-0 lg:border-l border-[var(--line)] p-4 sm:p-6 overflow-y-auto' : 'block border-t lg:border-t-0 lg:border-l border-[var(--line)] p-4 sm:p-6 overflow-y-auto'}>
@@ -173,8 +240,19 @@ export default function ReviewQueuePage() {
                   <div className="lg:hidden mb-2">
                     <button type="button" onClick={() => setSelectedId(null)} style={{ ...ghostBtn, minHeight: 36, fontWeight: 700 }}>← Back to Queue</button>
                   </div>
-                  <Skeleton width={200} height={20} />
-                  <SkeletonRows rows={5} />
+                  {detailError ? (
+                    <>
+                      <ErrorBanner message={detailError} />
+                      <div>
+                        <button type="button" onClick={() => reload()} style={{ ...ghostBtn, minHeight: 36 }}>Retry</button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <Skeleton width={200} height={20} />
+                      <SkeletonRows rows={5} />
+                    </>
+                  )}
                 </div>
               : <RecordDetail type={type} doc={doc} onDone={afterAction} onBack={() => setSelectedId(null)} />}
         </div>
@@ -207,8 +285,13 @@ function QueuePane(props: {
   onToggleSelect: (id: number) => void
   onToggleSelectAll: () => void
   onClearSelected: () => void
-  onBulkVerify: () => void
+  bulkActionLabel: string
+  onBulkAction: () => void
   bulkBusy: boolean
+  directMode: boolean
+  onToggleDirectMode: () => void
+  onExportSelected?: () => void
+  exportBusy: boolean
 }) {
   const { items } = props
   const groups = useMemo(() => groupItems(items ?? [], props.sortMode), [items, props.sortMode])
@@ -227,8 +310,25 @@ function QueuePane(props: {
           </button>
         ))}
       </div>
+      {props.type === 'receipt' && (
+        <div style={{ padding: '0 12px 10px' }}>
+          <button
+            type="button"
+            onClick={props.onToggleDirectMode}
+            title="Cash receipts that aren't a claim and aren't Credit — approve without Finance Manager review"
+            style={{
+              width: '100%', border: '1px solid var(--line)', borderRadius: 7, padding: '6px 0',
+              fontSize: '0.74rem', fontWeight: 700, cursor: 'pointer',
+              background: props.directMode ? 'var(--green-bg)' : 'transparent',
+              color: props.directMode ? 'var(--green)' : 'var(--muted)',
+            }}
+          >
+            {props.directMode ? '✓ Direct Approve (eligible cash receipts)' : 'Switch to Direct Approve list'}
+          </button>
+        </div>
+      )}
       <div style={{ padding: '4px 14px 8px', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--faint)', fontWeight: 700 }}>
-        Awaiting your review
+        {props.directMode ? 'Eligible for direct approval' : 'Awaiting your review'}
         <span style={{ background: 'var(--amber-bg)', color: 'var(--amber)', borderRadius: 999, fontSize: '0.66rem', padding: '1px 7px', marginLeft: 6 }}>
           {items?.length ?? 0}
         </span>
@@ -303,16 +403,28 @@ function QueuePane(props: {
             >
               Clear
             </button>
+            {props.onExportSelected && (
+              <button
+                type="button"
+                onClick={props.onExportSelected}
+                disabled={props.exportBusy}
+                style={{ ...ghostBtn, color: '#fff', border: '1px solid rgba(255,255,255,0.3)', minHeight: 30, padding: '3px 10px', fontSize: '0.75rem' }}
+              >
+                {props.exportBusy ? 'Exporting…' : 'Export'}
+              </button>
+            )}
             <button
               type="button"
-              onClick={props.onBulkVerify}
+              onClick={props.onBulkAction}
               disabled={props.bulkBusy}
               style={{
                 background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 6,
                 padding: '4px 12px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', minHeight: 30,
               }}
             >
-              {props.bulkBusy ? 'Verifying…' : `Verify (${props.selectedIds.length})`}
+              {props.bulkBusy
+                ? (props.directMode ? 'Approving…' : 'Verifying…')
+                : `${props.bulkActionLabel} (${props.selectedIds.length})`}
             </button>
           </div>
         </div>
@@ -618,6 +730,19 @@ function RecordDetail(props: {
   const [busy, setBusy] = useState(false)
   const [box, setBox] = useState<'query' | null>(null)
   const [boxText, setBoxText] = useState('')
+  const [statusOptions, setStatusOptions] = useState<MasterRow[]>([])
+
+  // Only receipts carry a job-card business status; expenses and cash have their own.
+  const receipt = !cash && !expense ? (doc as ReceiveDocument) : null
+
+  useEffect(() => {
+    if (!receipt) return
+    let live = true
+    mastersApi.listSelectable('receive-statuses')
+      .then(({ data }) => live && setStatusOptions(data))
+      .catch((e) => live && setError(apiError(e, 'Could not load the status list.')))
+    return () => { live = false }
+  }, [receipt != null])
 
   const { user } = useAuth()
   // Maker-checker mirror: the server refuses these actions when you created or last
@@ -672,6 +797,17 @@ function RecordDetail(props: {
             onOverride={(lineNo, amount, reason) =>
               run(() => reviewApi.overrideLine(type, doc.id, lineNo, amount, reason),
                 `Line ${lineNo} overridden — shows on this record permanently`, true)}
+            statusOptions={receipt && statusOptions.length ? statusOptions : undefined}
+            onStatusChange={receipt
+              ? (statusId) => run(
+                () => jobCardsApi.patch(receipt.jobCardId, { businessStatusId: statusId }),
+                `${docNo} — status updated`, true)
+              : undefined}
+            onOverrideInvoice={receipt
+              ? (amount, reason) => run(
+                () => reviewApi.overrideInvoiceAmount(receipt.id, amount, reason),
+                `${docNo} — invoice amount overridden`, true)
+              : undefined}
           />
         )}
 

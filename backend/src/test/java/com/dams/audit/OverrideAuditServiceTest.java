@@ -37,6 +37,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -107,6 +109,28 @@ class OverrideAuditServiceTest {
         assertThat(out.get(1).amountBefore()).isEqualByComparingTo("800");
         assertThat(out.get(1).amountAfter()).isEqualByComparingTo("1000");
         assertThat(out.get(1).reason()).isEqualTo("Rate corrected");
+    }
+
+    @Test
+    void list_includesInvoiceAmountOverride_asItsOwnKind_notMisfiledAsAnExpense() {
+        AuditEvent invoiceOverride = overrideEvent(
+            "JobCard", 70L, 3L, Instant.parse("2026-07-22T10:00:00Z"),
+            "{\"amountBefore\":21000,\"amountAfter\":19500,\"reason\":\"Corrected invoice\",\"documentNo\":\"OOR-JUL26-R-016\"}");
+        when(auditEventRepo.findForOverrideAudit(ORG, EventType.OVERRIDE, FROM, TO, null, null))
+            .thenReturn(List.of(invoiceOverride));
+
+        List<OverrideAuditEntry> out = service.list(FROM, TO, null, null);
+
+        assertThat(out).hasSize(1);
+        assertThat(out.get(0).kind()).isEqualTo("invoice");
+        assertThat(out.get(0).documentNo()).isEqualTo("OOR-JUL26-R-016");
+        assertThat(out.get(0).lineId()).isNull();
+        assertThat(out.get(0).amountBefore()).isEqualByComparingTo("21000");
+        assertThat(out.get(0).amountAfter()).isEqualByComparingTo("19500");
+        // A JobCard-entity OVERRIDE event must never fall through to the expense lookup —
+        // that lookup would be keyed on a job-card id and either return nothing or, worse,
+        // an unrelated expense document that happens to share the id.
+        verify(expenseDocumentRepo, never()).findByIdAndOrgId(any(), any());
     }
 
     @Test

@@ -8,11 +8,13 @@ public record OrgSettingsResponse(
     Long id,
     String name,
     boolean multiBranchCashierAccess,
+    boolean accountantDirectApproveCash,
     boolean active,
     Instant createdAt
 ) {
     public static OrgSettingsResponse of(Organization o) {
         return new OrgSettingsResponse(
-            o.getId(), o.getName(), o.isMultiBranchCashierAccess(), o.isActive(), o.getCreatedAt());
+            o.getId(), o.getName(), o.isMultiBranchCashierAccess(), o.isAccountantDirectApproveCash(),
+            o.isActive(), o.getCreatedAt());
     }
 }
