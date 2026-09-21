@@ -77,6 +77,8 @@ export default function AppShell() {
     if (!canAsk) return
     function onKey(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        const t = e.target as HTMLElement | null
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
         e.preventDefault()
         setAskOpen(true)
       }

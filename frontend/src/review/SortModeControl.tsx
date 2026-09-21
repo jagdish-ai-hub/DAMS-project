@@ -17,9 +17,9 @@ export default function SortModeControl({ value, onChange }: { value: SortMode; 
           type="button"
           onClick={() => onChange(o.v)}
           style={{
-            border: 'none', padding: '6px 10px', fontSize: '0.76rem', fontWeight: 700, cursor: 'pointer',
+            border: 'none', padding: '8px 12px', fontSize: '0.76rem', fontWeight: 700, cursor: 'pointer',
             background: value === o.v ? 'var(--navy)' : 'var(--surface)',
-            color: value === o.v ? '#fff' : 'var(--muted)',
+            color: value === o.v ? '#fff' : 'var(--muted)', minHeight: 36,
           }}
         >
           {o.label}

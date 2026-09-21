@@ -28,6 +28,13 @@ public interface CashDocumentRepository extends JpaRepository<CashDocument, Long
     List<CashDocument> findByOrgIdAndWorkflowStatusAndBranchIdInOrderBySubmittedAtAscIdAsc(
         Long orgId, CashWorkflowStatus workflowStatus, Collection<Long> branchIds);
 
+    /**
+     * Accountant review queue — movements in any of several workflow states within the
+     * caller's branches, oldest first. Used to show SUBMITTED and FM_QUERIED together (rev 49).
+     */
+    List<CashDocument> findByOrgIdAndWorkflowStatusInAndBranchIdInOrderBySubmittedAtAscIdAsc(
+        Long orgId, Collection<CashWorkflowStatus> workflowStatuses, Collection<Long> branchIds);
+
     /** Finance Manager queue — cash movements in one workflow state org-wide, oldest first. */
     List<CashDocument> findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(
         Long orgId, CashWorkflowStatus workflowStatus);
@@ -40,14 +47,15 @@ public interface CashDocumentRepository extends JpaRepository<CashDocument, Long
 
     boolean existsByOrgId(Long orgId);
 
-    /** Owner dashboard — cash movements still in the review pipeline (SUBMITTED / VERIFIED / QUERIED). */
+    /** Owner dashboard — cash movements still in the review pipeline (SUBMITTED / VERIFIED / QUERIED / FM_QUERIED). */
     @Query("""
         select count(c) from CashDocument c
         where c.orgId = :orgId
           and (:branchId is null or c.branchId = :branchId)
           and c.workflowStatus in (com.dams.cash.entity.CashWorkflowStatus.SUBMITTED,
                                    com.dams.cash.entity.CashWorkflowStatus.VERIFIED,
-                                   com.dams.cash.entity.CashWorkflowStatus.QUERIED)
+                                   com.dams.cash.entity.CashWorkflowStatus.QUERIED,
+                                   com.dams.cash.entity.CashWorkflowStatus.FM_QUERIED)
         """)
     long countPendingReview(@Param("orgId") Long orgId, @Param("branchId") Long branchId);
 
@@ -57,7 +65,8 @@ public interface CashDocumentRepository extends JpaRepository<CashDocument, Long
         where c.orgId = :orgId
           and c.workflowStatus in (com.dams.cash.entity.CashWorkflowStatus.SUBMITTED,
                                    com.dams.cash.entity.CashWorkflowStatus.VERIFIED,
-                                   com.dams.cash.entity.CashWorkflowStatus.QUERIED)
+                                   com.dams.cash.entity.CashWorkflowStatus.QUERIED,
+                                   com.dams.cash.entity.CashWorkflowStatus.FM_QUERIED)
         group by c.branchId
         """)
     List<Object[]> countPendingReviewByBranch(@Param("orgId") Long orgId);

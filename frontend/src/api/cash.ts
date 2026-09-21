@@ -12,6 +12,7 @@ export type CashWorkflowStatus =
   | 'VERIFIED'
   | 'APPROVED'
   | 'QUERIED'
+  | 'FM_QUERIED'
   | 'REJECTED'
 
 export interface CashDocument {

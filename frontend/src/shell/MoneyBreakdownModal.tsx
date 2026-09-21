@@ -91,22 +91,25 @@ export default function MoneyBreakdownModal(props: {
       {rows != null && rows.length > 0 && (
         <>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+            <table style={{ width: '100%', minWidth: 560, borderCollapse: 'collapse', fontSize: '0.82rem' }}>
               <thead>
                 <tr>
-                  <th style={th}>Date</th>
-                  <th style={th}>Doc</th>
-                  <th style={th}>Party</th>
-                  <th style={th}>Detail</th>
-                  <th style={th}>Status</th>
-                  <th style={{ ...th, textAlign: 'right' }}>Amount</th>
+                  <th style={{ ...th, position: 'sticky', top: 0, background: 'var(--surface)', zIndex: 1 }}>Date</th>
+                  <th style={{ ...th, position: 'sticky', top: 0, background: 'var(--surface)', zIndex: 1 }}>Doc</th>
+                  <th style={{ ...th, position: 'sticky', top: 0, background: 'var(--surface)', zIndex: 1 }}>Party</th>
+                  <th style={{ ...th, position: 'sticky', top: 0, background: 'var(--surface)', zIndex: 1 }}>Detail</th>
+                  <th style={{ ...th, position: 'sticky', top: 0, background: 'var(--surface)', zIndex: 1 }}>Status</th>
+                  <th style={{ ...th, textAlign: 'right', position: 'sticky', top: 0, background: 'var(--surface)', zIndex: 1 }}>Amount</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
                   <tr
                     key={r.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => props.onRowClick(r)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); props.onRowClick(r) } }}
                     style={{ cursor: 'pointer' }}
                     onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--navy3)' }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}

@@ -670,7 +670,7 @@ export default function NewReceiptPage() {
                   {['Date', 'Settlement Mode', 'Receive Amount', 'Bank Name', 'Transaction ID', 'Remarks', ''].map((h) => (
                     <th key={h} style={{
                       fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--faint)',
-                      textAlign: 'left', padding: '7px 6px', borderBottom: '1.5px solid var(--line)', background: '#FAFBFC',
+                      textAlign: 'left', padding: '7px 6px', borderBottom: '1.5px solid var(--line)', background: 'var(--bg)',
                     }}>
                       {h}
                     </th>
@@ -684,7 +684,7 @@ export default function NewReceiptPage() {
                   return (
                     <tr key={i} style={rowLocked ? { background: 'var(--bg)' } : undefined}>
                       <td style={cellStyle}>
-                        <input type="date" value={l.transactionDate} disabled={rowLocked} title={rowLocked ? 'Already reviewed — locked' : undefined} onChange={(e) => setLine(i, { transactionDate: e.target.value })} style={cellInput} />
+                        <input type="date" value={l.transactionDate} disabled={rowLocked} max={istToday()} title={rowLocked ? 'Already reviewed — locked' : undefined} onChange={(e) => setLine(i, { transactionDate: e.target.value })} style={cellInput} />
                       </td>
                       <td style={cellStyle}>
                         <select value={l.settlementModeId} disabled={rowLocked} title={rowLocked ? 'Already reviewed — locked' : undefined} onChange={(e) => setLine(i, { settlementModeId: Number(e.target.value) })} style={cellInput}>
@@ -693,8 +693,8 @@ export default function NewReceiptPage() {
                       </td>
                       <td style={cellStyle}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <input type="number" value={l.amount} disabled={rowLocked} title={rowLocked ? 'Already reviewed — locked' : undefined} onChange={(e) => setLine(i, { amount: e.target.value })} style={{ ...cellInput, textAlign: 'right' }} />
-                          {!rowLocked && (m?.name?.toLowerCase().includes('upi') || (Number(l.amount) > 0 && !m?.name?.toLowerCase().includes('cash'))) && (
+                          <input type="number" value={l.amount} disabled={rowLocked} min={0} step="0.01" inputMode="decimal" title={rowLocked ? 'Already reviewed — locked' : undefined} onChange={(e) => setLine(i, { amount: e.target.value })} style={{ ...cellInput, textAlign: 'right' }} />
+                          {!rowLocked && m?.name?.toLowerCase().includes('upi') && Number(l.amount) > 0 && (
                             <button
                               type="button"
                               title="Generate UPI QR for customer"
@@ -817,8 +817,8 @@ export default function NewReceiptPage() {
   )
 }
 
-const cellStyle = { padding: 6, borderBottom: '1px solid var(--line)', verticalAlign: 'middle' as const }
-const cellInput = { border: '1.5px solid var(--line)', borderRadius: 6, padding: '6px 7px', width: '100%', fontSize: '0.82rem' }
+const cellStyle = { padding: 6, borderBottom: '1px solid var(--line)', verticalAlign: 'middle' as const, minWidth: 110 }
+const cellInput = { border: '1.5px solid var(--line)', borderRadius: 6, padding: '6px 7px', width: '100%', fontSize: '0.82rem', minWidth: 0 }
 
 function Row({ label, req, children }: { label: string; req?: boolean; children: React.ReactNode }) {
   return (

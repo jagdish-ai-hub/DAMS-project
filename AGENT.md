@@ -29,17 +29,28 @@ accountants, plus the owner's live window into branch operations.
 - **FINANCE_MANAGER** — all branches within their org. Final approval on
   every entry, **except** the carve-out below. Closes Warranty/AMC/CG
   claims, with override authority that is final and locked once used.
+  **Close Claim is itself the approval for a claim receipt (rev 49)** —
+  there is no separate Approve step for a claim. While its receipt is
+  VERIFIED, the FM sees only Query and Close Claim; Close Claim approves
+  every VERIFIED receive document on the job card and closes the claim in
+  one transaction. See plan.md rev 49.
 - **ACCOUNTANT** — one or more assigned branches within their org. Verifies
   submitted entries, can override amounts (provisional — still needs FM
   approval downstream) or the job card's invoice amount, queries or rejects
   with a reason. Closes Expense documents explicitly.
-  **Direct approval (org opt-in, default OFF — rev 45):** when an Owner
+  **Direct approval (org opt-in, default OFF — rev 46):** when an Owner
   turns on `accountant_direct_approve_cash` in Settings, an Accountant may
   approve a SUBMITTED receipt directly — one click, straight to APPROVED,
   skipping the Finance Manager — but only when it is not a claim (no
   `claim_type_id`), its business status isn't "Credit", and every
   settlement line is cash-mode. Everything else still requires FM approval
-  as usual. See plan.md rev 45.
+  as usual. See plan.md rev 46.
+  **FM-queried entries land back here, not with the Cashier (rev 49):**
+  when the FM queries a VERIFIED entry, it returns to the Accountant's own
+  queue (not the Cashier's My Entries) as `FM_QUERIED`, with the same
+  override tools available to fix it. The Accountant resends it straight
+  to the FM. An Accountant's own query on a fresh SUBMITTED entry is
+  unchanged — that still goes to the Cashier. See plan.md rev 49.
 - **CASHIER** — exactly one branch. Creates Receive and Expense entries,
   adds payments against existing job cards, does daily cash closing.
 
@@ -124,13 +135,19 @@ has `org_id = null`.
    the record is shown afterward.
    **Visibility vs closing are separate.** A claim becomes visible in the
    FM's open-claims list as soon as its receipt enters the review workflow
-   (SUBMITTED / QUERIED / VERIFIED / APPROVED) and stays there until it is
-   closed — a claim must never sit invisible among ordinary receipts just
-   because nobody has approved it yet. **Closing** still requires every
-   live receive document on the job card to be APPROVED: money goes through
-   maker-checker before a claim is finalised. The list therefore shows each
-   claim's workflow status, and the Close Claim action stays unavailable
-   (with the reason shown) until the claim is approved.
+   (SUBMITTED / QUERIED / FM_QUERIED / VERIFIED / APPROVED) and stays there
+   until it is closed — a claim must never sit invisible among ordinary
+   receipts just because nobody has approved it yet. **Closing** still
+   requires every live receive document on the job card to be at least
+   VERIFIED: money goes through maker-checker before a claim is finalised.
+   **Close Claim is itself the approval (rev 49) — there is no separate
+   Approve step for a claim receipt.** Any live document still VERIFIED is
+   approved as part of the same close transaction (same maker-checker
+   check and audit trail a standalone Approve would use); the FM sees only
+   Query and Close Claim while a claim receipt sits VERIFIED. The list
+   shows each claim's workflow status, and the Close Claim action stays
+   unavailable (with the reason shown) until every live document is at
+   least verified.
 
 ### "Add Payment" behavior
 Adding a payment against an existing job card **always appends a new
@@ -292,12 +309,18 @@ flag the conflict and ask rather than silently working around it.
    the maker-checker flow catching errors before approval.
 7. **Universal search for every role**, results always scoped by that
    user's branch access (and the cashier toggle in #2).
-8. **Queried-entry fix-and-resubmit loop (required v1)** — the cashier
-   home includes a "My Entries" list (today + recent) with workflow
-   badges. Queried items are visibly highlighted, open in edit mode, and
-   can be corrected and **Resubmitted**. The same append-while-open
-   principle applies to Expense documents: lines can be added until the
-   Accountant closes them.
+8. **Queried-entry fix-and-resubmit loop (required v1) — two distinct
+   loops, not one (rev 49).** An Accountant's query on a SUBMITTED entry
+   still goes to the Cashier: the cashier home's "My Entries" list (today +
+   recent) shows it with workflow badges, highlighted, open in edit mode,
+   correctable and **Resubmitted** back to SUBMITTED. The same
+   append-while-open principle applies to Expense documents: lines can be
+   added until the Accountant closes them.
+   A Finance Manager's query on a VERIFIED entry is a **second loop that
+   never reaches the Cashier**: it returns to the Accountant's own review
+   queue as `FM_QUERIED`, fixed there with the same override tools used on
+   a fresh entry, and resent straight back to VERIFIED with a "Resend to
+   Finance" action. See plan.md rev 49.
 
 ## UI reference
 
@@ -415,7 +438,7 @@ auth, like an S3 presigned URL), `/swagger-ui.html`, `/swagger-ui/**`,
 | Expenses | `expense/controller/ExpenseDocumentController` | `POST /expenses`, `GET /expenses/{id}`, `PATCH /expenses/{id}`, `POST /expenses/{id}/submit`, `POST /expenses/{id}/resubmit`, `POST /expenses/{id}/transfer-to-claim`, `POST /expenses/{id}/lines`, `PATCH /expenses/{id}/lines/{lineNo}`, `DELETE /expenses/{id}/lines/{lineNo}`, `POST|GET /expenses/{id}/attachments`, `POST|GET /expenses/{id}/lines/{lineNo}/attachments` |
 | Cash docs | `cash/controller/CashDocumentController` | `POST /cash-documents`, `GET /cash-documents`, `GET /cash-documents/{id}`, `PATCH /cash-documents/{id}`, `POST /cash-documents/{id}/submit`, `POST /cash-documents/{id}/resubmit`, `DELETE /cash-documents/{id}` |
 | Cash day | `cash/controller/CashController` | `GET /cash/drawer`, `POST /cash/opening`, `POST|GET /cash/close-day` |
-| Review | `review/controller/ReviewController` | `GET /review/receipts|expenses|cash`, `GET /review/receipts/direct-approve-eligible`, `GET /review/fm/receipts|expenses|cash`, `POST /receipts/{id}/verify|query|reject`, `POST /receipts/{id}/lines/{lineNo}/override`, `POST /receipts/{id}/override-invoice-amount`, `POST /receipts/{id}/direct-approve`, `POST /receipts/direct-approve` (bulk), `POST /receipts/{id}/approve`, `POST /expenses/{id}/verify|query|reject`, `POST /expenses/{id}/lines/{lineNo}/override`, `POST /expenses/{id}/close`, `POST /expenses/{id}/approve`, `POST /cash-documents/{id}/verify|approve|query|reject` |
+| Review | `review/controller/ReviewController` | `GET /review/receipts|expenses|cash`, `GET /review/receipts/direct-approve-eligible`, `GET /review/fm/receipts|expenses|cash`, `POST /receipts/{id}/verify|query|reject`, `POST /receipts/{id}/resubmit-to-fm`, `POST /receipts/{id}/lines/{lineNo}/override`, `POST /receipts/{id}/override-invoice-amount`, `POST /receipts/{id}/direct-approve`, `POST /receipts/direct-approve` (bulk), `POST /receipts/{id}/approve`, `POST /expenses/{id}/verify|query|reject`, `POST /expenses/{id}/resubmit-to-fm`, `POST /expenses/{id}/lines/{lineNo}/override`, `POST /expenses/{id}/close`, `POST /expenses/{id}/approve`, `POST /cash-documents/{id}/verify|approve|query|reject`, `POST /cash-documents/{id}/resubmit-to-fm` |
 | Search | `search/controller/SearchController` | `GET /search?q=` |
 | AI assistant | `ai/controller/AiController` | `POST /ai/ask`, `GET /ai/brief`, `GET /ai/benchmark`, `GET /ai/anomalies`, `GET /ai/risk`, `GET /ai/queries/roots`, `GET /ai/claims/insights`, `GET /ai/cash/advice`, `GET /ai/close/checklist`, `GET /ai/receivers/duplicates`, `GET /ai/masters/health`, `GET /ai/limits/advice`, `GET /ai/search` (all read-only; only write is `ai_query_log` trace row) |
 | My Entries | `myentries/controller/MyEntriesController` | `GET /my-entries` |

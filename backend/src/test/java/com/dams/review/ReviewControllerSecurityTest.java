@@ -236,6 +236,42 @@ class ReviewControllerSecurityTest {
     }
 
     @Test
+    void resubmitReceiptToFm_okForAccountant_forbiddenForFinanceManager() throws Exception {
+        stubToken("acct-token", 6L, 1L, Role.ACCOUNTANT);
+        when(reviewService.resubmitReceiptToFm(1L)).thenReturn(mock(ReceiveDocumentResponse.class));
+        mockMvc.perform(post("/api/v1/receipts/1/resubmit-to-fm").header("Authorization", "Bearer acct-token"))
+            .andExpect(status().isOk());
+
+        stubToken("fm-token", 8L, 1L, Role.FINANCE_MANAGER);
+        mockMvc.perform(post("/api/v1/receipts/1/resubmit-to-fm").header("Authorization", "Bearer fm-token"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void resubmitExpenseToFm_okForAccountant_forbiddenForFinanceManager() throws Exception {
+        stubToken("acct-token", 6L, 1L, Role.ACCOUNTANT);
+        when(reviewService.resubmitExpenseToFm(1L)).thenReturn(mock(ExpenseDocumentResponse.class));
+        mockMvc.perform(post("/api/v1/expenses/1/resubmit-to-fm").header("Authorization", "Bearer acct-token"))
+            .andExpect(status().isOk());
+
+        stubToken("fm-token", 8L, 1L, Role.FINANCE_MANAGER);
+        mockMvc.perform(post("/api/v1/expenses/1/resubmit-to-fm").header("Authorization", "Bearer fm-token"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void resubmitCashToFm_okForAccountant_forbiddenForFinanceManager() throws Exception {
+        stubToken("acct-token", 6L, 1L, Role.ACCOUNTANT);
+        when(reviewService.resubmitCashToFm(1L)).thenReturn(mock(com.dams.cash.dto.CashDocumentResponse.class));
+        mockMvc.perform(post("/api/v1/cash-documents/1/resubmit-to-fm").header("Authorization", "Bearer acct-token"))
+            .andExpect(status().isOk());
+
+        stubToken("fm-token", 8L, 1L, Role.FINANCE_MANAGER);
+        mockMvc.perform(post("/api/v1/cash-documents/1/resubmit-to-fm").header("Authorization", "Bearer fm-token"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
     void bulkDirectApproveReceipts_okForAccountant_forbiddenForFinanceManager() throws Exception {
         stubToken("acct-token", 6L, 1L, Role.ACCOUNTANT);
         when(reviewService.bulkDirectApproveReceipts(any()))

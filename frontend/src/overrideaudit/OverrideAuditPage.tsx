@@ -77,12 +77,12 @@ export default function OverrideAuditPage() {
       </div>
 
       <div style={{ ...card, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 16 }}>
-        <div style={{ flex: '1 1 140px', minWidth: 130 }}>
+        <div style={{ flex: '1 1 150px', minWidth: 140 }}>
           <Field label="From">
             <input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} style={{ ...inputStyle, width: '100%', minHeight: 38 }} />
           </Field>
         </div>
-        <div style={{ flex: '1 1 140px', minWidth: 130 }}>
+        <div style={{ flex: '1 1 150px', minWidth: 140 }}>
           <Field label="To">
             <input type="date" value={to} max={istToday()} onChange={(e) => setTo(e.target.value)} style={{ ...inputStyle, width: '100%', minHeight: 38 }} />
           </Field>
@@ -117,7 +117,7 @@ export default function OverrideAuditPage() {
               {['When', 'Type', 'Document / line', 'Branch', 'By', 'Was', 'Now', 'Reason'].map((h) => (
                 <th key={h} style={{
                   fontSize: '0.66rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--faint)',
-                  textAlign: 'left', padding: '9px 12px', borderBottom: '1.5px solid var(--line)', background: '#FAFBFC',
+                  textAlign: 'left', padding: '9px 12px', borderBottom: '1.5px solid var(--line)', background: 'var(--bg)',
                 }}>
                   {h}
                 </th>

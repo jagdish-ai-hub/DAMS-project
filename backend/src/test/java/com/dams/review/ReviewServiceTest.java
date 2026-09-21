@@ -549,17 +549,98 @@ class ReviewServiceTest {
             .hasMessageContaining("SUBMITTED");
     }
 
+    /**
+     * rev 49: the FM's query on a VERIFIED receipt goes to FM_QUERIED, not QUERIED — it routes
+     * back to the Accountant's own queue, not the Cashier. The Accountant's own query on a
+     * fresh SUBMITTED receipt (queryReceipt_asAccountant_...) is unchanged, still QUERIED.
+     */
     @Test
-    void queryReceipt_asFinanceManager_movesVerifiedBackToQueried() {
+    void queryReceipt_asFinanceManager_movesVerifiedToFmQueried() {
         when(branchScope.currentRole()).thenReturn(Role.FINANCE_MANAGER);
         ReceiveDocument doc = receiveDoc(WorkflowStatus.VERIFIED);
         when(receiveDocumentRepo.findByIdAndOrgId(R_ID, ORG)).thenReturn(Optional.of(doc));
 
         service.queryReceipt(R_ID, "Bank ref looks wrong");
 
-        assertThat(doc.getWorkflowStatus()).isEqualTo(WorkflowStatus.QUERIED);
+        assertThat(doc.getWorkflowStatus()).isEqualTo(WorkflowStatus.FM_QUERIED);
         verify(auditService).recordUserEvent(eq("ReceiveDocument"), eq(R_ID), eq(BRANCH),
             eq(EventType.QUERIED), eq(ACTOR_ID), any());
+    }
+
+    @Test
+    void resubmitReceiptToFm_movesFmQueriedToVerified_andAudits() {
+        ReceiveDocument doc = receiveDoc(WorkflowStatus.FM_QUERIED);
+        when(receiveDocumentRepo.findByIdAndOrgId(R_ID, ORG)).thenReturn(Optional.of(doc));
+
+        service.resubmitReceiptToFm(R_ID);
+
+        assertThat(doc.getWorkflowStatus()).isEqualTo(WorkflowStatus.VERIFIED);
+        verify(auditService).recordUserEvent(eq("ReceiveDocument"), eq(R_ID), eq(BRANCH),
+            eq(EventType.VERIFIED), eq(ACTOR_ID), any());
+    }
+
+    @Test
+    void resubmitReceiptToFm_conflict_whenNotFmQueried() {
+        when(receiveDocumentRepo.findByIdAndOrgId(R_ID, ORG)).thenReturn(Optional.of(receiveDoc(WorkflowStatus.SUBMITTED)));
+        assertThatThrownBy(() -> service.resubmitReceiptToFm(R_ID))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("SUBMITTED");
+        verify(receiveDocumentRepo, never()).save(any());
+    }
+
+    /** rev 49: the override gate widens to allow fixing an FM-queried receipt, not just a fresh one. */
+    @Test
+    void overrideReceiptLine_allowedWhileFmQueried() {
+        ReceiveDocument doc = receiveDoc(WorkflowStatus.FM_QUERIED);
+        when(receiveDocumentRepo.findByIdAndOrgId(R_ID, ORG)).thenReturn(Optional.of(doc));
+        when(settlementLineRepo.findByOrgIdAndReceiveDocumentIdAndLineNo(ORG, R_ID, 1))
+            .thenReturn(Optional.of(settlementLine(1, new BigDecimal("500"))));
+
+        service.overrideReceiptLine(R_ID, 1, new BigDecimal("450"), "Bank charge deducted");
+
+        verify(settlementLineRepo).save(any());
+    }
+
+    @Test
+    void queryExpense_asFinanceManager_movesVerifiedToFmQueried() {
+        when(branchScope.currentRole()).thenReturn(Role.FINANCE_MANAGER);
+        ExpenseDocument doc = expenseDoc(ExpenseWorkflowStatus.VERIFIED, false);
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+
+        service.queryExpense(E_ID, "Receipt attachment is missing");
+
+        assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.FM_QUERIED);
+    }
+
+    @Test
+    void resubmitExpenseToFm_movesFmQueriedToVerified() {
+        ExpenseDocument doc = expenseDoc(ExpenseWorkflowStatus.FM_QUERIED, false);
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+
+        service.resubmitExpenseToFm(E_ID);
+
+        assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.VERIFIED);
+    }
+
+    @Test
+    void queryCash_asFinanceManager_movesVerifiedToFmQueried() {
+        when(branchScope.currentRole()).thenReturn(Role.FINANCE_MANAGER);
+        com.dams.cash.entity.CashDocument doc = cashDoc(com.dams.cash.entity.CashWorkflowStatus.VERIFIED);
+        when(cashDocumentRepo.findByIdAndOrgId(C_ID, ORG)).thenReturn(Optional.of(doc));
+
+        service.queryCash(C_ID, "Direction looks backwards");
+
+        assertThat(doc.getWorkflowStatus()).isEqualTo(com.dams.cash.entity.CashWorkflowStatus.FM_QUERIED);
+    }
+
+    @Test
+    void resubmitCashToFm_movesFmQueriedToVerified() {
+        com.dams.cash.entity.CashDocument doc = cashDoc(com.dams.cash.entity.CashWorkflowStatus.FM_QUERIED);
+        when(cashDocumentRepo.findByIdAndOrgId(C_ID, ORG)).thenReturn(Optional.of(doc));
+
+        service.resubmitCashToFm(C_ID);
+
+        assertThat(doc.getWorkflowStatus()).isEqualTo(com.dams.cash.entity.CashWorkflowStatus.VERIFIED);
     }
 
     @Test
@@ -642,7 +723,20 @@ class ReviewServiceTest {
         when(branchScope.allowedBranchIds()).thenReturn(Optional.of(java.util.Set.of()));
         assertThat(service.receiptQueue()).isEmpty();
         verify(receiveDocumentRepo, never())
-            .findByOrgIdAndWorkflowStatusAndBranchIdInOrderBySubmittedAtAscIdAsc(any(), any(), any());
+            .findByOrgIdAndWorkflowStatusInAndBranchIdInOrderBySubmittedAtAscIdAsc(any(), any(), any());
+    }
+
+    /** rev 49: the live queue is SUBMITTED and FM_QUERIED together — both need the Accountant. */
+    @Test
+    void receiptQueue_includesBothSubmittedAndFmQueried() {
+        when(branchScope.allowedBranchIds()).thenReturn(Optional.of(java.util.Set.of(BRANCH)));
+        ReceiveDocument submitted = receiveDoc(WorkflowStatus.SUBMITTED);
+        ReceiveDocument fmQueried = receiveDoc(WorkflowStatus.FM_QUERIED);
+        when(receiveDocumentRepo.findByOrgIdAndWorkflowStatusInAndBranchIdInOrderBySubmittedAtAscIdAsc(
+            eq(ORG), eq(java.util.List.of(WorkflowStatus.SUBMITTED, WorkflowStatus.FM_QUERIED)), eq(java.util.Set.of(BRANCH))))
+            .thenReturn(java.util.List.of(submitted, fmQueried));
+
+        assertThat(service.receiptQueue()).hasSize(2);
     }
 
     @Test
@@ -671,7 +765,7 @@ class ReviewServiceTest {
         when(receiveDocumentRepo.findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(ORG, WorkflowStatus.VERIFIED))
             .thenReturn(java.util.List.of(verifiedClaim));
         when(receiveDocumentRepo.findByOrgIdAndWorkflowStatusInOrderBySubmittedAtAscIdAsc(
-            eq(ORG), eq(java.util.List.of(WorkflowStatus.SUBMITTED, WorkflowStatus.QUERIED,
+            eq(ORG), eq(java.util.List.of(WorkflowStatus.SUBMITTED, WorkflowStatus.QUERIED, WorkflowStatus.FM_QUERIED,
                 WorkflowStatus.VERIFIED, WorkflowStatus.APPROVED))))
             .thenReturn(java.util.List.of(verifiedClaim));
         when(jobCardRepo.findByOrgIdAndIdIn(ORG, java.util.List.of(11L))).thenReturn(java.util.List.of(claimJobCard()));

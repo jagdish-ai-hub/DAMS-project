@@ -8,6 +8,10 @@ package com.dams.expense.entity;
  * VERIFIED / APPROVED / QUERIED / REJECTED are added in Stages 7–8. CLOSED is the
  * Accountant's terminal close (Stage 7); this stage only reads it — a closed document
  * accepts no more lines.
+ *
+ * {@code FM_QUERIED} (rev 49) — see {@link com.dams.receive.entity.WorkflowStatus} for the
+ * full rationale; the Finance Manager's query on a VERIFIED expense routes back to the
+ * Accountant instead of the Cashier.
  */
 public enum ExpenseWorkflowStatus {
     DRAFT,
@@ -15,6 +19,7 @@ public enum ExpenseWorkflowStatus {
     VERIFIED,
     APPROVED,
     QUERIED,
+    FM_QUERIED,
     REJECTED,
     CLOSED
 }

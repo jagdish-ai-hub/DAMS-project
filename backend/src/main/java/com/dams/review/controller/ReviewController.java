@@ -143,10 +143,17 @@ public class ReviewController {
     }
 
     @PostMapping("/receipts/{id}/query")
-    @Operation(summary = "Query a receipt back to the cashier — Accountant (submitted) or FM (verified)")
+    @Operation(summary = "Query a receipt — Accountant (submitted, goes to the Cashier) or FM (verified, goes to the Accountant)")
     @PreAuthorize("hasAnyAuthority('ACCOUNTANT','FINANCE_MANAGER')")
     public ReceiveDocumentResponse queryReceipt(@PathVariable Long id, @Valid @RequestBody QueryRequest request) {
         return reviewService.queryReceipt(id, request.note().trim());
+    }
+
+    @PostMapping("/receipts/{id}/resubmit-to-fm")
+    @Operation(summary = "Accountant: resend an FM-queried receipt straight back to the Finance Manager (skips the Cashier)")
+    @PreAuthorize("hasAuthority('ACCOUNTANT')")
+    public ReceiveDocumentResponse resubmitReceiptToFm(@PathVariable Long id) {
+        return reviewService.resubmitReceiptToFm(id);
     }
 
     @PostMapping("/receipts/{id}/reject")
@@ -195,10 +202,17 @@ public class ReviewController {
     }
 
     @PostMapping("/expenses/{id}/query")
-    @Operation(summary = "Query an expense back to the cashier — Accountant (submitted) or FM (verified)")
+    @Operation(summary = "Query an expense — Accountant (submitted, goes to the Cashier) or FM (verified, goes to the Accountant)")
     @PreAuthorize("hasAnyAuthority('ACCOUNTANT','FINANCE_MANAGER')")
     public ExpenseDocumentResponse queryExpense(@PathVariable Long id, @Valid @RequestBody QueryRequest request) {
         return reviewService.queryExpense(id, request.note().trim());
+    }
+
+    @PostMapping("/expenses/{id}/resubmit-to-fm")
+    @Operation(summary = "Accountant: resend an FM-queried expense straight back to the Finance Manager (skips the Cashier)")
+    @PreAuthorize("hasAuthority('ACCOUNTANT')")
+    public ExpenseDocumentResponse resubmitExpenseToFm(@PathVariable Long id) {
+        return reviewService.resubmitExpenseToFm(id);
     }
 
     @PostMapping("/expenses/{id}/reject")
@@ -247,10 +261,17 @@ public class ReviewController {
     }
 
     @PostMapping("/cash-documents/{id}/query")
-    @Operation(summary = "Query a cash movement back to the cashier — Accountant (submitted) or FM (verified)")
+    @Operation(summary = "Query a cash movement — Accountant (submitted, goes to the Cashier) or FM (verified, goes to the Accountant)")
     @PreAuthorize("hasAnyAuthority('ACCOUNTANT','FINANCE_MANAGER')")
     public CashDocumentResponse queryCash(@PathVariable Long id, @Valid @RequestBody QueryRequest request) {
         return reviewService.queryCash(id, request.note().trim());
+    }
+
+    @PostMapping("/cash-documents/{id}/resubmit-to-fm")
+    @Operation(summary = "Accountant: resend an FM-queried cash movement straight back to the Finance Manager (skips the Cashier)")
+    @PreAuthorize("hasAuthority('ACCOUNTANT')")
+    public CashDocumentResponse resubmitCashToFm(@PathVariable Long id) {
+        return reviewService.resubmitCashToFm(id);
     }
 
     @PostMapping("/cash-documents/{id}/reject")

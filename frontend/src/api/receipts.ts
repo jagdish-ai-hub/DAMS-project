@@ -6,6 +6,7 @@ export type WorkflowStatus =
   | 'VERIFIED'
   | 'APPROVED'
   | 'QUERIED'
+  | 'FM_QUERIED'
   | 'REJECTED'
 
 /** One humanised audit event — the review pane's History card and the cashier's "why queried". */

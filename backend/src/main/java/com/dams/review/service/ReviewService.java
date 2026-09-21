@@ -161,6 +161,18 @@ public class ReviewService {
 
     // ============================================================ accountant queue
 
+    private static final List<WorkflowStatus> RECEIPT_LIVE_QUEUE_STATUSES =
+        List.of(WorkflowStatus.SUBMITTED, WorkflowStatus.FM_QUERIED);
+    private static final List<ExpenseWorkflowStatus> EXPENSE_LIVE_QUEUE_STATUSES =
+        List.of(ExpenseWorkflowStatus.SUBMITTED, ExpenseWorkflowStatus.FM_QUERIED);
+    private static final List<CashWorkflowStatus> CASH_LIVE_QUEUE_STATUSES =
+        List.of(CashWorkflowStatus.SUBMITTED, CashWorkflowStatus.FM_QUERIED);
+
+    /**
+     * Accountant "awaiting review" queue — SUBMITTED (never touched) alongside FM_QUERIED
+     * (the FM sent it back after verification, rev 49). Both need the Accountant's attention;
+     * the record detail shows which action applies.
+     */
     @Transactional(readOnly = true)
     public List<ReviewQueueItem> receiptQueue() {
         Long orgId = TenantContext.requireOrgId();
@@ -170,7 +182,7 @@ public class ReviewService {
             return List.of();
         }
         List<ReceiveDocument> docs = receiveDocumentRepo
-            .findByOrgIdAndWorkflowStatusAndBranchIdInOrderBySubmittedAtAscIdAsc(orgId, WorkflowStatus.SUBMITTED, branchIds);
+            .findByOrgIdAndWorkflowStatusInAndBranchIdInOrderBySubmittedAtAscIdAsc(orgId, RECEIPT_LIVE_QUEUE_STATUSES, branchIds);
         return toReceiptItems(orgId, docs);
     }
 
@@ -183,7 +195,7 @@ public class ReviewService {
             return List.of();
         }
         List<ExpenseDocument> docs = expenseDocumentRepo
-            .findByOrgIdAndWorkflowStatusAndBranchIdInOrderBySubmittedAtAscIdAsc(orgId, ExpenseWorkflowStatus.SUBMITTED, branchIds);
+            .findByOrgIdAndWorkflowStatusInAndBranchIdInOrderBySubmittedAtAscIdAsc(orgId, EXPENSE_LIVE_QUEUE_STATUSES, branchIds);
         return toExpenseItems(orgId, docs);
     }
 
@@ -251,7 +263,8 @@ public class ReviewService {
         // submission first so the aging badge measures the claim, not its newest document.
         List<ReceiveDocument> live = receiveDocumentRepo
             .findByOrgIdAndWorkflowStatusInOrderBySubmittedAtAscIdAsc(orgId, List.of(
-                WorkflowStatus.SUBMITTED, WorkflowStatus.QUERIED, WorkflowStatus.VERIFIED, WorkflowStatus.APPROVED));
+                WorkflowStatus.SUBMITTED, WorkflowStatus.QUERIED, WorkflowStatus.FM_QUERIED,
+                WorkflowStatus.VERIFIED, WorkflowStatus.APPROVED));
         Map<Long, JobCard> jcById = jobCardsById(orgId, live.stream().map(ReceiveDocument::getJobCardId).toList());
         Set<Long> closedJcIds = new java.util.HashSet<>(claimCloseRepo.findJobCardIdsByOrgId(orgId));
         Set<Long> seenJobCards = new LinkedHashSet<>();
@@ -292,7 +305,7 @@ public class ReviewService {
             return List.of();
         }
         return toCashItems(orgId, cashDocumentRepo
-            .findByOrgIdAndWorkflowStatusAndBranchIdInOrderBySubmittedAtAscIdAsc(orgId, CashWorkflowStatus.SUBMITTED, branchIds));
+            .findByOrgIdAndWorkflowStatusInAndBranchIdInOrderBySubmittedAtAscIdAsc(orgId, CASH_LIVE_QUEUE_STATUSES, branchIds));
     }
 
     @Transactional(readOnly = true)
@@ -318,13 +331,22 @@ public class ReviewService {
             CashWorkflowStatus.VERIFIED, CashWorkflowStatus.APPROVED, EventType.APPROVED, null, null);
     }
 
+    /** Query — see {@link #queryReceipt} for the FM_QUERIED-routes-to-Accountant rationale (rev 49). */
     @Transactional
     public CashDocumentResponse queryCash(Long id, String note) {
         return isFinanceManager()
             ? transitionCash(id, guard.requireFinanceManager(),
-                CashWorkflowStatus.VERIFIED, CashWorkflowStatus.QUERIED, EventType.QUERIED, "note", note)
+                CashWorkflowStatus.VERIFIED, CashWorkflowStatus.FM_QUERIED, EventType.QUERIED, "note", note)
             : transitionCash(id, guard.requireAccountant(),
                 CashWorkflowStatus.SUBMITTED, CashWorkflowStatus.QUERIED, EventType.QUERIED, "note", note);
+    }
+
+    /** Resubmit-to-FM — see {@link #resubmitReceiptToFm}. */
+    @Transactional
+    public CashDocumentResponse resubmitCashToFm(Long id) {
+        return transitionCash(id, guard.requireAccountant(),
+            CashWorkflowStatus.FM_QUERIED, CashWorkflowStatus.VERIFIED, EventType.VERIFIED,
+            "resubmittedAfterFmQuery", "true");
     }
 
     @Transactional
@@ -552,14 +574,30 @@ public class ReviewService {
             .map(SettlementMode::getId).collect(Collectors.toSet());
     }
 
-    /** Query back to the cashier — from the Accountant (SUBMITTED) or the FM (VERIFIED). */
+    /**
+     * Query — the Accountant's query on a SUBMITTED receipt goes back to the Cashier
+     * (QUERIED), unchanged. The FM's query on a VERIFIED receipt goes back to the Accountant
+     * instead (FM_QUERIED, rev 49) — they already own the classification the FM is questioning.
+     */
     @Transactional
     public ReceiveDocumentResponse queryReceipt(Long id, String note) {
         return isFinanceManager()
             ? transitionReceipt(id, guard.requireFinanceManager(),
-                WorkflowStatus.VERIFIED, WorkflowStatus.QUERIED, EventType.QUERIED, "note", note, false)
+                WorkflowStatus.VERIFIED, WorkflowStatus.FM_QUERIED, EventType.QUERIED, "note", note, false)
             : transitionReceipt(id, guard.requireAccountant(),
                 WorkflowStatus.SUBMITTED, WorkflowStatus.QUERIED, EventType.QUERIED, "note", note, false);
+    }
+
+    /**
+     * Resubmit-to-FM: the Accountant's fix for an FM_QUERIED receipt — reviews the FM's note,
+     * corrects amounts with the same override tools used on a fresh SUBMITTED receipt if
+     * needed, then sends it straight back to VERIFIED. The Cashier is never involved.
+     */
+    @Transactional
+    public ReceiveDocumentResponse resubmitReceiptToFm(Long id) {
+        return transitionReceipt(id, guard.requireAccountant(),
+            WorkflowStatus.FM_QUERIED, WorkflowStatus.VERIFIED, EventType.VERIFIED,
+            "resubmittedAfterFmQuery", "true", false);
     }
 
     /** Reject (terminal) — from the Accountant (SUBMITTED) or the FM (VERIFIED). */
@@ -584,7 +622,8 @@ public class ReviewService {
         AppUser me = guard.requireAccountant();
         ReceiveDocument doc = loadReceipt(orgId, id);
         requireState(me, doc.getBranchId(), doc.getCreatedBy(), doc.getLastModifiedBy(), describe(doc),
-            doc.getWorkflowStatus() == WorkflowStatus.SUBMITTED, doc.getWorkflowStatus());
+            doc.getWorkflowStatus() == WorkflowStatus.SUBMITTED || doc.getWorkflowStatus() == WorkflowStatus.FM_QUERIED,
+            doc.getWorkflowStatus());
 
         SettlementLine line = settlementLineRepo.findByOrgIdAndReceiveDocumentIdAndLineNo(orgId, id, lineNo)
             .orElseThrow(() -> DamsException.notFound("Settlement line", "lineNo", lineNo));
@@ -625,7 +664,8 @@ public class ReviewService {
         AppUser me = guard.requireAccountant();
         ReceiveDocument doc = loadReceipt(orgId, id);
         requireState(me, doc.getBranchId(), doc.getCreatedBy(), doc.getLastModifiedBy(), describe(doc),
-            doc.getWorkflowStatus() == WorkflowStatus.SUBMITTED, doc.getWorkflowStatus());
+            doc.getWorkflowStatus() == WorkflowStatus.SUBMITTED || doc.getWorkflowStatus() == WorkflowStatus.FM_QUERIED,
+            doc.getWorkflowStatus());
 
         JobCard jc = jobCardRepo.findByIdAndOrgId(doc.getJobCardId(), orgId)
             .orElseThrow(() -> DamsException.notFound("Job card", doc.getJobCardId()));
@@ -686,13 +726,22 @@ public class ReviewService {
         return new BulkVerifyResponse(verifiedIds.size(), verifiedIds, skippedReasons);
     }
 
+    /** Query — see {@link #queryReceipt} for the FM_QUERIED-routes-to-Accountant rationale (rev 49). */
     @Transactional
     public ExpenseDocumentResponse queryExpense(Long id, String note) {
         return isFinanceManager()
             ? transitionExpense(id, guard.requireFinanceManager(),
-                ExpenseWorkflowStatus.VERIFIED, ExpenseWorkflowStatus.QUERIED, EventType.QUERIED, "note", note)
+                ExpenseWorkflowStatus.VERIFIED, ExpenseWorkflowStatus.FM_QUERIED, EventType.QUERIED, "note", note)
             : transitionExpense(id, guard.requireAccountant(),
                 ExpenseWorkflowStatus.SUBMITTED, ExpenseWorkflowStatus.QUERIED, EventType.QUERIED, "note", note);
+    }
+
+    /** Resubmit-to-FM — see {@link #resubmitReceiptToFm}. */
+    @Transactional
+    public ExpenseDocumentResponse resubmitExpenseToFm(Long id) {
+        return transitionExpense(id, guard.requireAccountant(),
+            ExpenseWorkflowStatus.FM_QUERIED, ExpenseWorkflowStatus.VERIFIED, EventType.VERIFIED,
+            "resubmittedAfterFmQuery", "true");
     }
 
     @Transactional
@@ -716,7 +765,8 @@ public class ReviewService {
         AppUser me = guard.requireAccountant();
         ExpenseDocument doc = loadExpense(orgId, id);
         requireState(me, doc.getBranchId(), doc.getCreatedBy(), doc.getLastModifiedBy(), describe(doc),
-            doc.getWorkflowStatus() == ExpenseWorkflowStatus.SUBMITTED, doc.getWorkflowStatus());
+            doc.getWorkflowStatus() == ExpenseWorkflowStatus.SUBMITTED || doc.getWorkflowStatus() == ExpenseWorkflowStatus.FM_QUERIED,
+            doc.getWorkflowStatus());
 
         ExpenseLine line = expenseLineRepo.findByOrgIdAndExpenseDocumentIdAndLineNo(orgId, id, lineNo)
             .orElseThrow(() -> DamsException.notFound("Expense line", "lineNo", lineNo));

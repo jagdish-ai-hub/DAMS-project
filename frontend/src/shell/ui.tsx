@@ -172,17 +172,17 @@ export function TextInput(props: {
 
 export function ErrorBanner({ message }: { message: string }) {
   const ref = useRef<HTMLDivElement>(null)
-  // A failed action often sets an error far from where the user clicked (the Submit
-  // button sits at the bottom of a long form). Pull the message into view so the click
-  // never looks like it did nothing.
+  // Scroll the banner into view without yanking the page behind a modal.
+  // `nearest` keeps the closest scroll container stable; `center` scrolled every
+  // ancestor, including the page behind the modal.
   useEffect(() => {
     if (message) {
-      ref.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
     }
   }, [message])
   if (!message) return null
   return (
-    <div ref={ref} className="dams-anim-notice" style={{
+    <div ref={ref} role="alert" className="dams-anim-notice" style={{
       background: 'var(--red-bg)', border: '1px solid #EBC2C2', color: 'var(--red)',
       borderRadius: 8, padding: '10px 12px', fontSize: '0.82rem',
     }}>
@@ -201,20 +201,34 @@ export function Modal(props: { title: string; subtitle?: string; onClose: () => 
       }
     }
     document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
+    // Lock background scroll while any modal is open — prevents the page behind
+    // from scrolling and double scrollbars. Single modal at a time; nested modals
+    // stack but the lock is idempotent.
+    const prevOverflow = document.body.style.overflow
+    const prevPaddingRight = document.body.style.paddingRight
+    const scrollbarW = window.innerWidth - document.documentElement.clientWidth
+    document.body.style.overflow = 'hidden'
+    if (scrollbarW > 0) document.body.style.paddingRight = `${scrollbarW}px`
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prevOverflow
+      document.body.style.paddingRight = prevPaddingRight
+    }
   }, [onClose])
 
   // Portalled to document.body so a Modal opened from inside another popup
   // (history drawer → View documents, etc.) escapes the parent card's entrance
   // transform — a transformed ancestor would otherwise trap `position:fixed`
   // descendants and clip their shadow/window. Same look, just correct stacking.
+  // `onClick` (not `onMouseDown`) so scrollbar drags / text-selection drags don't
+  // dismiss the modal. Backdrop click closes; card click stops propagation.
   return createPortal(
     <div
       className="dams-anim-backdrop"
       role="dialog"
       aria-modal="true"
       aria-label={props.title}
-      onMouseDown={props.onClose}
+      onClick={props.onClose}
       style={{
         position: 'fixed', inset: 0, background: 'rgba(16,24,40,.45)',
         display: 'flex', justifyContent: 'center',
@@ -223,11 +237,11 @@ export function Modal(props: { title: string; subtitle?: string; onClose: () => 
     >
       <div
         className="dams-anim-modal"
-        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
         style={{
           background: 'var(--surface)', borderRadius: 12, boxShadow: 'var(--shadow-lift)',
           width: '100%', maxWidth: props.maxWidth ?? 460, margin: 'auto 0',
-          maxHeight: 'min(calc(100vh - 32px), 720px)', display: 'flex', flexDirection: 'column',
+          maxHeight: 'min(calc(100dvh - 32px), 720px)', display: 'flex', flexDirection: 'column',
         }}
       >
         <div style={{

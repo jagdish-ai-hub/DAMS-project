@@ -110,13 +110,15 @@ export default function AddPaymentModal(props: {
         </>
       }
     >
-      <div style={{ background: 'var(--amber-bg)', color: 'var(--amber)', borderRadius: 8, padding: '9px 12px', fontSize: '0.82rem', fontWeight: 600 }}>
-        Balance due: {inr(props.balanceDue)} — this adds a line to {nextLineLabel}.
-      </div>
+      {props.balanceDue > 0 && (
+        <div style={{ background: 'var(--amber-bg)', color: 'var(--amber)', borderRadius: 8, padding: '9px 12px', fontSize: '0.82rem', fontWeight: 600 }}>
+          Balance due: {inr(props.balanceDue)} — this adds a line to {nextLineLabel}.
+        </div>
+      )}
       <ErrorBanner message={error} />
 
       <Field label="Date">
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
+        <input type="date" value={date} max={istToday()} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
       </Field>
       <Field label="Settlement Mode *">
         <select value={modeId} onChange={(e) => setModeId(Number(e.target.value))} style={inputStyle}>
@@ -125,8 +127,8 @@ export default function AddPaymentModal(props: {
       </Field>
       <Field label="Amount *">
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
-          {(mode?.name?.toLowerCase().includes('upi') || Number(amount) > 0) && (
+          <input type="number" value={amount} min={0} step="0.01" inputMode="decimal" onChange={(e) => setAmount(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+          {mode?.name?.toLowerCase().includes('upi') && Number(amount) > 0 && (
             <button
               type="button"
               onClick={() => setShowUpiQr(true)}

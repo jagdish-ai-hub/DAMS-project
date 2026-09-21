@@ -6,7 +6,7 @@ import { jobCardsApi } from '../api/jobCards'
 import { cashApi, type CashDocument } from '../api/cash'
 import { reviewApi, type ReviewQueueItem, type ReviewType } from '../api/review'
 import { exportApi } from '../api/export'
-import { card, ErrorBanner, ghostBtn, primaryBtn, Modal, Badge, Skeleton, SkeletonRows, inr, inputStyle, th, td } from '../shell/ui'
+import { card, ErrorBanner, ghostBtn, primaryBtn, Modal, Badge, Skeleton, SkeletonRows, inr, fmtDate, fmtDateShort, inputStyle, th, td } from '../shell/ui'
 import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, type AnyDoc } from '../review/reviewShared'
 import GlobalSearch from '../shared/GlobalSearch'
 import { useAuth } from '../auth/useAuth'
@@ -32,9 +32,7 @@ const verifiedQueueFor = (t: ReviewType) => reviewApi.verifiedQueue(t)
 
 function fmtGroupDate(key: string): string {
   if (key === 'Unknown date') return key
-  const d = new Date(key + 'T00:00:00')
-  if (isNaN(d.getTime())) return key
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+  return fmtDateShort(key)
 }
 
 export default function ReviewQueuePage() {
@@ -296,7 +294,7 @@ function QueuePane(props: {
   const { items } = props
   const groups = useMemo(() => groupItems(items ?? [], props.sortMode), [items, props.sortMode])
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', padding: 12, gap: 4 }}>
         {(['receipt', 'expense', 'cash'] as const).map((t) => (
           <button key={t} type="button" onClick={() => props.onType(t)}
@@ -399,7 +397,7 @@ function QueuePane(props: {
             <button
               type="button"
               onClick={props.onClearSelected}
-              style={{ ...ghostBtn, color: '#fff', border: '1px solid rgba(255,255,255,0.3)', minHeight: 30, padding: '3px 10px', fontSize: '0.75rem' }}
+              style={{ ...ghostBtn, color: '#fff', border: '1px solid rgba(255,255,255,0.3)', minHeight: 36, padding: '6px 12px', fontSize: '0.75rem' }}
             >
               Clear
             </button>
@@ -408,7 +406,7 @@ function QueuePane(props: {
                 type="button"
                 onClick={props.onExportSelected}
                 disabled={props.exportBusy}
-                style={{ ...ghostBtn, color: '#fff', border: '1px solid rgba(255,255,255,0.3)', minHeight: 30, padding: '3px 10px', fontSize: '0.75rem' }}
+                style={{ ...ghostBtn, color: '#fff', border: '1px solid rgba(255,255,255,0.3)', minHeight: 36, padding: '6px 12px', fontSize: '0.75rem' }}
               >
                 {props.exportBusy ? 'Exporting…' : 'Export'}
               </button>
@@ -419,7 +417,7 @@ function QueuePane(props: {
               disabled={props.bulkBusy}
               style={{
                 background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 6,
-                padding: '4px 12px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', minHeight: 30,
+                padding: '6px 14px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', minHeight: 36,
               }}
             >
               {props.bulkBusy
@@ -507,8 +505,9 @@ export function QueueRow({
         <div style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>
           {it.categoryName} · <strong style={{ fontVariantNumeric: 'tabular-nums' }}>{inr(it.amount)}</strong>
         </div>
-        {(it.overLimit || it.hasOverride || (risk && risk.score > 0)) && (
+        {(it.workflowStatus === 'FM_QUERIED' || it.overLimit || it.hasOverride || (risk && risk.score > 0)) && (
           <div style={{ display: 'flex', gap: 5, marginTop: 2 }}>
+            {it.workflowStatus === 'FM_QUERIED' && <Tag>Queried by Finance</Tag>}
             {it.hasOverride && <Tag>Overridden</Tag>}
             {it.overLimit && <Tag>Above limit</Tag>}
             {risk && risk.score > 0 && <RiskDot risk={risk} />}
@@ -668,27 +667,30 @@ function DrilldownModal(props: {
       ) : (
         <>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+            <table style={{ width: '100%', minWidth: 560, borderCollapse: 'collapse', fontSize: '0.82rem' }}>
               <thead>
                 <tr>
-                  <th style={th}>Date</th>
-                  <th style={th}>Doc</th>
-                  <th style={th}>Party</th>
-                  <th style={th}>Branch</th>
-                  <th style={th}>Status</th>
-                  <th style={{ ...th, textAlign: 'right' }}>Amount</th>
+                  <th style={{ ...th, position: 'sticky', top: 0, background: 'var(--surface)', zIndex: 1 }}>Date</th>
+                  <th style={{ ...th, position: 'sticky', top: 0, background: 'var(--surface)', zIndex: 1 }}>Doc</th>
+                  <th style={{ ...th, position: 'sticky', top: 0, background: 'var(--surface)', zIndex: 1 }}>Party</th>
+                  <th style={{ ...th, position: 'sticky', top: 0, background: 'var(--surface)', zIndex: 1 }}>Branch</th>
+                  <th style={{ ...th, position: 'sticky', top: 0, background: 'var(--surface)', zIndex: 1 }}>Status</th>
+                  <th style={{ ...th, textAlign: 'right', position: 'sticky', top: 0, background: 'var(--surface)', zIndex: 1 }}>Amount</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((it) => (
                   <tr
                     key={`${it.type}-${it.id}`}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => props.onSelect(it.id)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); props.onSelect(it.id) } }}
                     style={{ cursor: 'pointer' }}
                     onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--navy3)' }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
                   >
-                    <td style={td}>{it.submittedAt ? it.submittedAt.slice(0, 10) : '—'}</td>
+                    <td style={td}>{it.submittedAt ? fmtDate(it.submittedAt) : '—'}</td>
                     <td style={{ ...td, fontFamily: 'Consolas, monospace', fontSize: '0.76rem' }}>{it.documentNo ?? 'draft'}</td>
                     <td style={td}>{it.partyName}</td>
                     <td style={td}>{it.branchCode}</td>
@@ -742,7 +744,7 @@ function RecordDetail(props: {
       .then(({ data }) => live && setStatusOptions(data))
       .catch((e) => live && setError(apiError(e, 'Could not load the status list.')))
     return () => { live = false }
-  }, [receipt != null])
+  }, [receipt])
 
   const { user } = useAuth()
   // Maker-checker mirror: the server refuses these actions when you created or last
@@ -750,6 +752,9 @@ function RecordDetail(props: {
   const isMaker = user != null && (user.userId === doc.createdBy
     || (doc.lastModifiedBy != null && user.userId === doc.lastModifiedBy))
   const canReview = wf === 'SUBMITTED' && !isMaker
+  // FM sent it back (rev 49) — fix it with the same override tools, then resend to the FM.
+  // The Cashier is never involved in this path.
+  const canResendToFm = wf === 'FM_QUERIED' && !isMaker
   const canClose = expense && (wf === 'VERIFIED' || wf === 'APPROVED') && !isMaker
   const overLimit = expense ? (doc as { overLimit: boolean }).overLimit : false
 
@@ -791,7 +796,7 @@ function RecordDetail(props: {
         : (
           <RecordCard
             doc={doc as AnyDoc}
-            canOverride={canReview}
+            canOverride={canReview || canResendToFm}
             busy={busy}
             onError={setError}
             onOverride={(lineNo, amount, reason) =>
@@ -811,7 +816,14 @@ function RecordDetail(props: {
           />
         )}
 
-      {!canReview && !canClose ? (
+      {canResendToFm && (
+        <div style={{ ...card, background: 'var(--amber-bg)', borderColor: '#EAD3AE', marginBottom: 14, fontSize: '0.82rem' }}>
+          <strong>Queried by Finance.</strong> See their note in the History below. Fix it with the
+          Override tools above if needed, then resend it straight back to them.
+        </div>
+      )}
+
+      {!canReview && !canClose && !canResendToFm ? (
         <div style={{ ...card, textAlign: 'center', color: 'var(--faint)', fontSize: '0.84rem' }}>
           {isMaker
             ? 'You created or last edited this entry — maker-checker requires another reviewer.'
@@ -837,6 +849,10 @@ function RecordDetail(props: {
                 <button type="button" onClick={() => run(() => reviewApi.verify(type, doc.id), `${docNo} verified — moved to Finance Manager`)}
                   disabled={busy} style={{ ...primaryBtn(busy), minHeight: 36 }}>Verify</button>
               </>
+            )}
+            {canResendToFm && (
+              <button type="button" onClick={() => run(() => reviewApi.resubmitToFm(type, doc.id), `${docNo} resent to the Finance Manager`)}
+                disabled={busy} style={{ ...primaryBtn(busy), minHeight: 36 }}>Resend to Finance</button>
             )}
             {canClose && (
               <button type="button" onClick={() => run(() => reviewApi.closeExpense(doc.id), `${docNo} closed`)}

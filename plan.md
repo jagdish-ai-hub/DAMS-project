@@ -7,6 +7,65 @@
 
 ## Revision log
 
+- **rev 49 (2026-09-21)** — Two FM-queue changes, same batch. (1) **A second, distinct
+  query state.** Today, both the Accountant's query on a SUBMITTED entry and the FM's query
+  on a VERIFIED entry collapse into the same `QUERIED` status, so both land back with the
+  Cashier — even when the FM's question was really about the Accountant's verification, not
+  the Cashier's raw entry. New `FM_QUERIED` status (`WorkflowStatus`, `ExpenseWorkflowStatus`,
+  `CashWorkflowStatus`; `V28__fm_queried_status.sql` widens the three `*_workflow_chk`
+  constraints). The FM's query now sets `FM_QUERIED` instead of `QUERIED`; the Accountant's own
+  query (on SUBMITTED) is unchanged. `FM_QUERIED` entries surface in the Accountant's normal
+  Receipts/Expenses/Cash queue tabs (not a separate tab), tagged "Queried by Finance", using the
+  same override tools already available on a fresh SUBMITTED entry (the override-gate checks in
+  `ReviewService` now accept `SUBMITTED || FM_QUERIED`). New `ReviewService.resubmitReceiptToFm`
+  / `resubmitExpenseToFm` / `resubmitCashToFm` (Accountant-only, `FM_QUERIED → VERIFIED`, reuses
+  `EventType.VERIFIED`) and matching `POST /{receipts|expenses|cash-documents}/{id}/resubmit-to-fm`
+  endpoints — the Cashier is never involved in this loop. FM's own open-claims visibility list
+  and the Owner dashboard's pipeline counts (`countPendingReview[ByBranch]` in all three document
+  repositories) both gained `FM_QUERIED` alongside `SUBMITTED`/`VERIFIED`/`QUERIED` so a
+  FM-queried claim or pipeline entry doesn't silently disappear while it sits with the
+  Accountant. Deliberately **not** built: an escalate-to-Cashier path from an `FM_QUERIED` entry
+  — out of scope per this revision's plan.
+  (2) **Close Claim is itself the FM's approval for a claim receipt — no separate Approve
+  step.** Previously the FM had to Approve a claim's receipt (VERIFIED → APPROVED), then
+  separately Close Claim (which required every live receive document already APPROVED).
+  `ClaimCloseService.closeClaim()`'s precondition loosens from "every live document APPROVED"
+  to "every live document at least VERIFIED"; a document still VERIFIED is approved inline via
+  `ReviewService.approveReceipt()` (new constructor dependency — same maker-checker check and
+  audit trail a standalone Approve click would use) before the `ClaimClose` row is written. FM's
+  UI (`FmQueuePage.tsx`) shows only **Query** and **Close claim** for a claim receipt at
+  VERIFIED — no Approve button, no "not closable yet — approve it below" banner (rewritten to
+  say "must be verified by the Accountant"). Ordinary (non-claim) receipts, and expenses/cash,
+  keep the separate Approve button exactly as before — this only changes claim-type receipts.
+  AGENT.md updated: role-hierarchy FINANCE_MANAGER/ACCOUNTANT bullets, closing-rule #3, and item
+  #8 (now describes two distinct fix-and-resubmit loops instead of one). Help docs updated:
+  `finance-manager/approving-entries.md`, `finance-manager/closing-a-claim.md`,
+  `accountant/reviewing-the-queue.md`, `cashier/fixing-a-queried-entry.md` (corrected — it
+  previously said an FM's query lands there too, which is no longer true).
+- **rev 48 (2026-09-20)** — Medium-severity UI sweep + the two flagged lows
+  (`UpiQrModal` undefined vars, `animate-in` class) — frontend-only, same design
+  throughout (no entities, migrations, or endpoints; no visual redesign). Overlays:
+  `Modal` + `HelpDrawer` lock body scroll, use `onClick` (not `onMouseDown`) so
+  scrollbar/text-selection drags don't dismiss, `maxHeight` uses `dvh`, sticky table
+  headers + `minWidth:560` + keyboard (`role=button`, Enter/Space) for
+  `MoneyBreakdownModal` and `ReviewQueuePage` drill-down, `ErrorBanner` scrolls
+  `nearest` not `center` and carries `role=alert`. Responsive: quick-action cards
+  `auto-fit minmax(150px)` instead of rigid 2-col, `Stat` values wrap with
+  `clamp` sizing, `HelpDrawer` nav fills drawer on phones (was 200px leaving dead
+  space), `QueuePane` sticky bulk bar no longer double-scrolls, date cells
+  `minWidth:110` with horizontal scroll, `OverrideAudit` filters widened to
+  `minWidth:140`, iOS auto-zoom suppressed via `globals.css` phone-only
+  `font-size:16px` for inputs/selects/textareas, touch targets bumped to
+  `minHeight:34-36` (Sort controls, Override, bulk actions). Consistency: table
+  headers `#FAFBFC` → `var(--bg)`, `fmtGroupDate` helpers now use `fmtDateShort`,
+  `ReviewQueuePage` bucket dates use `fmtDate`, `ExportModal` hover `var(--text)`
+  → `var(--ink)`. Forms: `AddPaymentModal`/`NewReceipt`/`NewExpense` dates get
+  `max=istToday()`, amounts get `min=0 step=0.01 inputMode=decimal`, QR rule
+  unified to `upi && amount>0`, `AddPaymentModal` balance banner only when
+  `balanceDue>0`, `AppShell` Ctrl/Cmd+K skips when focus is in an input, and
+  `SettingsPage` loading uses skeletons. Verified: `tsc --noEmit` clean, `eslint`
+  0 errors (4 pre-existing `react-hooks/exhaustive-deps` warnings from rev 44),
+  `vitest` 2/2, `vite build` green.
 - **rev 47 (2026-09-20)** — High-severity UI bug-hunt fixes, frontend-only, same design
   throughout (no entities, migrations, endpoints, or visual redesign). Popup stack:
   shared `Modal` now portals to `document.body` with an optional `zIndex` (nested

@@ -18,6 +18,7 @@ import com.dams.receive.entity.ReceiveDocument;
 import com.dams.receive.entity.WorkflowStatus;
 import com.dams.receive.repository.ReceiveDocumentRepository;
 import com.dams.receive.repository.SettlementLineRepository;
+import com.dams.review.service.ReviewService;
 import com.dams.user.entity.AppUser;
 import com.dams.user.entity.Role;
 import org.junit.jupiter.api.AfterEach;
@@ -67,13 +68,14 @@ class ClaimCloseServiceTest {
     @Mock private AttachmentService attachmentService;
     @Mock private AuditService auditService;
     @Mock private JobCardService jobCardService;
+    @Mock private ReviewService reviewService;
 
     private ClaimCloseService service;
 
     @BeforeEach
     void setUp() {
         service = new ClaimCloseService(claimCloseRepo, jobCardRepo, receiveDocumentRepo, settlementLineRepo,
-            branchRepo, userRepo, branchScope, attachmentService, auditService, jobCardService);
+            branchRepo, userRepo, branchScope, attachmentService, auditService, jobCardService, reviewService);
         TenantContext.setOrgId(ORG);
         lenient().when(branchScope.currentUserId()).thenReturn(FM_ID);
         lenient().when(userRepo.findByIdAndOrganization_Id(FM_ID, ORG)).thenReturn(Optional.of(user(Role.FINANCE_MANAGER)));
@@ -151,14 +153,28 @@ class ClaimCloseServiceTest {
     }
 
     @Test
-    void closeClaim_conflict_whenAReceiveDocumentIsNotApproved() {
+    void closeClaim_conflict_whenAReceiveDocumentIsNotAtLeastVerified() {
         when(receiveDocumentRepo.findByOrgIdAndJobCardIdOrderByCreatedAtDesc(ORG, JC_ID))
-            .thenReturn(List.of(doc(101L, WorkflowStatus.APPROVED, false), doc(102L, WorkflowStatus.VERIFIED, false)));
+            .thenReturn(List.of(doc(101L, WorkflowStatus.APPROVED, false), doc(102L, WorkflowStatus.SUBMITTED, false)));
 
         assertThatThrownBy(() -> service.closeClaim(JC_ID, new CloseClaimRequest(new BigDecimal("13000"), null)))
             .isInstanceOf(DamsException.class)
-            .hasMessageContaining("must be approved");
+            .hasMessageContaining("must be verified");
         verify(claimCloseRepo, never()).save(any());
+    }
+
+    @Test
+    void closeClaim_approvesEveryStillVerifiedDoc_asPartOfTheSameClose() {
+        ReceiveDocument d1 = doc(101L, WorkflowStatus.APPROVED, false);
+        ReceiveDocument d2 = doc(102L, WorkflowStatus.VERIFIED, false);
+        when(receiveDocumentRepo.findByOrgIdAndJobCardIdOrderByCreatedAtDesc(ORG, JC_ID)).thenReturn(List.of(d1, d2));
+
+        service.closeClaim(JC_ID, new CloseClaimRequest(new BigDecimal("13000"), null));
+
+        // Close Claim is itself the approval (rev 49) — the still-VERIFIED doc is approved
+        // inline, reusing the exact maker-checker path a standalone Approve click would use.
+        verify(reviewService).approveReceipt(102L);
+        verify(reviewService, never()).approveReceipt(101L);
     }
 
     @Test

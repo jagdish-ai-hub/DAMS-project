@@ -87,6 +87,10 @@ export const reviewApi = {
   query(t: ReviewType, id: number, note: string) {
     return api.post<AnyReviewDoc>(`${base(t)}/${id}/query`, { note })
   },
+  /** Accountant: resend an FM-queried entry straight back to the FM — skips the Cashier. */
+  resubmitToFm(t: ReviewType, id: number) {
+    return api.post<AnyReviewDoc>(`${base(t)}/${id}/resubmit-to-fm`)
+  },
   reject(t: ReviewType, id: number, reason: string) {
     return api.post<AnyReviewDoc>(`${base(t)}/${id}/reject`, { reason })
   },

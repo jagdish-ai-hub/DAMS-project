@@ -9,6 +9,7 @@ export type ExpenseWorkflowStatus =
   | 'VERIFIED'
   | 'APPROVED'
   | 'QUERIED'
+  | 'FM_QUERIED'
   | 'REJECTED'
   | 'CLOSED'
 

@@ -11,6 +11,10 @@ Your home screen is the **Review Queue**. It shows every entry a cashier has sub
    - **Query** — you need the cashier to check or change something. Type your question; the entry goes back to them and shows highlighted in their **My Entries**. When they fix and resubmit, it returns to your queue.
    - **Reject** — the entry shouldn't stand at all (a duplicate, or made in error). Type the reason. A rejected entry is closed for good; the cashier starts a fresh one if they need to.
 
+## When the finance manager sends one back to you
+
+If the finance manager has a question about an entry you already verified, it comes back to **you**, not the cashier — it shows in this same queue tagged **Queried by Finance**, with their note in the History. Fix it with the same **Override** tools you'd use on a fresh entry if the figures need changing, then press **Resend to Finance**. It goes straight back to them — the cashier is never involved in this loop.
+
 ## Good to know
 
 - You **can't review an entry you created or last changed** — a different accountant has to do that one.

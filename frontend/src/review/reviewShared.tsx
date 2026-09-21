@@ -17,7 +17,7 @@ export function apiError(err: unknown, fallback: string) {
 export const isExpense = (d: AnyDoc): d is ExpenseDocument => 'expenseCategoryName' in d
 
 export function wfTone(wf: string): 'green' | 'amber' | 'gray' | 'red' {
-  if (wf === 'QUERIED') return 'amber'
+  if (wf === 'QUERIED' || wf === 'FM_QUERIED') return 'amber'
   if (wf === 'REJECTED') return 'red'
   if (wf === 'VERIFIED' || wf === 'APPROVED' || wf === 'CLOSED') return 'green'
   return 'gray'
@@ -153,7 +153,7 @@ export function RecordCard(props: {
                         setInvoiceReason('')
                         props.onError('')
                       }}
-                      style={{ ...ghostBtn, padding: '3px 8px', fontSize: '0.7rem', minHeight: 26 }}
+                      style={{ ...ghostBtn, padding: '6px 10px', fontSize: '0.7rem', minHeight: 34 }}
                     >
                       Override
                     </button>
@@ -208,7 +208,7 @@ export function RecordCard(props: {
                       </span>
                       {props.canOverride && !editing && (
                         <button type="button" onClick={() => { setEditLine(l.lineNo); setEditAmt(String(l.amount)); setEditReason(''); props.onError('') }}
-                          style={{ ...ghostBtn, marginLeft: 8, padding: '4px 8px', fontSize: '0.74rem', minHeight: 32 }}>
+                          style={{ ...ghostBtn, marginLeft: 8, padding: '6px 10px', fontSize: '0.74rem', minHeight: 34 }}>
                           Override
                         </button>
                       )}

@@ -45,11 +45,23 @@ export default function HelpDrawer({ role, open, onClose, initialSlug }: {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        onClose()
+      }
     }
     if (open) {
       document.addEventListener('keydown', onKey)
-      return () => document.removeEventListener('keydown', onKey)
+      const prevOverflow = document.body.style.overflow
+      const prevPaddingRight = document.body.style.paddingRight
+      const scrollbarW = window.innerWidth - document.documentElement.clientWidth
+      document.body.style.overflow = 'hidden'
+      if (scrollbarW > 0) document.body.style.paddingRight = `${scrollbarW}px`
+      return () => {
+        document.removeEventListener('keydown', onKey)
+        document.body.style.overflow = prevOverflow
+        document.body.style.paddingRight = prevPaddingRight
+      }
     }
   }, [open, onClose])
 
@@ -67,7 +79,10 @@ export default function HelpDrawer({ role, open, onClose, initialSlug }: {
   return (
     <div
       className={closing ? 'dams-anim-backdrop-out' : 'dams-anim-backdrop'}
-      onMouseDown={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Help Center"
+      onClick={onClose}
       style={{
         position: 'fixed', inset: 0, background: 'rgba(16,24,40,.45)',
         display: 'flex', justifyContent: 'flex-end', zIndex: 60, overflow: 'hidden',
@@ -75,7 +90,7 @@ export default function HelpDrawer({ role, open, onClose, initialSlug }: {
     >
       <div
         className={closing ? 'dams-anim-drawer-out' : 'dams-anim-drawer'}
-        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
         style={{
           background: 'var(--surface, #fff)', width: 'min(760px, 100%)', maxWidth: '100%', height: '100%',
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
@@ -123,7 +138,7 @@ export default function HelpDrawer({ role, open, onClose, initialSlug }: {
         <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
           {/* Table of contents list pane */}
           <nav
-            className={`${mobileView === 'list' ? 'flex' : 'hidden'} sm:flex`}
+            className={`${mobileView === 'list' ? 'flex' : 'hidden'} sm:flex dams-help-nav`}
             style={{
               width: 'clamp(200px, 32%, 250px)', flexShrink: 0,
               borderRight: '1px solid var(--line)', padding: 14,

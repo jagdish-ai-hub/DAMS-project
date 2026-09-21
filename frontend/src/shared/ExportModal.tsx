@@ -89,9 +89,10 @@ export default function ExportModal({ defaultType = 'receipts', onClose }: Props
             onClick={() => setType('receipts')}
             className={`flex-1 py-2 px-3 text-xs font-bold rounded-lg border transition-all flex items-center justify-center gap-2 ${
               type === 'receipts'
-                ? 'bg-[var(--purple,#6B3FA0)] text-white border-transparent shadow-sm'
-                : 'bg-[var(--surface)] text-[var(--muted)] border-[var(--line)] hover:text-[var(--text)]'
+                ? 'bg-[var(--purple)] text-white border-transparent shadow-sm'
+                : 'bg-[var(--surface)] border-[var(--line)] hover:text-[var(--ink)]'
             }`}
+            style={type !== 'receipts' ? { color: 'var(--muted)' } : undefined}
           >
             <FileSpreadsheet className="w-4 h-4" />
             <span>Receipts Ledger</span>
@@ -101,9 +102,10 @@ export default function ExportModal({ defaultType = 'receipts', onClose }: Props
             onClick={() => setType('expenses')}
             className={`flex-1 py-2 px-3 text-xs font-bold rounded-lg border transition-all flex items-center justify-center gap-2 ${
               type === 'expenses'
-                ? 'bg-[var(--purple,#6B3FA0)] text-white border-transparent shadow-sm'
-                : 'bg-[var(--surface)] text-[var(--muted)] border-[var(--line)] hover:text-[var(--text)]'
+                ? 'bg-[var(--purple)] text-white border-transparent shadow-sm'
+                : 'bg-[var(--surface)] border-[var(--line)] hover:text-[var(--ink)]'
             }`}
+            style={type !== 'expenses' ? { color: 'var(--muted)' } : undefined}
           >
             <FileSpreadsheet className="w-4 h-4" />
             <span>Expenses Ledger</span>

@@ -33,6 +33,14 @@ public interface ReceiveDocumentRepository extends JpaRepository<ReceiveDocument
     List<ReceiveDocument> findByOrgIdAndWorkflowStatusAndBranchIdInOrderBySubmittedAtAscIdAsc(
         Long orgId, WorkflowStatus workflowStatus, Collection<Long> branchIds);
 
+    /**
+     * Accountant review queue — documents in any of several workflow states within the
+     * caller's branches, oldest first. Used to show SUBMITTED and FM_QUERIED together (rev 49):
+     * both need the Accountant's attention, just via a different action.
+     */
+    List<ReceiveDocument> findByOrgIdAndWorkflowStatusInAndBranchIdInOrderBySubmittedAtAscIdAsc(
+        Long orgId, Collection<WorkflowStatus> workflowStatuses, Collection<Long> branchIds);
+
     /** Finance Manager queue — documents in one workflow state org-wide, oldest first. */
     List<ReceiveDocument> findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(
         Long orgId, WorkflowStatus workflowStatus);
@@ -49,14 +57,15 @@ public interface ReceiveDocumentRepository extends JpaRepository<ReceiveDocument
 
     boolean existsByOrgId(Long orgId);
 
-    /** Owner dashboard — receipts still in the review pipeline (SUBMITTED / VERIFIED / QUERIED). */
+    /** Owner dashboard — receipts still in the review pipeline (SUBMITTED / VERIFIED / QUERIED / FM_QUERIED). */
     @Query("""
         select count(d) from ReceiveDocument d
         where d.orgId = :orgId
           and (:branchId is null or d.branchId = :branchId)
           and d.workflowStatus in (com.dams.receive.entity.WorkflowStatus.SUBMITTED,
                                    com.dams.receive.entity.WorkflowStatus.VERIFIED,
-                                   com.dams.receive.entity.WorkflowStatus.QUERIED)
+                                   com.dams.receive.entity.WorkflowStatus.QUERIED,
+                                   com.dams.receive.entity.WorkflowStatus.FM_QUERIED)
         """)
     long countPendingReview(@Param("orgId") Long orgId, @Param("branchId") Long branchId);
 
@@ -66,7 +75,8 @@ public interface ReceiveDocumentRepository extends JpaRepository<ReceiveDocument
         where d.orgId = :orgId
           and d.workflowStatus in (com.dams.receive.entity.WorkflowStatus.SUBMITTED,
                                    com.dams.receive.entity.WorkflowStatus.VERIFIED,
-                                   com.dams.receive.entity.WorkflowStatus.QUERIED)
+                                   com.dams.receive.entity.WorkflowStatus.QUERIED,
+                                   com.dams.receive.entity.WorkflowStatus.FM_QUERIED)
         group by d.branchId
         """)
     List<Object[]> countPendingReviewByBranch(@Param("orgId") Long orgId);

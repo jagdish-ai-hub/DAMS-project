@@ -21,7 +21,7 @@ public record ReviewQueueItem(
     boolean overLimit,      // expenses only
     boolean hasOverride,    // a line amount has already been overridden
     Instant submittedAt,
-    String workflowStatus   // SUBMITTED | VERIFIED | APPROVED | CLOSED — lets a "verified" list
-                            // still show each row's real state
+    String workflowStatus   // SUBMITTED | VERIFIED | APPROVED | CLOSED | FM_QUERIED — lets a
+                            // "verified" list still show each row's real state
 ) {
 }

@@ -27,6 +27,13 @@ public interface ExpenseDocumentRepository extends JpaRepository<ExpenseDocument
     List<ExpenseDocument> findByOrgIdAndWorkflowStatusAndBranchIdInOrderBySubmittedAtAscIdAsc(
         Long orgId, ExpenseWorkflowStatus workflowStatus, Collection<Long> branchIds);
 
+    /**
+     * Accountant review queue — documents in any of several workflow states within the
+     * caller's branches, oldest first. Used to show SUBMITTED and FM_QUERIED together (rev 49).
+     */
+    List<ExpenseDocument> findByOrgIdAndWorkflowStatusInAndBranchIdInOrderBySubmittedAtAscIdAsc(
+        Long orgId, Collection<ExpenseWorkflowStatus> workflowStatuses, Collection<Long> branchIds);
+
     /** Finance Manager queue — documents in one workflow state org-wide, oldest first. */
     List<ExpenseDocument> findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(
         Long orgId, ExpenseWorkflowStatus workflowStatus);
@@ -42,14 +49,15 @@ public interface ExpenseDocumentRepository extends JpaRepository<ExpenseDocument
 
     boolean existsByOrgId(Long orgId);
 
-    /** Owner dashboard — expenses still in the review pipeline (SUBMITTED / VERIFIED / QUERIED). */
+    /** Owner dashboard — expenses still in the review pipeline (SUBMITTED / VERIFIED / QUERIED / FM_QUERIED). */
     @Query("""
         select count(d) from ExpenseDocument d
         where d.orgId = :orgId
           and (:branchId is null or d.branchId = :branchId)
           and d.workflowStatus in (com.dams.expense.entity.ExpenseWorkflowStatus.SUBMITTED,
                                    com.dams.expense.entity.ExpenseWorkflowStatus.VERIFIED,
-                                   com.dams.expense.entity.ExpenseWorkflowStatus.QUERIED)
+                                   com.dams.expense.entity.ExpenseWorkflowStatus.QUERIED,
+                                   com.dams.expense.entity.ExpenseWorkflowStatus.FM_QUERIED)
         """)
     long countPendingReview(@Param("orgId") Long orgId, @Param("branchId") Long branchId);
 
@@ -59,7 +67,8 @@ public interface ExpenseDocumentRepository extends JpaRepository<ExpenseDocument
         where d.orgId = :orgId
           and d.workflowStatus in (com.dams.expense.entity.ExpenseWorkflowStatus.SUBMITTED,
                                    com.dams.expense.entity.ExpenseWorkflowStatus.VERIFIED,
-                                   com.dams.expense.entity.ExpenseWorkflowStatus.QUERIED)
+                                   com.dams.expense.entity.ExpenseWorkflowStatus.QUERIED,
+                                   com.dams.expense.entity.ExpenseWorkflowStatus.FM_QUERIED)
         group by d.branchId
         """)
     List<Object[]> countPendingReviewByBranch(@Param("orgId") Long orgId);

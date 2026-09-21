@@ -5,7 +5,7 @@ import { cashApi, type CashDocument } from '../api/cash'
 import { reviewApi, type FmQueue, type ReviewQueueItem, type ReviewType } from '../api/review'
 import { jobCardsApi } from '../api/jobCards'
 import { mastersApi, type MasterRow } from '../api/masters'
-import { card, Badge, ErrorBanner, ghostBtn, primaryBtn, inputStyle, Modal, Skeleton, SkeletonRows, inr } from '../shell/ui'
+import { card, Badge, ErrorBanner, ghostBtn, primaryBtn, inputStyle, Modal, Skeleton, SkeletonRows, inr, fmtDateShort } from '../shell/ui'
 import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, type AnyDoc } from '../review/reviewShared'
 import GlobalSearch from '../shared/GlobalSearch'
 import { useAuth } from '../auth/useAuth'
@@ -307,9 +307,7 @@ function Section(props: {
 
 function fmtGroupDate(key: string): string {
   if (key === 'Unknown date') return key
-  const d = new Date(key + 'T00:00:00')
-  if (isNaN(d.getTime())) return key
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+  return fmtDateShort(key)
 }
 
 function Overview({
@@ -430,20 +428,27 @@ function FmDetail(props: {
       .then(({ data }) => live && setStatusOptions(data))
       .catch((e) => live && setError(apiError(e, 'Could not load the status list.')))
     return () => { live = false }
-  }, [receipt != null])
+  }, [receipt])
 
   const { user } = useAuth()
-  // Maker-checker mirror (claim close needs none — an FM can never be a maker by
-  // construction, and the service does not check it there either).
+  // Maker-checker mirror. Ordinary approve still needs it here; Close Claim (rev 49) folds an
+  // implicit approve into the same click, and the service checks maker-checker there too — the
+  // FE doesn't pre-hide Close Claim for it since the check is per receive-document on the job
+  // card, not just this one, so a rejection surfaces as a normal error instead.
   const isMaker = user != null && (user.userId === doc.createdBy
     || (doc.lastModifiedBy != null && user.userId === doc.lastModifiedBy))
-  const canApprove = wf === 'VERIFIED' && !isMaker
+  const isClaim = !!receipt && receipt.isClaim
+  const claimSettled = !!receipt && receipt.settledViaClaimClose
+  // Query is available at VERIFIED regardless of claim-ness; Approve is the ordinary
+  // (non-claim) path only — a claim's approval now happens inside Close Claim itself.
+  const canQuery = wf === 'VERIFIED' && !isMaker
+  const canApprove = canQuery && !isClaim
 
-  const isOpenClaim = !!receipt && receipt.isClaim && wf === 'APPROVED' && !receipt.settledViaClaimClose
-  const isClosedClaim = !!receipt && receipt.settledViaClaimClose
-  // A claim is visible from submission, but closing needs the money approved first
+  const isOpenClaim = isClaim && (wf === 'VERIFIED' || wf === 'APPROVED') && !claimSettled
+  const isClosedClaim = claimSettled
+  // A claim is visible from submission, but closing needs the Accountant's verification first
   // (AGENT.md closing-rule #3) — say so rather than leaving the FM guessing.
-  const claimPendingApproval = !!receipt && receipt.isClaim && wf !== 'APPROVED' && !receipt.settledViaClaimClose
+  const claimPendingApproval = isClaim && !isOpenClaim && !claimSettled
 
   async function run(fn: () => Promise<unknown>, message: string, keepOpen = false) {
     setBusy(true)
@@ -513,12 +518,12 @@ function FmDetail(props: {
       {claimPendingApproval && (
         <div style={{ ...card, background: 'var(--amber-bg, #FEF3C7)', borderColor: '#FDE68A', marginBottom: 14, fontSize: '0.82rem' }}>
           <strong>Open claim · not closable yet.</strong> This is a warranty / AMC / CG claim, but its
-          receipt is {wf.toLowerCase()}. Every receipt on the claim must be approved before it can be
-          closed{canApprove ? ' — approve it below.' : '.'}
+          receipt is {wf.toLowerCase()}. It must be verified by the Accountant before Close Claim
+          becomes available here.
         </div>
       )}
 
-      {!canApprove && !isOpenClaim ? (
+      {!canQuery && !isOpenClaim ? (
         <div style={{ ...card, textAlign: 'center', color: 'var(--faint)', fontSize: '0.84rem' }}>
           {isMaker
             ? 'You created or last edited this entry — maker-checker requires another reviewer.'
@@ -535,13 +540,13 @@ function FmDetail(props: {
             />
           )}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+            {canQuery && (
+              <button type="button" onClick={() => { setBox(box === 'query' ? null : 'query'); setBoxText(''); setError('') }}
+                style={{ ...ghostBtn, color: 'var(--amber)', minHeight: 36 }}>Query</button>
+            )}
             {canApprove && (
-              <>
-                <button type="button" onClick={() => { setBox(box === 'query' ? null : 'query'); setBoxText(''); setError('') }}
-                  style={{ ...ghostBtn, color: 'var(--amber)', minHeight: 36 }}>Query</button>
-                <button type="button" onClick={() => run(() => reviewApi.approve(type, doc.id), `${docNo} approved`)}
-                  disabled={busy} style={{ ...primaryBtn(busy), minHeight: 36 }}>Approve</button>
-              </>
+              <button type="button" onClick={() => run(() => reviewApi.approve(type, doc.id), `${docNo} approved`)}
+                disabled={busy} style={{ ...primaryBtn(busy), minHeight: 36 }}>Approve</button>
             )}
             {isOpenClaim && (
               <button type="button" onClick={() => setClaimModal(true)} disabled={busy}

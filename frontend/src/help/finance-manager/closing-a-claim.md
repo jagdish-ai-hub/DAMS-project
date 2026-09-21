@@ -4,11 +4,11 @@ Warranty, AMC and goodwill (CG) claims are the jobs where the money comes from t
 
 ## Before you can close
 
-Every receive document on the job card has to be **approved** first. If one is still in review, the claim can't be closed yet.
+Every receive document on the job card has to be **verified by the accountant** first. If one is still awaiting the accountant, the claim can't be closed yet. There's no separate Approve step for a claim — **Close Claim is itself the approval**: pressing it approves every verified receive document on the job card and closes the claim in one action.
 
 ## Close a claim
 
-1. On **Approvals & Claims** (Receipts tab), open an entry under **Open warranty / AMC / CG claims** — these are approved claim receipts waiting to be finalised.
+1. On **Approvals & Claims** (Receipts tab), open an entry under **Open warranty / AMC / CG claims** — these are verified (or already approved) claim receipts waiting to be finalised. While a claim receipt sits at Verified, you'll see only **Query** and **Close claim** here — no Approve button.
 2. Press **Close claim**.
 3. The box shows **received so far** — the total of the settlement lines.
 4. Enter the **final amount**:

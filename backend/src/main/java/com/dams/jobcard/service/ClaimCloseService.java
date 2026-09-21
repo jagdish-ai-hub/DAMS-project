@@ -19,6 +19,7 @@ import com.dams.receive.entity.SettlementLine;
 import com.dams.receive.entity.WorkflowStatus;
 import com.dams.receive.repository.ReceiveDocumentRepository;
 import com.dams.receive.repository.SettlementLineRepository;
+import com.dams.review.service.ReviewService;
 import com.dams.user.entity.AppUser;
 import com.dams.user.entity.Role;
 import com.dams.user.repository.AppUserRepository;
@@ -45,8 +46,12 @@ import java.util.Map;
  * business-status changes, and {@code POST /receipts} on the job card is refused — all
  * already wired in Stage 4 against the existence of the ClaimClose row.
  *
- * Precondition: every non-REJECTED receive document on the job card must be APPROVED. You
- * finalise a claim once its money is fully through the maker-checker flow, not before.
+ * Precondition (rev 49): every non-REJECTED receive document on the job card must be at
+ * least VERIFIED. A document still VERIFIED is approved as part of this same transaction —
+ * via {@link ReviewService#approveReceipt}, the exact maker-checker check and audit trail a
+ * standalone Approve click would use — so Close Claim is itself the FM's approval; there is
+ * no separate Approve step for a claim receipt. A document still SUBMITTED or QUERIED (the
+ * Accountant hasn't verified it yet) still blocks closing.
  */
 @Service
 public class ClaimCloseService {
@@ -63,6 +68,7 @@ public class ClaimCloseService {
     private final AttachmentService attachmentService;
     private final AuditService auditService;
     private final JobCardService jobCardService;
+    private final ReviewService reviewService;
 
     public ClaimCloseService(ClaimCloseRepository claimCloseRepo,
                              JobCardRepository jobCardRepo,
@@ -73,7 +79,8 @@ public class ClaimCloseService {
                              BranchScope branchScope,
                              AttachmentService attachmentService,
                              AuditService auditService,
-                             JobCardService jobCardService) {
+                             JobCardService jobCardService,
+                             ReviewService reviewService) {
         this.claimCloseRepo = claimCloseRepo;
         this.jobCardRepo = jobCardRepo;
         this.receiveDocumentRepo = receiveDocumentRepo;
@@ -84,6 +91,7 @@ public class ClaimCloseService {
         this.attachmentService = attachmentService;
         this.auditService = auditService;
         this.jobCardService = jobCardService;
+        this.reviewService = reviewService;
     }
 
     @Transactional
@@ -112,9 +120,12 @@ public class ClaimCloseService {
                 + "the claim receipt must be raised and approved before the claim can be closed");
         }
         for (ReceiveDocument d : live) {
-            if (d.getWorkflowStatus() != WorkflowStatus.APPROVED) {
+            if (d.getWorkflowStatus() == WorkflowStatus.VERIFIED) {
+                // Close Claim is itself the FM's approval (rev 49) — no separate Approve click.
+                reviewService.approveReceipt(d.getId());
+            } else if (d.getWorkflowStatus() != WorkflowStatus.APPROVED) {
                 throw DamsException.conflict("Receive document " + describe(d) + " is " + d.getWorkflowStatus()
-                    + " — every receive document on this claim must be approved before the claim can be closed");
+                    + " — every receive document on this claim must be verified before the claim can be closed");
             }
         }
 

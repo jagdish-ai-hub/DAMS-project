@@ -176,7 +176,7 @@ function HomeSearch(props: {
 
       {hits == null && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14, maxWidth: 640, margin: '30px auto 0' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14, maxWidth: 640, margin: '30px auto 0' }}>
             <QuickCard tone="green" mark="＋" title="New Receipt" sub="Start a fresh entry" onClick={() => navigate('/app/new-receipt')} />
             <QuickCard tone="red" mark="−" title="New Expense" sub="Petty cash, fuel, taxi…" onClick={() => navigate('/app/new-expense')} />
             <QuickCard tone="navy" mark="₹" title="Cash" sub="Drawer & day close" onClick={() => navigate('/app/cash')} />
@@ -643,9 +643,9 @@ function CustomerHistoryView(props: {
 function Stat({ label, value, tone }: { label: string; value: string; tone?: 'green' | 'amber' | 'muted' }) {
   const color = tone === 'green' ? 'var(--green)' : tone === 'amber' ? 'var(--amber)' : tone === 'muted' ? 'var(--muted)' : 'var(--ink)'
   return (
-    <div style={card}>
+    <div style={{ ...card, minWidth: 0, overflow: 'hidden' }}>
       <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--faint)' }}>{label}</div>
-      <div style={{ fontSize: '1.2rem', fontWeight: 700, marginTop: 3, fontVariantNumeric: 'tabular-nums', color }}>{value}</div>
+      <div style={{ fontSize: 'clamp(0.95rem, 3.5vw, 1.2rem)', fontWeight: 700, marginTop: 3, fontVariantNumeric: 'tabular-nums', color, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{value}</div>
     </div>
   )
 }

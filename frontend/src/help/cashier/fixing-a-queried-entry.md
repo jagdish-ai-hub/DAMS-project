@@ -19,4 +19,4 @@ The entry goes back to **Submitted** and returns to the checker's queue. Its DAM
 
 - Only **Draft** and **Queried** entries can be edited.
 - Once an entry is **Verified** or **Approved**, you can still **Add Payment** to a receipt, but you can't change lines that are already there.
-- A query can come from the accountant or, later in the flow, from the finance manager — the fix is the same either way.
+- A query here always comes from the **accountant**, on something you just submitted. If the finance manager later has a question about an entry the accountant already verified, that goes back to the accountant instead — it never reaches you, and you won't see it here.

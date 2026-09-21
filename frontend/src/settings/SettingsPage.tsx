@@ -170,7 +170,7 @@ function OrgSettingsForm() {
   if (!settings) {
     return error
       ? <ErrorBanner message={error} />
-      : <div style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>Loading…</div>
+      : <div style={{ padding: 12 }}><div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}><div style={{ height: 18, width: 180, borderRadius: 6, background: 'var(--gray-bg)' }} className="dams-skeleton" /><div style={{ height: 40, borderRadius: 8, background: 'var(--gray-bg)' }} className="dams-skeleton" /><div style={{ height: 40, borderRadius: 8, background: 'var(--gray-bg)' }} className="dams-skeleton" /></div></div>
   }
 
   return (
