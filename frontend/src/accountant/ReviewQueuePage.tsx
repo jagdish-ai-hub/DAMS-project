@@ -78,6 +78,11 @@ export default function ReviewQueuePage() {
   const cashCount = (items ?? []).filter((it) => inBucket(it, 'cash')).length
   const creditCount = (items ?? []).filter((it) => inBucket(it, 'credit')).length
   const claimCount = (items ?? []).filter((it) => inBucket(it, 'claim')).length
+  // Already verified/approved — the same bucket filter applies, so "Cash" shows cash
+  // pending on top and cash closed underneath.
+  const activeVerified = type === 'receipt' && receiptBucket !== 'awaiting'
+    ? (verifiedItems == null ? null : verifiedItems.filter((it) => inBucket(it, receiptBucket)))
+    : verifiedItems
 
   useEffect(() => {
     let live = true
@@ -141,6 +146,13 @@ export default function ReviewQueuePage() {
   function selectCashCreditSub(sub: 'cash' | 'credit') {
     setReceiptBucket(sub)
     setCashCreditOpen(true)
+    resetSelection()
+  }
+
+  /** The overview's filter chips — same state as the left-hand buttons. */
+  function setBucket(b: ReceiptBucket) {
+    setReceiptBucket(b)
+    setCashCreditOpen(b === 'cash' || b === 'credit')
     resetSelection()
   }
 
@@ -265,14 +277,17 @@ export default function ReviewQueuePage() {
             onSelectCashCreditSub={selectCashCreditSub}
             onExportSelected={type === 'receipt' && receiptBucket === 'cash' ? handleExportSelected : undefined}
             exportBusy={exportBusy}
+            closedItems={activeVerified}
           />
         </div>
         <div className={selectedId == null ? 'hidden lg:block border-t lg:border-t-0 lg:border-l border-[var(--line)] p-4 sm:p-6 overflow-y-auto' : 'block border-t lg:border-t-0 lg:border-l border-[var(--line)] p-4 sm:p-6 overflow-y-auto'}>
           {selectedId == null
             ? <Overview
                 type={type}
-                items={items ?? []}
-                verifiedItems={verifiedItems ?? []}
+                items={activeItems ?? []}
+                verifiedItems={activeVerified ?? []}
+                bucket={receiptBucket}
+                onBucket={setBucket}
                 onSelect={setSelectedId}
                 onOpenDrilldown={() => setDrilldown(true)}
               />
@@ -302,8 +317,8 @@ export default function ReviewQueuePage() {
       {drilldown && (
         <DrilldownModal
           type={type}
-          pending={items ?? []}
-          verified={verifiedItems ?? []}
+          pending={activeItems ?? []}
+          verified={activeVerified ?? []}
           onSelect={(id) => { setDrilldown(false); setSelectedId(id) }}
           onClose={() => setDrilldown(false)}
         />
@@ -338,9 +353,12 @@ function QueuePane(props: {
   onSelectCashCreditSub: (sub: 'cash' | 'credit') => void
   onExportSelected?: () => void
   exportBusy: boolean
+  closedItems: ReviewQueueItem[] | null
 }) {
   const { items } = props
   const groups = useMemo(() => groupItems(items ?? [], props.sortMode), [items, props.sortMode])
+  const [closedOpen, setClosedOpen] = useState(true)
+  const closed = props.closedItems ?? []
   // Bulk select/approve is reserved for the Cash bucket (receipts) and the Expenses tab's
   // ordinary bulk-verify — nowhere else does a checkbox appear.
   const showBulkCheckboxes = props.type === 'expense'
@@ -453,6 +471,43 @@ function QueuePane(props: {
         </div>
       ))}
 
+      {closed.length > 0 && (
+        <div style={{ marginTop: 18, borderTop: '1px solid var(--line)' }}>
+          <button
+            type="button"
+            onClick={() => setClosedOpen((o) => !o)}
+            aria-expanded={closedOpen}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left',
+              padding: '12px 14px 8px', border: 'none', background: 'transparent', cursor: 'pointer',
+              fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em',
+              color: 'var(--faint)', fontWeight: 700,
+            }}
+          >
+            <span style={{
+              display: 'inline-block', transition: 'transform var(--dur) var(--ease)',
+              transform: closedOpen ? 'rotate(90deg)' : 'none',
+            }}>▶</span>
+            Closed entries
+            <span style={{ background: 'var(--green-bg)', color: 'var(--green)', borderRadius: 999, fontSize: '0.66rem', padding: '1px 7px' }}>
+              {closed.length}
+            </span>
+            <span style={{ marginLeft: 'auto', textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>
+              verified / approved
+            </span>
+          </button>
+          {closedOpen && closed.map((it) => (
+            <QueueRow
+              key={`closed-${it.id}`}
+              it={it}
+              closed
+              selected={props.selectedId === it.id}
+              onSelect={() => props.onSelect(it.id)}
+            />
+          ))}
+        </div>
+      )}
+
       {showBulkCheckboxes && props.selectedIds.length > 0 && (
         <div style={{
           position: 'sticky', bottom: 0, zIndex: 10,
@@ -534,12 +589,15 @@ export function QueueRow({
   onSelect,
   checked,
   onToggleCheck,
+  closed,
 }: {
   it: ReviewQueueItem
   selected: boolean
   onSelect: () => void
   checked?: boolean
   onToggleCheck?: () => void
+  /** Already verified/approved — shown read-only under "Closed entries". */
+  closed?: boolean
 }) {
   return (
     <div
@@ -550,6 +608,7 @@ export function QueueRow({
         display: 'flex',
         alignItems: 'stretch',
         minHeight: 44,
+        opacity: closed && !selected ? 0.72 : 1,
       }}
     >
       {onToggleCheck && (
@@ -594,6 +653,14 @@ export function QueueRow({
           <span style={{ fontFamily: 'Consolas, monospace', fontSize: '0.7rem', fontWeight: 700, color: 'var(--navy2)' }}>
             {it.documentNo ?? 'draft'}
           </span>
+          {closed && (
+            <span style={{
+              fontSize: '0.6rem', fontWeight: 800, letterSpacing: '0.03em', textTransform: 'uppercase',
+              padding: '1px 6px', borderRadius: 4, background: 'var(--green-bg)', color: 'var(--green)',
+            }}>
+              {it.workflowStatus === 'VERIFIED' ? 'Verified' : it.workflowStatus === 'CLOSED' ? 'Closed' : 'Approved'}
+            </span>
+          )}
           <span style={{ marginLeft: 'auto', fontSize: '0.68rem', color: 'var(--faint)' }}>{it.branchCode}</span>
         </div>
         <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{it.partyName}</div>
@@ -614,92 +681,185 @@ export function QueueRow({
 
 // ───────────────────────────── Overview panel ─────────────────────────────
 
+const BUCKET_CHIPS: { v: ReceiptBucket; label: string }[] = [
+  { v: 'awaiting', label: 'All' },
+  { v: 'cash', label: 'Cash' },
+  { v: 'credit', label: 'Credit' },
+  { v: 'claim', label: 'Claim' },
+]
+
+const panel = {
+  background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12,
+  padding: '16px 18px',
+} as const
+
 function Overview(props: {
   type: ReviewType
   items: ReviewQueueItem[]
   verifiedItems: ReviewQueueItem[]
+  bucket: ReceiptBucket
+  onBucket: (b: ReceiptBucket) => void
   onSelect: (id: number) => void
   onOpenDrilldown: () => void
 }) {
   const { items, verifiedItems } = props
-  const total = items.reduce((a, r) => a + r.amount, 0)
-  const verifiedTotal = verifiedItems.reduce((a, r) => a + r.amount, 0)
+  const pendingTotal = items.reduce((a, r) => a + r.amount, 0)
+  const closedTotal = verifiedItems.reduce((a, r) => a + r.amount, 0)
+  const allCount = items.length + verifiedItems.length
+  const pendingShare = allCount === 0 ? 0 : items.length / allCount
+
   const byBranch = useMemo(() => {
-    const m = new Map<string, number>()
-    items.forEach((r) => m.set(r.branchCode, (m.get(r.branchCode) ?? 0) + 1))
-    const max = Math.max(1, ...m.values())
-    return [...m.entries()].map(([code, n]) => ({ code, n, pct: Math.round((n / max) * 100) }))
-  }, [items])
+    const m = new Map<string, { pending: number; closed: number }>()
+    const bump = (code: string, key: 'pending' | 'closed') => {
+      const row = m.get(code) ?? { pending: 0, closed: 0 }
+      row[key] += 1
+      m.set(code, row)
+    }
+    items.forEach((r) => bump(r.branchCode, 'pending'))
+    verifiedItems.forEach((r) => bump(r.branchCode, 'closed'))
+    const max = Math.max(1, ...[...m.values()].map((v) => v.pending + v.closed))
+    return [...m.entries()]
+      .sort((a, b) => b[1].pending - a[1].pending || a[0].localeCompare(b[0]))
+      .map(([code, v]) => ({ code, ...v, max }))
+  }, [items, verifiedItems])
 
   const label = props.type === 'receipt' ? 'receipts' : props.type === 'expense' ? 'expenses' : 'cash movements'
+  const bucketName = props.type === 'receipt' && props.bucket !== 'awaiting'
+    ? BUCKET_CHIPS.find((c) => c.v === props.bucket)?.label
+    : null
+  const avg = (sum: number, n: number) => (n === 0 ? '—' : inr(Math.round(sum / n)))
 
   return (
     <div>
-      <h2 style={{ fontSize: '1.1rem', color: 'var(--navy)' }}>Accountant overview</h2>
-      <div style={{ fontSize: '0.82rem', color: 'var(--muted)', marginBottom: 16 }}>Reviewing {label}</div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 12, marginBottom: 18 }}>
-        <Stat label="Awaiting your review" value={String(items.length)} sub={items.length === 1 ? 'item' : 'items'}
-          onClick={props.onOpenDrilldown} />
-        <Stat label="Total value pending" value={inr(total)} sub="across your branches" accent
-          onClick={props.onOpenDrilldown} />
-        <Stat label="Verified" value={String(verifiedItems.length)} sub="moved on to the Finance Manager or closed"
-          onClick={props.onOpenDrilldown} />
-        <Stat label="Total value verified" value={inr(verifiedTotal)} sub="across your branches" accent
-          onClick={props.onOpenDrilldown} />
-      </div>
-
-      {items.length === 0 ? (
-        <div style={{ ...card, color: 'var(--faint)', fontSize: '0.85rem', textAlign: 'center' }}>
-          Nothing waiting on you right now — the {label} queue is clear.
-        </div>
-      ) : (
-        <>
-          <div style={{ ...card, marginBottom: 14 }}>
-            <h3 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: 10 }}>By branch</h3>
-            {byBranch.map((b) => (
-              <div key={b.code} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', fontSize: '0.82rem' }}>
-                <span style={{ width: 46, fontWeight: 600, color: 'var(--muted)' }}>{b.code}</span>
-                <span style={{ flex: 1, background: 'var(--bg)', borderRadius: 5, height: 10, overflow: 'hidden' }}>
-                  <span style={{ display: 'block', height: '100%', width: `${b.pct}%`, background: 'var(--navy2)' }} />
-                </span>
-                <span style={{ width: 26, textAlign: 'right', fontWeight: 700 }}>{b.n}</span>
-              </div>
-            ))}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+        <div>
+          <h2 style={{ fontSize: '1.1rem', color: 'var(--navy)' }}>Accountant overview</h2>
+          <div style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
+            Reviewing {label}{bucketName ? ` · ${bucketName} only` : ''}
           </div>
-          <div style={{ ...card }}>
-            <h3 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: 4 }}>Needs your attention</h3>
-            <div style={{ fontSize: '0.74rem', color: 'var(--faint)', marginBottom: 8 }}>click to open</div>
-            {items.slice(0, 6).map((r) => (
-              <button key={r.id} type="button" onClick={() => props.onSelect(r.id)}
+        </div>
+        {props.type === 'receipt' && (
+          <div role="group" aria-label="Filter receipts" style={{ display: 'flex', border: '1px solid var(--line)', borderRadius: 8, overflow: 'hidden' }}>
+            {BUCKET_CHIPS.map((c) => (
+              <button key={c.v} type="button" onClick={() => props.onBucket(c.v)} aria-pressed={props.bucket === c.v}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left',
-                  border: 'none', borderTop: '1px solid var(--line)', background: 'transparent',
-                  padding: '10px 0', cursor: 'pointer', fontSize: '0.84rem',
+                  border: 'none', padding: '7px 12px', fontSize: '0.76rem', fontWeight: 700, cursor: 'pointer', minHeight: 34,
+                  background: props.bucket === c.v ? 'var(--navy)' : 'var(--surface)',
+                  color: props.bucket === c.v ? '#fff' : 'var(--muted)',
                 }}>
-                <span style={{ fontFamily: 'Consolas, monospace', fontSize: '0.72rem', color: 'var(--navy2)' }}>{r.documentNo ?? 'draft'}</span>
-                <span style={{ flex: 1, fontWeight: 700 }}>{r.partyName}</span>
-                <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{inr(r.amount)}</span>
+                {c.label}
               </button>
             ))}
           </div>
-        </>
+        )}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 190px), 1fr))', gap: 12, marginBottom: 14 }}>
+        <Stat tone="pending" label="Pending with you" value={String(items.length)}
+          note={`${items.length === 1 ? 'entry' : 'entries'} still need your verify or query`}
+          share={pendingShare} />
+        <Stat tone="pending" label="Pending value" value={inr(pendingTotal)}
+          note={`avg ${avg(pendingTotal, items.length)} per entry`} />
+        <Stat tone="closed" label="Closed by you" value={String(verifiedItems.length)}
+          note="verified or approved — with the FM or done"
+          share={allCount === 0 ? 0 : 1 - pendingShare} />
+        <Stat tone="closed" label="Closed value" value={inr(closedTotal)}
+          note={`avg ${avg(closedTotal, verifiedItems.length)} per entry`} />
+      </div>
+
+      {byBranch.length > 0 && (
+        <div style={{ ...panel, marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10, gap: 10, flexWrap: 'wrap' }}>
+            <h3 style={{ fontSize: '0.9rem', fontWeight: 700 }}>By branch</h3>
+            <span style={{ fontSize: '0.72rem', color: 'var(--faint)', display: 'flex', gap: 12 }}>
+              <Legend color="var(--amber)" text="pending" />
+              <Legend color="var(--green)" text="closed" />
+            </span>
+          </div>
+          {byBranch.map((b) => (
+            <div key={b.code} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', fontSize: '0.82rem' }}>
+              <span style={{ width: 46, fontWeight: 600, color: 'var(--muted)' }}>{b.code}</span>
+              <span style={{ flex: 1, background: 'var(--bg)', borderRadius: 999, height: 8, overflow: 'hidden', display: 'flex' }}>
+                <span style={{ height: '100%', width: `${(b.pending / b.max) * 100}%`, background: 'var(--amber)' }} />
+                <span style={{ height: '100%', width: `${(b.closed / b.max) * 100}%`, background: 'var(--green)', opacity: 0.55 }} />
+              </span>
+              <span style={{ minWidth: 64, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--muted)' }}>
+                <strong style={{ color: 'var(--ink)' }}>{b.pending}</strong> / {b.closed}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {items.length === 0 ? (
+        <div style={{ ...panel, color: 'var(--faint)', fontSize: '0.85rem', textAlign: 'center' }}>
+          Nothing waiting on you right now — the {bucketName ? `${bucketName.toLowerCase()} ` : ''}{label} queue is clear.
+        </div>
+      ) : (
+        <div style={{ ...panel }}>
+          <h3 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: 2 }}>Needs your attention</h3>
+          <div style={{ fontSize: '0.74rem', color: 'var(--faint)', marginBottom: 8 }}>oldest first · click to open</div>
+          {items.slice(0, 6).map((r) => (
+            <button key={r.id} type="button" onClick={() => props.onSelect(r.id)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left',
+                border: 'none', borderTop: '1px solid var(--line)', background: 'transparent',
+                padding: '10px 0', cursor: 'pointer', fontSize: '0.84rem',
+              }}>
+              <span style={{ fontFamily: 'Consolas, monospace', fontSize: '0.72rem', color: 'var(--navy2)' }}>{r.documentNo ?? 'draft'}</span>
+              <span style={{ flex: 1, fontWeight: 700, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.partyName}</span>
+              <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{inr(r.amount)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {allCount > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+          <button type="button" onClick={props.onOpenDrilldown}
+            style={{ ...ghostBtn, minHeight: 36, fontSize: '0.8rem', fontWeight: 700, color: 'var(--navy2)' }}>
+            Open full table — pending &amp; closed, by branch and date →
+          </button>
+        </div>
       )}
     </div>
   )
 }
 
-function Stat({ label, value, sub, accent, onClick }: { label: string; value: string; sub: string; accent?: boolean; onClick?: () => void }) {
+function Legend({ color, text }: { color: string; text: string }) {
   return (
-    <div
-      onClick={onClick}
-      style={{ ...card, borderTop: `3px solid ${accent ? 'var(--amber)' : 'var(--navy2)'}`, cursor: onClick ? 'pointer' : undefined }}
-    >
-      <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--muted)', fontWeight: 600 }}>
-        {label}{onClick && <span style={{ color: 'var(--navy2)' }}> ⓘ</span>}
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+      <span style={{ width: 8, height: 8, borderRadius: 2, background: color }} />
+      {text}
+    </span>
+  )
+}
+
+/** One summary box: what it counts (label), the figure, and a line saying what it means. */
+function Stat({ tone, label, value, note, share }: {
+  tone: 'pending' | 'closed'
+  label: string
+  value: string
+  note: string
+  /** 0–1 — this box's share of all entries in view; draws a thin meter when given. */
+  share?: number
+}) {
+  const accent = tone === 'pending' ? 'var(--amber)' : 'var(--green)'
+  return (
+    <div style={{ ...panel, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: '0.76rem', fontWeight: 600, color: 'var(--muted)' }}>
+        <span style={{ width: 7, height: 7, borderRadius: '50%', background: accent, flexShrink: 0 }} />
+        {label}
       </div>
-      <div style={{ fontSize: '1.4rem', fontWeight: 800, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
-      <div style={{ fontSize: '0.76rem', color: 'var(--faint)' }}>{sub}</div>
+      <div style={{ fontSize: 'clamp(1.3rem, 2.4vw, 1.65rem)', fontWeight: 700, color: 'var(--ink)', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, overflowWrap: 'anywhere' }}>
+        {value}
+      </div>
+      {share != null && (
+        <div style={{ height: 4, borderRadius: 999, background: 'var(--bg)', overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${Math.round(share * 100)}%`, background: accent }} />
+        </div>
+      )}
+      <div style={{ fontSize: '0.74rem', color: 'var(--faint)', lineHeight: 1.35 }}>{note}</div>
     </div>
   )
 }

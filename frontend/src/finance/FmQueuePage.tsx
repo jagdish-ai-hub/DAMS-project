@@ -125,7 +125,10 @@ export default function FmQueuePage() {
     reload()
   }
 
-  const total = queue.awaitingApproval.reduce((a, r) => a + r.amount, 0)
+  // Claim receipts live in the claims section above (actioned by Close Claim, rev 49) — listing
+  // them again under "Awaiting final approval" would offer an Approve step they no longer have.
+  const awaitingRegular = queue.awaitingApproval.filter((it) => !it.isClaim)
+  const total = awaitingRegular.reduce((a, r) => a + r.amount, 0)
 
   return (
     <div style={{ maxWidth: 1180, margin: '0 auto' }}>
@@ -167,27 +170,27 @@ export default function FmQueuePage() {
             ))}
           </div>
 
-          <Section title="Awaiting final approval" items={queue.awaitingApproval} selectedId={selectedId} onSelect={setSelectedId} riskMap={riskMap} sortMode={sortMode} />
           {type === 'receipt' && (
-            <>
-              <Section
-                title="Open warranty / AMC / CG claims"
-                items={filteredOpenClaims}
-                selectedId={selectedId}
-                onSelect={setSelectedId}
-                showAging
-                claimFilter={claimBucket}
-                onClaimFilterChange={setClaimBucket}
-                totalCount={queue.openClaims.length}
-              />
-              <Section title="Recently closed" items={queue.recentlyClosed} selectedId={selectedId} onSelect={setSelectedId} plain />
-            </>
+            <Section
+              title="Open warranty / AMC / CG claims"
+              items={filteredOpenClaims}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              showAging
+              claimFilter={claimBucket}
+              onClaimFilterChange={setClaimBucket}
+              totalCount={queue.openClaims.length}
+            />
+          )}
+          <Section title="Awaiting final approval" items={awaitingRegular} selectedId={selectedId} onSelect={setSelectedId} riskMap={riskMap} sortMode={sortMode} />
+          {type === 'receipt' && (
+            <Section title="Recently closed" items={queue.recentlyClosed} selectedId={selectedId} onSelect={setSelectedId} plain />
           )}
         </div>
 
         <div className={selectedId == null ? 'hidden lg:block border-t lg:border-t-0 lg:border-l border-[var(--line)] p-4 sm:p-6 overflow-y-auto' : 'block border-t lg:border-t-0 lg:border-l border-[var(--line)] p-4 sm:p-6 overflow-y-auto'}>
           {selectedId == null
-            ? <Overview count={queue.awaitingApproval.length} total={total} openClaimsList={queue.openClaims} type={type} />
+            ? <Overview count={awaitingRegular.length} total={total} openClaimsList={queue.openClaims} type={type} />
             : doc == null
               ? <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <div className="lg:hidden mb-2">

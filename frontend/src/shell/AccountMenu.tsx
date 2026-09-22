@@ -19,7 +19,12 @@ export default function AccountMenu() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
+  // The header row scrolls horizontally on phones (overflow-x: auto), which also clips
+  // anything absolutely positioned inside it — so the dropdown is fixed to the viewport,
+  // anchored to the button's on-screen position.
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -27,9 +32,22 @@ export default function AccountMenu() {
         setOpen(false)
       }
     }
+    function onResize() { setOpen(false) }
     document.addEventListener('mousedown', onClickOutside)
-    return () => document.removeEventListener('mousedown', onClickOutside)
+    window.addEventListener('resize', onResize)
+    return () => {
+      document.removeEventListener('mousedown', onClickOutside)
+      window.removeEventListener('resize', onResize)
+    }
   }, [])
+
+  function toggle() {
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect()
+      setPos({ top: r.bottom + 6, right: Math.max(12, window.innerWidth - r.right) })
+    }
+    setOpen((o) => !o)
+  }
 
   if (!user) return null
 
@@ -62,7 +80,8 @@ export default function AccountMenu() {
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button
-        onClick={() => setOpen((o) => !o)}
+        ref={btnRef}
+        onClick={toggle}
         aria-haspopup="menu"
         aria-expanded={open}
         style={{
@@ -95,14 +114,14 @@ export default function AccountMenu() {
         <span style={{ fontSize: '0.6rem', opacity: 0.8, flexShrink: 0 }}>▼</span>
       </button>
 
-      {open && (
+      {open && pos && (
         <div
           role="menu"
           className="dams-anim-menu"
           style={{
-            position: 'absolute',
-            right: 0,
-            top: 'calc(100% + 6px)',
+            position: 'fixed',
+            right: pos.right,
+            top: pos.top,
             background: 'var(--surface)',
             color: 'var(--ink)',
             border: '1px solid var(--line)',
