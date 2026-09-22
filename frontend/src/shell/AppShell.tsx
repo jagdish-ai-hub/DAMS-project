@@ -55,6 +55,14 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   ],
 }
 
+const DASHBOARD_LABEL: Record<Role, string> = {
+  SUPER_ADMIN: 'Super Admin Dashboard',
+  OWNER: 'Owner Dashboard',
+  FINANCE_MANAGER: 'Finance Dashboard',
+  ACCOUNTANT: 'Accountant Dashboard',
+  CASHIER: 'Cashier Dashboard',
+}
+
 /**
  * Authenticated app frame: navy topbar (logo + role-conditional nav + account menu),
  * then the routed content. The view is driven entirely by the JWT's role — there is
@@ -161,7 +169,12 @@ export default function AppShell() {
             }}>
               DA
             </div>
-            <span style={{ fontWeight: 700, fontSize: '0.95rem', whiteSpace: 'nowrap' }}>DAMS</span>
+            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25, minWidth: 0 }}>
+              <span style={{ fontWeight: 700, fontSize: '0.68rem', whiteSpace: 'nowrap' }}>Dealer Activity Management System</span>
+              <span style={{ fontWeight: 500, fontSize: '0.62rem', color: 'rgba(255,255,255,.72)', whiteSpace: 'nowrap' }}>
+                {DASHBOARD_LABEL[user.role]}
+              </span>
+            </div>
           </div>
 
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>

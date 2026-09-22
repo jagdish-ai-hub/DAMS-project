@@ -74,6 +74,7 @@ class ReceiveDocumentServiceTest {
 
     private static final long ORG = 1L;
     private static final long CASHIER_ID = 7L;
+    private static final long ACCOUNTANT_ID = 9L;
     private static final long JOB_CARD_ID = 50L;
     private static final long BRANCH_ID = 3L;
 
@@ -201,6 +202,85 @@ class ReceiveDocumentServiceTest {
         service.addLine(500L, lineInput(new BigDecimal("500")));
 
         assertThat(draft.getWorkflowStatus()).isEqualTo(WorkflowStatus.DRAFT);
+    }
+
+    // ---- rev 49: an Accountant may also add a payment, while actively reviewing it ----
+
+    @Test
+    void addPayment_asAccountant_allowedWhileSubmitted_setsLastModifiedByToThatAccountant() {
+        ReceiveDocument submitted = openDoc();
+        submitted.setWorkflowStatus(WorkflowStatus.SUBMITTED);
+        when(receiveDocumentRepo.findByIdAndOrgId(500L, ORG)).thenReturn(Optional.of(submitted));
+        when(branchScope.currentRole()).thenReturn(Role.ACCOUNTANT);
+        when(branchScope.currentUserId()).thenReturn(ACCOUNTANT_ID);
+        when(userRepo.findByIdAndOrganization_Id(ACCOUNTANT_ID, ORG)).thenReturn(Optional.of(accountant()));
+
+        service.addLine(500L, lineInput(new BigDecimal("500")));
+
+        assertThat(submitted.getLastModifiedBy()).isEqualTo(ACCOUNTANT_ID);
+        verify(paymentGuard, never()).requireCanPost(any(), any());
+    }
+
+    @Test
+    void addPayment_asAccountant_allowedWhileFmQueried() {
+        ReceiveDocument fmQueried = openDoc();
+        fmQueried.setWorkflowStatus(WorkflowStatus.FM_QUERIED);
+        when(receiveDocumentRepo.findByIdAndOrgId(500L, ORG)).thenReturn(Optional.of(fmQueried));
+        when(branchScope.currentRole()).thenReturn(Role.ACCOUNTANT);
+        when(branchScope.currentUserId()).thenReturn(ACCOUNTANT_ID);
+        when(userRepo.findByIdAndOrganization_Id(ACCOUNTANT_ID, ORG)).thenReturn(Optional.of(accountant()));
+
+        service.addLine(500L, lineInput(new BigDecimal("500")));
+
+        verify(settlementLineRepo).save(any(SettlementLine.class));
+    }
+
+    @Test
+    void addPayment_asAccountant_conflict_onceAlreadyVerified() {
+        ReceiveDocument verified = openDoc();
+        verified.setWorkflowStatus(WorkflowStatus.VERIFIED);
+        when(receiveDocumentRepo.findByIdAndOrgId(500L, ORG)).thenReturn(Optional.of(verified));
+        when(branchScope.currentRole()).thenReturn(Role.ACCOUNTANT);
+        when(branchScope.currentUserId()).thenReturn(ACCOUNTANT_ID);
+        when(userRepo.findByIdAndOrganization_Id(ACCOUNTANT_ID, ORG)).thenReturn(Optional.of(accountant()));
+
+        assertThatThrownBy(() -> service.addLine(500L, lineInput(new BigDecimal("500"))))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("awaiting their review");
+        verify(settlementLineRepo, never()).save(any());
+    }
+
+    @Test
+    void addPayment_asAccountant_forbidden_whenBranchNotAssigned() {
+        ReceiveDocument submitted = openDoc();
+        submitted.setWorkflowStatus(WorkflowStatus.SUBMITTED);
+        when(receiveDocumentRepo.findByIdAndOrgId(500L, ORG)).thenReturn(Optional.of(submitted));
+        when(branchScope.currentRole()).thenReturn(Role.ACCOUNTANT);
+        when(branchScope.currentUserId()).thenReturn(ACCOUNTANT_ID);
+        when(userRepo.findByIdAndOrganization_Id(ACCOUNTANT_ID, ORG)).thenReturn(Optional.of(accountant()));
+        when(branchScope.canSeeBranch(BRANCH_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.addLine(500L, lineInput(new BigDecimal("500"))))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("not assigned");
+        verify(settlementLineRepo, never()).save(any());
+    }
+
+    @Test
+    void addPayment_asAccountant_audited_withAddedByAccountantMarker() {
+        ReceiveDocument submitted = openDoc();
+        submitted.setWorkflowStatus(WorkflowStatus.SUBMITTED);
+        when(receiveDocumentRepo.findByIdAndOrgId(500L, ORG)).thenReturn(Optional.of(submitted));
+        when(branchScope.currentRole()).thenReturn(Role.ACCOUNTANT);
+        when(branchScope.currentUserId()).thenReturn(ACCOUNTANT_ID);
+        when(userRepo.findByIdAndOrganization_Id(ACCOUNTANT_ID, ORG)).thenReturn(Optional.of(accountant()));
+
+        service.addLine(500L, lineInput(new BigDecimal("500")));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<java.util.Map<String, Object>> detail = ArgumentCaptor.forClass(java.util.Map.class);
+        verify(auditService).recordUserEvent(eq("ReceiveDocument"), eq(500L), any(), eq(EventType.LINE_ADDED), eq(ACCOUNTANT_ID), detail.capture());
+        assertThat(detail.getValue()).containsEntry("addedByAccountant", true);
     }
 
     @Test
@@ -454,6 +534,14 @@ class ReceiveDocumentServiceTest {
         u.setName("Bikram Nayak");
         u.setRole(Role.CASHIER);
         u.setHomeBranchId(BRANCH_ID);
+        return u;
+    }
+
+    private static AppUser accountant() {
+        AppUser u = new AppUser();
+        ReflectionTestUtils.setField(u, "id", ACCOUNTANT_ID);
+        u.setName("Priya Singh");
+        u.setRole(Role.ACCOUNTANT);
         return u;
     }
 

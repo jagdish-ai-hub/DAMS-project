@@ -8,10 +8,9 @@ import { reviewApi, type ReviewQueueItem, type ReviewType } from '../api/review'
 import { exportApi } from '../api/export'
 import { card, ErrorBanner, ghostBtn, primaryBtn, Modal, Badge, Skeleton, SkeletonRows, inr, fmtDate, fmtDateShort, inputStyle, th, td } from '../shell/ui'
 import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, type AnyDoc } from '../review/reviewShared'
+import AddPaymentModal from '../cashier/AddPaymentModal'
 import GlobalSearch from '../shared/GlobalSearch'
 import { useAuth } from '../auth/useAuth'
-import { useRiskMap, RiskDot, } from '../review/AiRiskBadge'
-import type { RiskScore } from '../api/ai'
 import SortModeControl, { groupItems, type SortMode } from '../review/SortModeControl'
 
 /**
@@ -35,6 +34,24 @@ function fmtGroupDate(key: string): string {
   return fmtDateShort(key)
 }
 
+/**
+ * Receipts only. 'awaiting' is the flat, unfiltered list (no bulk actions — just click in and
+ * Verify/Query one at a time). The other three are views over the same `items`, split by the
+ * same rule the org's direct-approve toggle already uses: no claim + status isn't "Credit" +
+ * every line cash-mode = 'cash' (the only bucket with bulk select/approve); everything else
+ * non-claim is 'credit'; anything with a claim type is 'claim'.
+ */
+type ReceiptBucket = 'awaiting' | 'cash' | 'credit' | 'claim'
+
+function inBucket(it: ReviewQueueItem, bucket: ReceiptBucket): boolean {
+  switch (bucket) {
+    case 'claim': return it.isClaim
+    case 'cash': return !it.isClaim && it.isCashEligible
+    case 'credit': return !it.isClaim && !it.isCashEligible
+    default: return true
+  }
+}
+
 export default function ReviewQueuePage() {
   const [type, setType] = useState<ReviewType>('receipt')
   const [items, setItems] = useState<ReviewQueueItem[] | null>(null)
@@ -48,16 +65,19 @@ export default function ReviewQueuePage() {
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [bulkBusy, setBulkBusy] = useState(false)
   const [exportBusy, setExportBusy] = useState(false)
-  const [sortMode, setSortMode] = useState<SortMode>('all')
+  const [sortMode, setSortMode] = useState<SortMode>('date')
   const [drilldown, setDrilldown] = useState(false)
-  // Receipts only: a separate list of SUBMITTED receipts an Accountant may approve directly
-  // (org opt-in — see Settings). Not a filter over `items`, a different endpoint/action.
-  const [directMode, setDirectMode] = useState(false)
-  const [directItems, setDirectItems] = useState<ReviewQueueItem[] | null>(null)
+  // Receipts only — see ReceiptBucket above. Always 'awaiting' for expenses/cash.
+  const [receiptBucket, setReceiptBucket] = useState<ReceiptBucket>('awaiting')
+  const [cashCreditOpen, setCashCreditOpen] = useState(false)
 
   const reload = useCallback(() => setTick((n) => n + 1), [])
-  const riskMap = useRiskMap(type)
-  const activeItems = type === 'receipt' && directMode ? directItems : items
+  const activeItems = type === 'receipt' && receiptBucket !== 'awaiting'
+    ? (items == null ? null : items.filter((it) => inBucket(it, receiptBucket)))
+    : items
+  const cashCount = (items ?? []).filter((it) => inBucket(it, 'cash')).length
+  const creditCount = (items ?? []).filter((it) => inBucket(it, 'credit')).length
+  const claimCount = (items ?? []).filter((it) => inBucket(it, 'claim')).length
 
   useEffect(() => {
     let live = true
@@ -67,15 +87,6 @@ export default function ReviewQueuePage() {
       .catch((e) => { if (live) setError(apiError(e, 'Could not load the review queue.')) })
     return () => { live = false }
   }, [type, tick])
-
-  useEffect(() => {
-    if (type !== 'receipt' || !directMode) return
-    let live = true
-    reviewApi.directApproveEligibleReceipts()
-      .then((r) => { if (live) setDirectItems(r.data) })
-      .catch((e) => { if (live) setError(apiError(e, 'Could not load the direct-approve list. Is it turned on in Settings?')) })
-    return () => { live = false }
-  }, [type, directMode, tick])
 
   useEffect(() => {
     if (selectedId == null) { setDoc(null); setDetailError(''); return }
@@ -88,9 +99,16 @@ export default function ReviewQueuePage() {
     return () => { live = false }
   }, [selectedId, type, tick])
 
+  // A click deep in a long list swaps in the detail pane in place — without this, the page
+  // stays scrolled to wherever the list click happened, hiding the detail's own top.
+  useEffect(() => {
+    if (selectedId != null) window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [selectedId])
+
   function pickType(t: ReviewType) {
     setType(t)
-    setDirectMode(false)
+    setReceiptBucket('awaiting')
+    setCashCreditOpen(false)
     setSelectedId(null)
     setSelectedIds([])
     setDoc(null)
@@ -98,12 +116,32 @@ export default function ReviewQueuePage() {
     setDrilldown(false)
   }
 
-  function toggleDirectMode() {
-    setDirectMode((v) => !v)
+  function resetSelection() {
     setSelectedId(null)
     setSelectedIds([])
     setDoc(null)
     setFlash('')
+  }
+
+  /** Claim Transaction is a flat toggle — click again to go back to the unfiltered list. */
+  function selectClaimBucket() {
+    setReceiptBucket((b) => (b === 'claim' ? 'awaiting' : 'claim'))
+    setCashCreditOpen(false)
+    resetSelection()
+  }
+
+  /** Cash/Credit expands into its two sub-buttons; closing it returns to the flat list. */
+  function toggleCashCreditGroup() {
+    const opening = !cashCreditOpen
+    setCashCreditOpen(opening)
+    setReceiptBucket(opening ? 'cash' : 'awaiting')
+    resetSelection()
+  }
+
+  function selectCashCreditSub(sub: 'cash' | 'credit') {
+    setReceiptBucket(sub)
+    setCashCreditOpen(true)
+    resetSelection()
   }
 
   async function handleBulkVerify() {
@@ -143,7 +181,7 @@ export default function ReviewQueuePage() {
   }
 
   async function handleExportSelected() {
-    const ids = selectedIds.length > 0 ? selectedIds : (directItems ?? []).map((it) => it.id)
+    const ids = selectedIds.length > 0 ? selectedIds : (activeItems ?? []).map((it) => it.id)
     if (ids.length === 0) return
     setExportBusy(true)
     setError('')
@@ -210,17 +248,22 @@ export default function ReviewQueuePage() {
             selectedId={selectedId}
             onType={pickType}
             onSelect={setSelectedId}
-            riskMap={riskMap}
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
             onToggleSelectAll={toggleSelectAll}
             onClearSelected={() => setSelectedIds([])}
-            bulkActionLabel={directMode ? 'Approve' : 'Verify'}
-            onBulkAction={directMode ? handleBulkDirectApprove : handleBulkVerify}
+            bulkActionLabel={type === 'expense' ? 'Verify' : 'Approve'}
+            onBulkAction={type === 'expense' ? handleBulkVerify : handleBulkDirectApprove}
             bulkBusy={bulkBusy}
-            directMode={directMode}
-            onToggleDirectMode={toggleDirectMode}
-            onExportSelected={directMode ? handleExportSelected : undefined}
+            receiptBucket={receiptBucket}
+            cashCreditOpen={cashCreditOpen}
+            cashCount={cashCount}
+            creditCount={creditCount}
+            claimCount={claimCount}
+            onSelectClaimBucket={selectClaimBucket}
+            onToggleCashCreditGroup={toggleCashCreditGroup}
+            onSelectCashCreditSub={selectCashCreditSub}
+            onExportSelected={type === 'receipt' && receiptBucket === 'cash' ? handleExportSelected : undefined}
             exportBusy={exportBusy}
           />
         </div>
@@ -278,7 +321,6 @@ function QueuePane(props: {
   selectedId: number | null
   onType: (t: ReviewType) => void
   onSelect: (id: number) => void
-  riskMap: Map<number, RiskScore>
   selectedIds: number[]
   onToggleSelect: (id: number) => void
   onToggleSelectAll: () => void
@@ -286,13 +328,28 @@ function QueuePane(props: {
   bulkActionLabel: string
   onBulkAction: () => void
   bulkBusy: boolean
-  directMode: boolean
-  onToggleDirectMode: () => void
+  receiptBucket: ReceiptBucket
+  cashCreditOpen: boolean
+  cashCount: number
+  creditCount: number
+  claimCount: number
+  onSelectClaimBucket: () => void
+  onToggleCashCreditGroup: () => void
+  onSelectCashCreditSub: (sub: 'cash' | 'credit') => void
   onExportSelected?: () => void
   exportBusy: boolean
 }) {
   const { items } = props
   const groups = useMemo(() => groupItems(items ?? [], props.sortMode), [items, props.sortMode])
+  // Bulk select/approve is reserved for the Cash bucket (receipts) and the Expenses tab's
+  // ordinary bulk-verify — nowhere else does a checkbox appear.
+  const showBulkCheckboxes = props.type === 'expense'
+    || (props.type === 'receipt' && props.receiptBucket === 'cash')
+  const bucketLabel = props.type !== 'receipt' ? 'Awaiting your review'
+    : props.receiptBucket === 'cash' ? 'Cash — eligible for direct approval'
+      : props.receiptBucket === 'credit' ? 'Credit'
+        : props.receiptBucket === 'claim' ? 'Claim transactions'
+          : 'Awaiting your review'
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', padding: 12, gap: 4 }}>
@@ -309,30 +366,44 @@ function QueuePane(props: {
         ))}
       </div>
       {props.type === 'receipt' && (
-        <div style={{ padding: '0 12px 10px' }}>
-          <button
-            type="button"
-            onClick={props.onToggleDirectMode}
-            title="Cash receipts that aren't a claim and aren't Credit — approve without Finance Manager review"
-            style={{
-              width: '100%', border: '1px solid var(--line)', borderRadius: 7, padding: '6px 0',
-              fontSize: '0.74rem', fontWeight: 700, cursor: 'pointer',
-              background: props.directMode ? 'var(--green-bg)' : 'transparent',
-              color: props.directMode ? 'var(--green)' : 'var(--muted)',
-            }}
-          >
-            {props.directMode ? '✓ Direct Approve (eligible cash receipts)' : 'Switch to Direct Approve list'}
-          </button>
+        <div style={{ padding: '0 12px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <BucketButton
+              label="Cash/Credit" count={props.cashCount + props.creditCount}
+              active={props.receiptBucket === 'cash' || props.receiptBucket === 'credit'}
+              onClick={props.onToggleCashCreditGroup}
+            />
+            <BucketButton
+              label="Claim Transaction" count={props.claimCount}
+              active={props.receiptBucket === 'claim'}
+              onClick={props.onSelectClaimBucket}
+            />
+          </div>
+          {props.cashCreditOpen && (
+            <div style={{ display: 'flex', gap: 6, paddingLeft: 12 }}>
+              <BucketButton
+                label="Cash" count={props.cashCount} small
+                active={props.receiptBucket === 'cash'}
+                onClick={() => props.onSelectCashCreditSub('cash')}
+                title="No claim, status isn't Credit, every line cash-mode — approve without Finance Manager review"
+              />
+              <BucketButton
+                label="Credit" count={props.creditCount} small
+                active={props.receiptBucket === 'credit'}
+                onClick={() => props.onSelectCashCreditSub('credit')}
+              />
+            </div>
+          )}
         </div>
       )}
       <div style={{ padding: '4px 14px 8px', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--faint)', fontWeight: 700 }}>
-        {props.directMode ? 'Eligible for direct approval' : 'Awaiting your review'}
+        {bucketLabel}
         <span style={{ background: 'var(--amber-bg)', color: 'var(--amber)', borderRadius: 999, fontSize: '0.66rem', padding: '1px 7px', marginLeft: 6 }}>
           {items?.length ?? 0}
         </span>
       </div>
 
-      {props.type !== 'cash' && items && items.length > 0 && (
+      {showBulkCheckboxes && items && items.length > 0 && (
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '6px 14px', borderBottom: '1px solid var(--line)', background: 'var(--bg)',
@@ -375,15 +446,14 @@ function QueuePane(props: {
               it={it}
               selected={props.selectedId === it.id}
               onSelect={() => props.onSelect(it.id)}
-              risk={props.riskMap.get(it.id)}
-              checked={props.type !== 'cash' ? props.selectedIds.includes(it.id) : undefined}
-              onToggleCheck={props.type !== 'cash' ? () => props.onToggleSelect(it.id) : undefined}
+              checked={showBulkCheckboxes ? props.selectedIds.includes(it.id) : undefined}
+              onToggleCheck={showBulkCheckboxes ? () => props.onToggleSelect(it.id) : undefined}
             />
           ))}
         </div>
       ))}
 
-      {props.type !== 'cash' && props.selectedIds.length > 0 && (
+      {showBulkCheckboxes && props.selectedIds.length > 0 && (
         <div style={{
           position: 'sticky', bottom: 0, zIndex: 10,
           background: 'var(--navy)', color: '#fff', padding: '10px 14px',
@@ -421,7 +491,7 @@ function QueuePane(props: {
               }}
             >
               {props.bulkBusy
-                ? (props.directMode ? 'Approving…' : 'Verifying…')
+                ? (props.type === 'expense' ? 'Verifying…' : 'Approving…')
                 : `${props.bulkActionLabel} (${props.selectedIds.length})`}
             </button>
           </div>
@@ -431,18 +501,43 @@ function QueuePane(props: {
   )
 }
 
+function BucketButton(props: { label: string; count: number; active: boolean; onClick: () => void; small?: boolean; title?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      title={props.title}
+      style={{
+        flex: 1, border: '1px solid var(--line)', borderRadius: 7,
+        padding: props.small ? '5px 0' : '6px 0',
+        fontSize: props.small ? '0.72rem' : '0.74rem', fontWeight: 700, cursor: 'pointer',
+        background: props.active ? 'var(--green-bg)' : 'transparent',
+        color: props.active ? 'var(--green)' : 'var(--muted)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+      }}
+    >
+      {props.active ? `✓ ${props.label}` : props.label}
+      <span style={{
+        background: props.active ? 'var(--green)' : 'var(--amber-bg)',
+        color: props.active ? '#fff' : 'var(--amber)',
+        borderRadius: 999, fontSize: '0.64rem', fontWeight: 800, padding: '1px 6px',
+      }}>
+        {props.count}
+      </span>
+    </button>
+  )
+}
+
 export function QueueRow({
   it,
   selected,
   onSelect,
-  risk,
   checked,
   onToggleCheck,
 }: {
   it: ReviewQueueItem
   selected: boolean
   onSelect: () => void
-  risk?: RiskScore
   checked?: boolean
   onToggleCheck?: () => void
 }) {
@@ -505,12 +600,11 @@ export function QueueRow({
         <div style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>
           {it.categoryName} · <strong style={{ fontVariantNumeric: 'tabular-nums' }}>{inr(it.amount)}</strong>
         </div>
-        {(it.workflowStatus === 'FM_QUERIED' || it.overLimit || it.hasOverride || (risk && risk.score > 0)) && (
+        {(it.workflowStatus === 'FM_QUERIED' || it.overLimit || it.hasOverride) && (
           <div style={{ display: 'flex', gap: 5, marginTop: 2 }}>
             {it.workflowStatus === 'FM_QUERIED' && <Tag>Queried by Finance</Tag>}
             {it.hasOverride && <Tag>Overridden</Tag>}
             {it.overLimit && <Tag>Above limit</Tag>}
-            {risk && risk.score > 0 && <RiskDot risk={risk} />}
           </div>
         )}
       </button>
@@ -733,6 +827,7 @@ function RecordDetail(props: {
   const [box, setBox] = useState<'query' | null>(null)
   const [boxText, setBoxText] = useState('')
   const [statusOptions, setStatusOptions] = useState<MasterRow[]>([])
+  const [addPayment, setAddPayment] = useState(false)
 
   // Only receipts carry a job-card business status; expenses and cash have their own.
   const receipt = !cash && !expense ? (doc as ReceiveDocument) : null
@@ -757,6 +852,9 @@ function RecordDetail(props: {
   const canResendToFm = wf === 'FM_QUERIED' && !isMaker
   const canClose = expense && (wf === 'VERIFIED' || wf === 'APPROVED') && !isMaker
   const overLimit = expense ? (doc as { overLimit: boolean }).overLimit : false
+  // rev 49: an Accountant may add a payment too, same window as the override tools —
+  // while they're actively reviewing it, not after it's moved on.
+  const canAddPayment = receipt != null && (canReview || canResendToFm)
 
   async function run(fn: () => Promise<unknown>, message: string, keepOpen = false) {
     setBusy(true)
@@ -842,6 +940,10 @@ function RecordDetail(props: {
             />
           )}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+            {canAddPayment && (
+              <button type="button" onClick={() => setAddPayment(true)} disabled={busy}
+                style={{ ...ghostBtn, minHeight: 36 }}>Add Payment</button>
+            )}
             {canReview && (
               <>
                 <button type="button" onClick={() => { setBox(box === 'query' ? null : 'query'); setBoxText(''); setError('') }}
@@ -864,6 +966,19 @@ function RecordDetail(props: {
             )}
           </div>
         </div>
+      )}
+
+      {addPayment && receipt && (
+        <AddPaymentModal
+          receiptId={receipt.id}
+          customerName={receipt.customerName ?? ''}
+          jobReference={receipt.jobCardReference}
+          documentNo={receipt.documentNo}
+          balanceDue={receipt.pendingAmount}
+          isClaim={receipt.isClaim}
+          onClose={() => setAddPayment(false)}
+          onDone={() => { setAddPayment(false); props.onDone(`${docNo} — payment added`, true) }}
+        />
       )}
     </div>
   )

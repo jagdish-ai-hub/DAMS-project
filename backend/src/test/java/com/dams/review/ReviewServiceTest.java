@@ -739,6 +739,47 @@ class ReviewServiceTest {
         assertThat(service.receiptQueue()).hasSize(2);
     }
 
+    /** rev 49: isClaim / isCashEligible power the Accountant's Cash/Credit/Claim Transaction split. */
+    @Test
+    void receiptQueue_flagsCashEligibleNonClaimReceipt() {
+        when(branchScope.allowedBranchIds()).thenReturn(Optional.of(java.util.Set.of(BRANCH)));
+        ReceiveDocument submitted = receiveDoc(WorkflowStatus.SUBMITTED);
+        when(receiveDocumentRepo.findByOrgIdAndWorkflowStatusInAndBranchIdInOrderBySubmittedAtAscIdAsc(
+            eq(ORG), eq(java.util.List.of(WorkflowStatus.SUBMITTED, WorkflowStatus.FM_QUERIED)), eq(java.util.Set.of(BRANCH))))
+            .thenReturn(java.util.List.of(submitted));
+        when(jobCardRepo.findByOrgIdAndIdIn(ORG, java.util.List.of(11L))).thenReturn(java.util.List.of(plainJobCard()));
+        when(settlementLineRepo.findByOrgIdAndReceiveDocumentIdInOrderByLineNoAsc(ORG, java.util.List.of(R_ID)))
+            .thenReturn(java.util.List.of(settlementLine(1, new BigDecimal("500"))));
+        when(settlementModeRepo.findByOrgIdAndCashTrue(ORG)).thenReturn(java.util.List.of(cashMode()));
+        when(receiveBusinessStatusRepo.findByOrgIdAndNameIgnoreCase(ORG, "Credit")).thenReturn(Optional.empty());
+
+        var result = service.receiptQueue();
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).isClaim()).isFalse();
+        assertThat(result.get(0).isCashEligible()).isTrue();
+    }
+
+    @Test
+    void receiptQueue_flagsClaimReceipt_asNotCashEligible() {
+        when(branchScope.allowedBranchIds()).thenReturn(Optional.of(java.util.Set.of(BRANCH)));
+        ReceiveDocument submitted = receiveDoc(WorkflowStatus.SUBMITTED);
+        when(receiveDocumentRepo.findByOrgIdAndWorkflowStatusInAndBranchIdInOrderBySubmittedAtAscIdAsc(
+            eq(ORG), eq(java.util.List.of(WorkflowStatus.SUBMITTED, WorkflowStatus.FM_QUERIED)), eq(java.util.Set.of(BRANCH))))
+            .thenReturn(java.util.List.of(submitted));
+        when(jobCardRepo.findByOrgIdAndIdIn(ORG, java.util.List.of(11L))).thenReturn(java.util.List.of(claimJobCard()));
+        when(settlementLineRepo.findByOrgIdAndReceiveDocumentIdInOrderByLineNoAsc(ORG, java.util.List.of(R_ID)))
+            .thenReturn(java.util.List.of());
+        when(settlementModeRepo.findByOrgIdAndCashTrue(ORG)).thenReturn(java.util.List.of());
+        when(receiveBusinessStatusRepo.findByOrgIdAndNameIgnoreCase(ORG, "Credit")).thenReturn(Optional.empty());
+
+        var result = service.receiptQueue();
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).isClaim()).isTrue();
+        assertThat(result.get(0).isCashEligible()).isFalse();
+    }
+
     @Test
     void verifiedReceiptQueue_returnsDocsWithTheirRealWorkflowStatus() {
         when(branchScope.allowedBranchIds()).thenReturn(Optional.of(java.util.Set.of(BRANCH)));

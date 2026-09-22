@@ -21,7 +21,11 @@ public record ReviewQueueItem(
     boolean overLimit,      // expenses only
     boolean hasOverride,    // a line amount has already been overridden
     Instant submittedAt,
-    String workflowStatus   // SUBMITTED | VERIFIED | APPROVED | CLOSED | FM_QUERIED — lets a
+    String workflowStatus,  // SUBMITTED | VERIFIED | APPROVED | CLOSED | FM_QUERIED — lets a
                             // "verified" list still show each row's real state
+    boolean isClaim,        // receipts only — job card carries a claim_type_id
+    boolean isCashEligible  // receipts only — the direct-approve rule: no claim, status isn't
+                            // "Credit", every settlement line is cash-mode (rev 49's
+                            // Cash/Credit/Claim Transaction split reuses this same predicate)
 ) {
 }

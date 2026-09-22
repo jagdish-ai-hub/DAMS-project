@@ -69,7 +69,7 @@ export default function FmQueuePage() {
   const [flash, setFlash] = useState('')
   const [tick, setTick] = useState(0)
   const [claimBucket, setClaimBucket] = useState<AgingBucket>('all')
-  const [sortMode, setSortMode] = useState<SortMode>('all')
+  const [sortMode, setSortMode] = useState<SortMode>('date')
 
   const reload = useCallback(() => setTick((n) => n + 1), [])
   const riskMap = useRiskMap(type)
@@ -107,6 +107,12 @@ export default function FmQueuePage() {
     load()
     return () => { live = false }
   }, [selectedId, type, tick])
+
+  // A click deep in a long list swaps in the detail pane in place — without this, the page
+  // stays scrolled to wherever the list click happened, hiding the detail's own top.
+  useEffect(() => {
+    if (selectedId != null) window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [selectedId])
 
   function pickType(t: ReviewType) {
     setType(t); setSelectedId(null); setDoc(null); setFlash('')

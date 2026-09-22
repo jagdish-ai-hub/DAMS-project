@@ -24,7 +24,10 @@ import org.springframework.security.access.prepost.PreAuthorize;
  * append to the job card's open document; submit / resubmit; Add Payment; edit or remove a
  * line while it is still a draft or queried; attach and list PDF/image receipts.
  *
- * Every write requires a CASHIER acting on a job card in their own home branch.
+ * Every write requires a CASHIER acting on a job card in their own home branch, with one
+ * exception (rev 49): an Accountant may also Add Payment while actively reviewing a document
+ * (SUBMITTED or FM_QUERIED), branch-scoped by their assigned branches — see
+ * {@code ReceiveDocumentService.addLine}.
  */
 @RestController
 @RequestMapping("/api/v1/receipts")
@@ -70,8 +73,9 @@ public class ReceiveDocumentController {
     }
 
     @PostMapping("/{id}/lines")
-    @Operation(summary = "Add Payment — append one settlement line to the open document")
-    @PreAuthorize("hasAuthority('CASHIER')")
+    @Operation(summary = "Add Payment — append one settlement line to the open document "
+        + "(Cashier in their home branch, or an Accountant while actively reviewing it)")
+    @PreAuthorize("hasAnyAuthority('CASHIER','ACCOUNTANT')")
     public ReceiveDocumentResponse addLine(@PathVariable Long id, @Valid @RequestBody SettlementLineInput input) {
         return receiveDocumentService.addLine(id, input);
     }

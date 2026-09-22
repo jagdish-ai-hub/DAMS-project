@@ -387,7 +387,7 @@ public class ReviewService {
             out.add(new ReviewQueueItem("cash", d.getId(), d.getDocumentNo(),
                 d.getBranchId(), branchCode(orgId, d.getBranchId(), branchCodes),
                 party, "Cash movement", d.getAmount(), false, false, d.getSubmittedAt(),
-                d.getWorkflowStatus().name()));
+                d.getWorkflowStatus().name(), false, false));
         }
         return out;
     }
@@ -922,6 +922,8 @@ public class ReviewService {
             jobCards.values().stream().map(JobCard::getCustomerId).toList());
         Map<Long, String> categoryNames = receiveCategoryNames(orgId);
         Map<Long, List<SettlementLine>> linesByDoc = groupSettlementLines(orgId, docs.stream().map(ReceiveDocument::getId).toList());
+        Long creditStatusId = creditStatusId(orgId);
+        Set<Long> cashModeIds = cashModeIds(orgId);
 
         List<ReviewQueueItem> out = new ArrayList<>(docs.size());
         for (ReceiveDocument d : docs) {
@@ -933,11 +935,13 @@ public class ReviewService {
             BigDecimal amount = lineSum.signum() > 0 ? lineSum
                 : (jc != null && jc.getInvoiceAmount() != null ? jc.getInvoiceAmount() : BigDecimal.ZERO);
             boolean hasOverride = lines.stream().anyMatch(l -> l.getOverriddenBy() != null);
+            boolean isClaim = jc != null && jc.getClaimTypeId() != null;
+            boolean isCashEligible = isDirectApproveEligible(jc, creditStatusId, cashModeIds, lines);
 
             out.add(new ReviewQueueItem("receipt", d.getId(), d.getDocumentNo(),
                 d.getBranchId(), branchCode(orgId, d.getBranchId(), branchCodes),
                 party, category, amount, false, hasOverride, d.getSubmittedAt(),
-                d.getWorkflowStatus().name()));
+                d.getWorkflowStatus().name(), isClaim, isCashEligible));
         }
         return out;
     }
@@ -962,7 +966,7 @@ public class ReviewService {
             out.add(new ReviewQueueItem("expense", d.getId(), d.getDocumentNo(),
                 d.getBranchId(), branchCode(orgId, d.getBranchId(), branchCodes),
                 party, category, amount, d.isOverLimit(), hasOverride, d.getSubmittedAt(),
-                d.getWorkflowStatus().name()));
+                d.getWorkflowStatus().name(), false, false));
         }
         return out;
     }
@@ -997,7 +1001,8 @@ public class ReviewService {
             Long docId = doc != null ? doc.getId() : jc.getId();
             out.add(new ReviewQueueItem("receipt", docId, ref, jc.getBranchId(),
                 code, party, category,
-                cc.getFinalAmount(), false, cc.isOverridden(), cc.getClosedAt(), "CLOSED"));
+                cc.getFinalAmount(), false, cc.isOverridden(), cc.getClosedAt(), "CLOSED",
+                jc.getClaimTypeId() != null, false));
         }
         return out;
     }

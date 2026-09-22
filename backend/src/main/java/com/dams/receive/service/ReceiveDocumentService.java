@@ -43,6 +43,7 @@ import com.dams.receive.repository.SettlementLineRepository;
 import com.dams.attachment.entity.ParentType;
 import com.dams.attachment.repository.AttachmentRepository;
 import com.dams.user.entity.AppUser;
+import com.dams.user.entity.Role;
 import com.dams.user.repository.AppUserRepository;
 import com.dams.vehicle.entity.Vehicle;
 import com.dams.vehicle.repository.VehicleRepository;
@@ -242,14 +243,23 @@ public class ReceiveDocumentService {
         return assemble(doc);
     }
 
-    /** "Add Payment" — one line onto the job card's open document. Never a second document. */
+    /**
+     * "Add Payment" — one line onto the job card's open document. Never a second document.
+     * Normally the Cashier, in their own home branch. An Accountant may also add one (rev 49)
+     * while they're actively reviewing the document (SUBMITTED or FM_QUERIED) — branch-scoped
+     * by their assigned branches, not a home branch. Either way, {@code last_modified_by} moves
+     * to whoever just added money, so that person can't be the one who verifies it afterward.
+     */
     @Transactional
     public ReceiveDocumentResponse addLine(Long documentId, SettlementLineInput input) {
         Long orgId = TenantContext.requireOrgId();
         ReceiveDocument doc = load(orgId, documentId);
         JobCard jobCard = jobCardRepo.findByIdAndOrgId(doc.getJobCardId(), orgId)
             .orElseThrow(() -> DamsException.notFound("Job card", doc.getJobCardId()));
-        AppUser me = paymentGuard.requireCanPost(orgId, jobCard);
+        boolean asAccountant = branchScope.currentRole() == Role.ACCOUNTANT;
+        AppUser me = asAccountant
+            ? requireAccountantCanAddLine(orgId, jobCard, doc)
+            : paymentGuard.requireCanPost(orgId, jobCard);
 
         if (doc.isSettled()) {
             throw DamsException.conflict("Document " + describe(doc) + " is settled — it accepts no more payments");
@@ -264,8 +274,13 @@ public class ReceiveDocumentService {
 
         SettlementLine line = appendLines(orgId, doc, List.of(input), me.getId(), jobCard.getClaimTypeId() != null).get(0);
         doc.setLastModifiedBy(me.getId());
-        auditService.recordUserEvent(ENTITY, doc.getId(), doc.getBranchId(), EventType.LINE_ADDED, me.getId(),
-            orderedDetail("lineNo", line.getLineNo(), "amount", line.getAmount()));
+        Map<String, Object> lineAddedDetail = new LinkedHashMap<>();
+        lineAddedDetail.put("lineNo", line.getLineNo());
+        lineAddedDetail.put("amount", line.getAmount());
+        if (asAccountant) {
+            lineAddedDetail.put("addedByAccountant", true);
+        }
+        auditService.recordUserEvent(ENTITY, doc.getId(), doc.getBranchId(), EventType.LINE_ADDED, me.getId(), lineAddedDetail);
 
         // A new payment on an already-reviewed document means the Accountant/FM approved a
         // smaller picture than what's now on record — reopen it for re-review rather than
@@ -664,6 +679,24 @@ public class ReceiveDocumentService {
     private String referenceOf(Long orgId, JobCard jc) {
         String code = branchRepo.findByIdAndOrgId(jc.getBranchId(), orgId).map(Branch::getCode).orElse("?");
         return JobCardResponse.reference(code, jc.getId());
+    }
+
+    /**
+     * An Accountant may add a settlement line (rev 49) only while they're actively reviewing
+     * the document — SUBMITTED or FM_QUERIED — and only in one of their assigned branches
+     * ({@link BranchScope#canSeeBranch}, not a single home branch like the Cashier).
+     */
+    private AppUser requireAccountantCanAddLine(Long orgId, JobCard jobCard, ReceiveDocument doc) {
+        AppUser me = userRepo.findByIdAndOrganization_Id(branchScope.currentUserId(), orgId)
+            .orElseThrow(() -> DamsException.forbidden("The signed-in user is not part of this organization"));
+        if (!branchScope.canSeeBranch(jobCard.getBranchId())) {
+            throw DamsException.forbidden("You are not assigned to the branch of job card " + referenceOf(orgId, jobCard));
+        }
+        if (doc.getWorkflowStatus() != WorkflowStatus.SUBMITTED && doc.getWorkflowStatus() != WorkflowStatus.FM_QUERIED) {
+            throw DamsException.conflict("Document " + describe(doc) + " is " + doc.getWorkflowStatus()
+                + " — an Accountant can only add a payment while a document is awaiting their review");
+        }
+        return me;
     }
 
     private static String describe(ReceiveDocument doc) {

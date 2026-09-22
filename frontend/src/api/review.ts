@@ -19,6 +19,11 @@ export interface ReviewQueueItem {
   hasOverride: boolean
   submittedAt: string | null
   workflowStatus: string
+  /** Receipts only — job card carries a claim type. */
+  isClaim: boolean
+  /** Receipts only — the direct-approve rule: no claim, status isn't "Credit", every
+   * settlement line is cash-mode. Powers the Cash/Credit/Claim Transaction split. */
+  isCashEligible: boolean
 }
 
 /** The Finance Manager's queue for one document type (open claims / recently closed are receipts only). */
