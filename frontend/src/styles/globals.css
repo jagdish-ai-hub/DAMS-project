@@ -27,16 +27,32 @@
     --purple:   #6B3FA0;
     --purple-bg:#EFE7FB;
     --radius:   10px;
-    --shadow:   0 1px 2px rgba(16,24,40,.04), 0 2px 8px rgba(16,24,40,.05);
-    --shadow-lift: 0 4px 14px rgba(16,24,40,.10), 0 2px 6px rgba(16,24,40,.06);
-    --font:     'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    --radius-sm: 8px;
+    --radius-lg: 14px;
+
+    /* Depth — layered, navy-tinted shadows: a hairline for the edge, a close contact shadow,
+       and a wide soft ambient. Only shadow values changed; every colour token is as before. */
+    --shadow-xs:   0 1px 2px rgba(16,24,40,.06);
+    --shadow:      0 0 0 1px rgba(16,24,40,.015), 0 1px 2px rgba(16,24,40,.04), 0 4px 14px -4px rgba(31,56,100,.08);
+    --shadow-lift: 0 1px 2px rgba(16,24,40,.05), 0 10px 24px -6px rgba(31,56,100,.16), 0 24px 48px -18px rgba(16,24,40,.14);
+    --shadow-pop:  0 0 0 1px rgba(16,24,40,.06), 0 16px 36px -8px rgba(16,24,40,.24), 0 40px 80px -24px rgba(31,56,100,.30);
+    --ring:        0 0 0 3px var(--navy3), 0 0 0 1px var(--navy2);
+
+    /* Typeface — the real family is set at runtime from the Super Admin's choice (lib/fonts.ts). */
+    --font:     'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    --font-features: 'kern';
     --font-mono: Consolas, 'SFMono-Regular', 'Liberation Mono', Menlo, Courier, monospace;
 
-    /* Motion — one short scale for the whole app so nothing feels sluggish. */
+    /* Motion — one short scale for the whole app so nothing feels sluggish. Entrances decelerate
+       (expo-out), exits are quicker and accelerate away; the spring has a whisper of overshoot. */
     --dur-fast: 120ms;
     --dur:      190ms;
-    --dur-slow: 260ms;
-    --ease:     cubic-bezier(.2, .6, .2, 1);
+    --dur-slow: 280ms;
+    --dur-exit: 170ms;
+    --ease:        cubic-bezier(.2, .6, .2, 1);
+    --ease-out:    cubic-bezier(.16, 1, .3, 1);
+    --ease-in:     cubic-bezier(.4, 0, 1, 1);
+    --ease-spring: cubic-bezier(.34, 1.36, .64, 1);
   }
 
   *, *::before, *::after {
@@ -45,13 +61,30 @@
     padding: 0;
   }
 
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
   body {
     font-family: var(--font);
+    font-feature-settings: var(--font-features);
+    /* Every figure in a finance app should line up in its column. */
+    font-variant-numeric: tabular-nums;
     background: var(--bg);
     color: var(--ink);
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
     font-size: 14px;
+    -webkit-tap-highlight-color: transparent;
   }
+
+  h1, h2, h3 { letter-spacing: -0.012em; }
+
+  ::selection { background: var(--navy3); color: var(--navy); }
+
+  input[type='checkbox'], input[type='radio'] { accent-color: var(--navy); }
 
   button {
     font-family: inherit;
@@ -133,36 +166,126 @@
    Motion & interaction polish. Everything here is scoped to the authenticated
    app frame (.dams-app) so the login / accept-invite screens keep their own look.
    Keyframes and the reduced-motion guard are global.
+
+   Most visuals in this app are inline styles, which beat any class. So this layer only
+   touches properties nothing sets inline — transform, opacity, filter, outline, box-shadow on
+   elements without one, ::before/::after — or uses !important deliberately (commented).
    ───────────────────────────────────────────────────────────────────────────── */
 
 @keyframes dams-fade-in   { from { opacity: 0 }               to { opacity: 1 } }
-@keyframes dams-slide-up   { from { opacity: 0; transform: translateY(12px) scale(.98) } to { opacity: 1; transform: none } }
+@keyframes dams-slide-up   { from { opacity: 0; transform: translateY(14px) scale(.965) } to { opacity: 1; transform: none } }
 @keyframes dams-slide-in-right { from { transform: translateX(100%) } to { transform: translateX(0) } }
-@keyframes dams-scale-in   { from { opacity: 0; transform: translateY(-6px) scale(.96) } to { opacity: 1; transform: none } }
+@keyframes dams-slide-in-left  { from { transform: translateX(-100%) } to { transform: none } }
+@keyframes dams-scale-in   { from { opacity: 0; transform: translateY(-6px) scale(.94) } to { opacity: 1; transform: none } }
 @keyframes dams-notice-in  { from { opacity: 0; transform: translateY(-8px) }  to { opacity: 1; transform: none } }
-@keyframes dams-route-in   { from { opacity: 0; transform: translateY(6px) }   to { opacity: 1; transform: none } }
-@keyframes dams-toast-in   { from { opacity: 0; transform: translateY(10px) }  to { opacity: 1; transform: none } }
+@keyframes dams-route-in   { from { opacity: 0; transform: translateY(8px) }   to { opacity: 1; transform: none } }
+@keyframes dams-rise       { from { opacity: 0; transform: translateY(10px) }  to { opacity: 1; transform: none } }
+@keyframes dams-row-in     { from { opacity: 0; transform: translateY(4px) }   to { opacity: 1; transform: none } }
+@keyframes dams-toast-in   { from { opacity: 0; transform: translateY(16px) scale(.96) } to { opacity: 1; transform: none } }
 @keyframes dams-spin       { to { transform: rotate(360deg) } }
 @keyframes dams-shimmer    { from { background-position: 200% 0 } to { background-position: -200% 0 } }
 @keyframes dams-fade-out        { from { opacity: 1 } to { opacity: 0 } }
 @keyframes dams-slide-out-right { from { transform: translateX(0) } to { transform: translateX(100%) } }
+@keyframes dams-slide-out-left  { from { transform: none } to { transform: translateX(-100%) } }
+@keyframes dams-modal-out  { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(8px) scale(.975) } }
+@keyframes dams-menu-out   { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(-4px) scale(.96) } }
+@keyframes dams-toast-out  { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(8px) scale(.98) } }
+@keyframes dams-sheet-in   { from { transform: translateY(100%) } to { transform: none } }
+@keyframes dams-sheet-out  { from { transform: none } to { transform: translateY(100%) } }
+@keyframes dams-shake      { 0%, 100% { transform: none } 20% { transform: translateX(-4px) } 40% { transform: translateX(4px) } 60% { transform: translateX(-2px) } 80% { transform: translateX(2px) } }
+@keyframes dams-grow-x     { from { transform: scaleX(0) } to { transform: scaleX(1) } }
+@keyframes dams-meter      { from { transform: scaleX(0) } to { transform: scaleX(1) } }
+@keyframes dams-drift      { 0%, 100% { transform: translate(0, 0) scale(1) } 50% { transform: translate(-60px, -40px) scale(1.15) } }
+@keyframes dams-countdown  { from { transform: scaleX(1) } to { transform: scaleX(0) } }
 
 /* Entrance helpers used by shared components. */
-.dams-anim-backdrop { animation: dams-fade-in var(--dur) var(--ease) both; }
-.dams-anim-modal    { animation: dams-slide-up var(--dur-slow) var(--ease) both; }
-.dams-anim-drawer   { animation: dams-slide-in-right var(--dur-slow) var(--ease) both; }
-.dams-anim-menu     { animation: dams-scale-in var(--dur-fast) var(--ease) both; transform-origin: top right; }
-.dams-anim-notice   { animation: dams-notice-in var(--dur) var(--ease) both; }
-.dams-anim-toast    { animation: dams-toast-in var(--dur) var(--ease) both; }
-.dams-route-fade    { animation: dams-route-in var(--dur) var(--ease) both; }
-.dams-anim-backdrop-out { animation: dams-fade-out var(--dur) var(--ease) both; }
-.dams-anim-drawer-out   { animation: dams-slide-out-right var(--dur-slow) var(--ease) both; }
+.dams-anim-backdrop { animation: dams-fade-in var(--dur) var(--ease) backwards; }
+.dams-anim-modal    { animation: dams-slide-up var(--dur-slow) var(--ease-spring) backwards; }
+.dams-anim-drawer   { animation: dams-slide-in-right var(--dur-slow) var(--ease-out) backwards; }
+.dams-anim-nav      { animation: dams-slide-in-left var(--dur-slow) var(--ease-out) backwards; }
+.dams-anim-menu     { animation: dams-scale-in var(--dur) var(--ease-spring) backwards; transform-origin: top right; }
+.dams-anim-notice   { animation: dams-notice-in var(--dur-slow) var(--ease-out) backwards; }
+.dams-anim-toast    { animation: dams-toast-in var(--dur-slow) var(--ease-spring) backwards; }
+.dams-anim-error    { animation: dams-notice-in var(--dur) var(--ease-out) backwards, dams-shake 360ms var(--ease) 120ms 1; }
+.dams-route-fade    { animation: dams-route-in var(--dur-slow) var(--ease-out) backwards; }
+/* Help drawer's own exit (it stays mounted 240ms while closing — HelpDrawer.tsx). */
+.dams-anim-backdrop-out { animation: dams-fade-out 220ms var(--ease-in) both; }
+.dams-anim-drawer-out   { animation: dams-slide-out-right 220ms var(--ease-in) both; }
 
-/* Loading skeleton — a soft shimmer sweep. */
+/* Frosted overlay behind every modal / drawer — the page stays visible but recedes. */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .dams-backdrop {
+    -webkit-backdrop-filter: blur(6px) saturate(140%);
+    backdrop-filter: blur(6px) saturate(140%);
+  }
+}
+
+/* Screen content cascades in: the page's top-level blocks rise one after another.
+   :where() keeps this at zero specificity so any component's own animation class still wins. */
+:where(.dams-route-fade > * > *) { animation: dams-rise var(--dur-slow) var(--ease-out) backwards; }
+:where(.dams-route-fade > * > *:nth-child(2)) { animation-delay: 40ms; }
+:where(.dams-route-fade > * > *:nth-child(3)) { animation-delay: 80ms; }
+:where(.dams-route-fade > * > *:nth-child(4)) { animation-delay: 120ms; }
+:where(.dams-route-fade > * > *:nth-child(5)) { animation-delay: 160ms; }
+:where(.dams-route-fade > * > *:nth-child(n+6)) { animation-delay: 200ms; }
+
+/* ── Exit ghosts (shell/motion.tsx useExitGhost) ──────────────────────────────
+   A closed overlay leaves an inert copy of itself here for one exit animation. Every entrance
+   animation inside the copy is frozen first, then the exit is applied to the parts that move. */
+.dams-exit-ghost { position: fixed; inset: 0; z-index: 90; pointer-events: none; }
+.dams-exit-ghost * { animation: none !important; }
+.dams-exit-ghost > * { animation: dams-fade-out var(--dur-exit) var(--ease-in) both !important; }
+.dams-exit-ghost .dams-anim-modal { animation: dams-modal-out var(--dur-exit) var(--ease-in) both !important; }
+.dams-exit-ghost .dams-anim-nav   { animation: dams-slide-out-left var(--dur-exit) var(--ease-in) both !important; }
+.dams-exit-ghost > .dams-anim-menu  { animation: dams-menu-out var(--dur-exit) var(--ease-in) both !important; }
+.dams-exit-ghost > .dams-anim-toast { animation: dams-toast-out var(--dur-exit) var(--ease-in) both !important; }
+
+/* ── Modal ─────────────────────────────────────────────────────────────────── */
+.dams-modal-card { position: relative; }
+/* Phones: the modal becomes a bottom sheet — same content, same buttons, thumb-reachable.
+   !important: the card's margin/radius/max-height and the backdrop padding are inline. */
+@media (max-width: 640px) {
+  .dams-modal-backdrop { padding: 12px 0 0 !important; align-items: flex-end; }
+  .dams-modal-backdrop > .dams-modal-card {
+    margin: auto 0 0 !important;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important;
+    max-height: calc(100dvh - 24px) !important;
+    padding-bottom: env(safe-area-inset-bottom);
+    animation: dams-sheet-in var(--dur-slow) var(--ease-out) backwards;
+  }
+  .dams-modal-card::before {
+    content: ''; position: absolute; top: 6px; left: 50%; width: 36px; height: 4px;
+    margin-left: -18px; border-radius: 999px; background: var(--line); z-index: 2;
+  }
+  .dams-exit-ghost .dams-modal-backdrop > .dams-modal-card {
+    animation: dams-sheet-out var(--dur-exit) var(--ease-in) both !important;
+  }
+}
+/* Header hairline appears only once the body has scrolled under it. */
+.dams-modal-head { transition: box-shadow var(--dur) var(--ease); position: relative; z-index: 1; }
+.dams-modal-head[data-scrolled] { box-shadow: 0 6px 12px -10px rgba(16,24,40,.35); }
+
+/* Clickable overview boxes (StatBox). Border/background are inline, so the hover cue uses
+   outline + box-shadow + transform, which nothing inline sets. */
+.dams-statbox {
+  transition: outline-color var(--dur-fast) var(--ease), box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease-out);
+  outline: 1px solid transparent; outline-offset: -1px;
+}
+.dams-statbox:hover { outline-color: var(--navy2); box-shadow: var(--shadow-lift); transform: translateY(-2px); }
+.dams-statbox:active { transform: translateY(0) scale(.99); }
+.dams-statbox:focus-visible { outline: 2px solid var(--navy2); outline-offset: 1px; }
+.dams-meter { transform-origin: left center; animation: dams-meter 900ms var(--ease-out) 150ms backwards; }
+
+/* Owner dashboard KPI tiles — the clickable ones lift like StatBox (box-shadow is inline → !important). */
+.dams-kpi { transition: transform var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease); }
+.dams-kpi[data-clickable]:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift) !important; }
+.dams-kpi[data-clickable]:active { transform: translateY(0) scale(.99); }
+
+/* Loading skeleton — a soft, wide light sweep. */
 .dams-skeleton {
-  background: linear-gradient(90deg, var(--gray-bg) 25%, #f4f6f9 37%, var(--gray-bg) 63%);
-  background-size: 200% 100%;
-  animation: dams-shimmer 1.4s ease-in-out infinite;
+  background: linear-gradient(100deg, var(--gray-bg) 30%, #f7f9fc 50%, var(--gray-bg) 70%);
+  background-size: 220% 100%;
+  animation: dams-shimmer 1.6s ease-in-out infinite;
 }
 
 /* Inline button spinner. */
@@ -170,6 +293,13 @@
   display: inline-block; width: 1em; height: 1em; vertical-align: -0.15em;
   border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
   animation: dams-spin 0.6s linear infinite;
+}
+
+/* Toast auto-dismiss meter (Cashier "saved" flash). */
+.dams-toast-meter {
+  position: absolute; left: 10px; right: 10px; bottom: 4px; height: 2px; border-radius: 2px;
+  background: rgba(255,255,255,.35); transform-origin: left center;
+  animation: dams-countdown 3500ms linear backwards;
 }
 
 /* Interaction feedback for the app frame. */
@@ -183,11 +313,11 @@
               box-shadow var(--dur) var(--ease),
               color var(--dur) var(--ease),
               filter var(--dur-fast) var(--ease),
-              transform var(--dur-fast) var(--ease),
+              transform var(--dur-fast) var(--ease-out),
               opacity var(--dur) var(--ease);
 }
-.dams-app button:not(:disabled):hover { filter: brightness(1.05); }
-.dams-app button:not(:disabled):active { transform: scale(.975); filter: brightness(.97); }
+.dams-app button:not(:disabled):hover { filter: brightness(1.06); }
+.dams-app button:not(:disabled):active { transform: scale(.97); filter: brightness(.96); transition-duration: 60ms; }
 
 /* Visible keyboard focus everywhere (many inputs set outline:none inline). */
 .dams-app button:focus-visible,
@@ -198,27 +328,92 @@
   outline: 2px solid var(--navy2);
   outline-offset: 2px;
 }
-/* Soft focus ring on text fields (box-shadow isn't set inline, so this lands). */
+/* Text fields: a quiet hover, then a crisp two-tone focus ring. Border colour is inline on
+   these inputs, so the hover/focus border needs !important; box-shadow isn't set inline. */
+.dams-app input:not([type=checkbox]):not([type=radio]):not([type=range]):not(:disabled):not(:focus):hover,
+.dams-app select:not(:disabled):not(:focus):hover,
+.dams-app textarea:not(:disabled):not(:focus):hover {
+  border-color: color-mix(in srgb, var(--line), var(--navy2) 28%) !important;
+}
 .dams-app input:not([type=checkbox]):not([type=radio]):focus,
 .dams-app select:focus,
 .dams-app textarea:focus {
-  box-shadow: 0 0 0 3px var(--navy3);
+  box-shadow: var(--ring);
+  border-color: var(--navy2) !important;
 }
+.dams-app input::placeholder, .dams-app textarea::placeholder { color: var(--faint); opacity: 1; }
 
+/* Topbar — a whisper of sheen on the same navy, a hairline highlight, and depth on scroll.
+   !important: the header's background shorthand is inline, which would reset the image. */
+.dams-app > header {
+  background-image: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,0) 70%) !important;
+  box-shadow: inset 0 -1px 0 rgba(255,255,255,.07);
+  transition: box-shadow var(--dur-slow) var(--ease);
+}
+.dams-app > header[data-scrolled] {
+  box-shadow: inset 0 -1px 0 rgba(255,255,255,.07), 0 8px 24px -10px rgba(16,24,40,.45);
+}
 /* Topbar nav — hover on the inactive links (active carries aria-current). */
+.dams-app header nav a { position: relative; }
 .dams-app header nav a:not([aria-current]):hover {
   background: rgba(255, 255, 255, .12) !important;
 }
+.dams-app header nav a[aria-current]::after {
+  content: ''; position: absolute; left: 12px; right: 12px; bottom: 1px; height: 2px;
+  border-radius: 2px; background: rgba(255,255,255,.8);
+  transform-origin: center; animation: dams-grow-x var(--dur-slow) var(--ease-out) backwards;
+}
+/* Hamburger ↔ close: the icon turns as it swaps. */
+.dams-burger svg { transition: transform var(--dur-slow) var(--ease-spring); }
+.dams-burger[aria-expanded='true'] svg { transform: rotate(90deg); }
 
-/* Table rows — a quiet hover so long rows are easy to track across. */
+/* Mobile nav drawer — links arrive one after another. */
+.dams-mobile-nav > a { animation: dams-rise var(--dur-slow) var(--ease-out) backwards; }
+.dams-mobile-nav > a:nth-of-type(2) { animation-delay: 40ms; }
+.dams-mobile-nav > a:nth-of-type(3) { animation-delay: 80ms; }
+.dams-mobile-nav > a:nth-of-type(4) { animation-delay: 120ms; }
+.dams-mobile-nav > a:nth-of-type(n+5) { animation-delay: 160ms; }
+.dams-mobile-nav > a:not([aria-current]):hover { background: rgba(255,255,255,.1) !important; }
+
+/* Account menu Log out — a soft tinted pill on hover (background is inline → !important). */
+.dams-menu-item:hover { background: var(--red-bg) !important; }
+
+/* Table rows — a quiet tint plus a navy edge on the row being read, and a gentle arrival. */
 .dams-app tbody tr { transition: background-color var(--dur-fast) var(--ease); }
-.dams-app tbody tr:hover { background: rgba(31, 56, 100, .04); }
+.dams-app tbody tr:hover { background: rgba(31, 56, 100, .035); }
+.dams-app tbody tr:hover > td:first-child { box-shadow: inset 2px 0 0 var(--navy2); }
+.dams-app tbody tr { animation: dams-row-in var(--dur-slow) var(--ease-out) backwards; }
+.dams-app tbody tr:nth-child(2) { animation-delay: 20ms; }
+.dams-app tbody tr:nth-child(3) { animation-delay: 40ms; }
+.dams-app tbody tr:nth-child(4) { animation-delay: 60ms; }
+.dams-app tbody tr:nth-child(5) { animation-delay: 80ms; }
+.dams-app tbody tr:nth-child(6) { animation-delay: 100ms; }
+.dams-app tbody tr:nth-child(7) { animation-delay: 120ms; }
+.dams-app tbody tr:nth-child(n+8) { animation-delay: 140ms; }
+
+/* Scrollbars inside the app — thin, rounded, and only as dark as they need to be. */
+.dams-app * { scrollbar-width: thin; scrollbar-color: rgba(16,24,40,.18) transparent; }
+
+/* ── Login / accept-invite ─────────────────────────────────────────────────── */
+.dams-auth-card { animation: dams-rise 420ms var(--ease-out) 60ms backwards; }
+.dams-login-glow { animation: dams-drift 22s ease-in-out infinite; }
+.dams-login-brand > div:first-child { animation: dams-rise 520ms var(--ease-out) backwards; }
+.dams-auth input:not([type=checkbox]):focus { box-shadow: var(--ring); }
+.dams-auth button { transition: filter var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease-out); }
+.dams-auth button:not(:disabled):hover { filter: brightness(1.06); }
+.dams-auth button:not(:disabled):active { transform: scale(.98); }
+/* Developer credit under the sign-in card (text-decoration is inline → !important). */
+.dams-credit { animation: dams-fade-in 600ms var(--ease-out) 400ms backwards; }
+.dams-credit a { transition: color var(--dur) var(--ease); }
+.dams-credit a:hover { color: var(--navy) !important; text-decoration: underline !important; text-underline-offset: 3px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: .001ms !important;
+    animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: .001ms !important;
   }
   .dams-app button:not(:disabled):active { transform: none; }
+  .dams-statbox:hover, .dams-kpi[data-clickable]:hover { transform: none; }
 }

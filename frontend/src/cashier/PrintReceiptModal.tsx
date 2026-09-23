@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useExitGhost } from '../shell/motion'
 import type { ReceiveDocument } from '../api/receipts'
 import { inr, fmtDate, fmtDateTime, ghostBtn, primaryBtn } from '../shell/ui'
 import { Printer, X } from 'lucide-react'
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function PrintReceiptModal({ doc, onClose }: Props) {
+  const ghostRef = useExitGhost<HTMLDivElement>()
   const [printFormat, setPrintFormat] = useState<'thermal' | 'a4'>('thermal')
 
   useEffect(() => {
@@ -72,8 +74,9 @@ export default function PrintReceiptModal({ doc, onClose }: Props) {
         role="dialog"
         aria-modal="true"
         aria-label="Print Payment Receipt"
+        ref={ghostRef}
         onMouseDown={onClose}
-        className="dams-anim-backdrop"
+        className="dams-anim-backdrop dams-backdrop dams-modal-backdrop"
         style={{
           position: 'fixed', inset: 0, zIndex: 70, background: 'rgba(16,24,40,.55)',
           display: 'flex', justifyContent: 'center', padding: 'clamp(12px, 3vh, 32px) clamp(10px, 3vw, 16px)',
@@ -82,10 +85,10 @@ export default function PrintReceiptModal({ doc, onClose }: Props) {
       >
       <div
         onMouseDown={(e) => e.stopPropagation()}
-        className="dams-anim-modal no-print"
+        className="dams-anim-modal dams-modal-card no-print"
         style={{
           background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12,
-          boxShadow: 'var(--shadow-lift)', width: '100%', maxWidth: 672, margin: 'auto 0',
+          boxShadow: 'var(--shadow-pop)', width: '100%', maxWidth: 672, margin: 'auto 0',
           maxHeight: 'min(calc(100dvh - 32px), 860px)', display: 'flex', flexDirection: 'column',
         }}
       >

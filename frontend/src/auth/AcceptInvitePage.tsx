@@ -53,7 +53,7 @@ export default function AcceptInvitePage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
+    <div className="dams-auth" style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
       {/* Navy topbar */}
       <div style={{
         background: 'var(--navy)',
@@ -81,7 +81,7 @@ export default function AcceptInvitePage() {
         justifyContent: 'center',
         padding: '40px 16px',
       }}>
-        <div style={{
+        <div className="dams-auth-card" style={{
           background: 'var(--surface)',
           border: '1px solid var(--line)',
           borderRadius: 'var(--radius)',

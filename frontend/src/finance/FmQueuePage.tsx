@@ -5,13 +5,14 @@ import { cashApi, type CashDocument } from '../api/cash'
 import { reviewApi, type FmQueue, type ReviewQueueItem, type ReviewType } from '../api/review'
 import { jobCardsApi } from '../api/jobCards'
 import { mastersApi, type MasterRow } from '../api/masters'
-import { card, Badge, ErrorBanner, ghostBtn, primaryBtn, inputStyle, Modal, Skeleton, SkeletonRows, inr, fmtDateShort } from '../shell/ui'
+import { card, ErrorBanner, ghostBtn, primaryBtn, inputStyle, Modal, Skeleton, SkeletonRows, inr, fmtDateShort } from '../shell/ui'
 import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, type AnyDoc } from '../review/reviewShared'
 import GlobalSearch from '../shared/GlobalSearch'
 import { useAuth } from '../auth/useAuth'
 import AiClaimBanner from './AiClaimBanner'
 import { useRiskMap, RiskDot } from '../review/AiRiskBadge'
 import SortModeControl, { groupItems, type SortMode } from '../review/SortModeControl'
+import { StatBox } from '../review/StatBox'
 
 /**
  * Finance Manager queue (intial ui prototypes/review-close.html, FM view). Approve / query /
@@ -180,6 +181,7 @@ export default function FmQueuePage() {
               claimFilter={claimBucket}
               onClaimFilterChange={setClaimBucket}
               totalCount={queue.openClaims.length}
+              sortMode={sortMode}
             />
           )}
           <Section title="Awaiting final approval" items={awaitingRegular} selectedId={selectedId} onSelect={setSelectedId} riskMap={riskMap} sortMode={sortMode} />
@@ -285,7 +287,9 @@ function Section(props: {
                   <span style={{ fontFamily: 'Consolas, monospace', fontSize: '0.7rem', fontWeight: 700, color: 'var(--navy2)' }}>
                     {it.documentNo ?? 'draft'}
                   </span>
-                  <span style={{ marginLeft: 'auto', fontSize: '0.68rem', color: 'var(--faint)' }}>{it.branchCode}</span>
+                  <span style={{ marginLeft: 'auto', fontSize: '0.68rem', color: 'var(--faint)', whiteSpace: 'nowrap' }}>
+                    {it.submittedAt ? `${fmtDateShort(it.submittedAt)} · ` : ''}{it.branchCode}
+                  </span>
                 </div>
                 <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{it.partyName}</div>
                 <div style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>
@@ -293,13 +297,6 @@ function Section(props: {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
                   {it.hasOverride && <Tag>Overridden</Tag>}
-                  {/* A claim is listed from submission (AGENT.md closing-rule #3), so the row must
-                      say whether it still needs approving or is ready to close. */}
-                  {props.showAging && (
-                    <Badge tone={it.workflowStatus === 'APPROVED' ? 'green' : 'amber'}>
-                      {it.workflowStatus === 'APPROVED' ? 'Ready to close' : `Needs approval · ${it.workflowStatus}`}
-                    </Badge>
-                  )}
                   {props.showAging && <AgingBadge days={claimAgeDays(it.submittedAt)} />}
                   {props.riskMap?.get(it.id) != null && props.riskMap.get(it.id)!.score > 0 && (
                     <RiskDot risk={props.riskMap.get(it.id)} />
@@ -345,8 +342,11 @@ function Overview({
     return { b0_30, b31_60, b61_90, b90_plus }
   }, [openClaimsList])
 
-  // Open claims are listed from submission, so only the approved ones can actually be closed.
-  const readyToClose = openClaimsList.filter((c) => c.workflowStatus === 'APPROVED').length
+  // Close Claim is itself the approval (rev 49), so a claim is closable once the Accountant
+  // has verified it; anything earlier is still with the Accountant.
+  const readyToClose = openClaimsList.filter((c) => c.workflowStatus === 'VERIFIED' || c.workflowStatus === 'APPROVED').length
+  const claimsTotal = openClaimsList.reduce((a, c) => a + c.amount, 0)
+  const avg = (sum: number, n: number) => (n === 0 ? '—' : inr(Math.round(sum / n)))
 
   return (
     <div>
@@ -354,21 +354,20 @@ function Overview({
       <div style={{ fontSize: '0.82rem', color: 'var(--muted)', marginBottom: 16 }}>
         Reviewing {type === 'receipt' ? 'receipts' : type === 'expense' ? 'expenses' : 'cash movements'}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 12 }}>
-        <div style={{ ...card, borderTop: '3px solid var(--navy2)' }}>
-          <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>Awaiting final approval</div>
-          <div style={{ fontSize: '1.4rem', fontWeight: 800, marginTop: 4 }}>{count}</div>
-          <div style={{ fontSize: '0.76rem', color: 'var(--faint)' }}>{inr(total)} total</div>
-        </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 190px), 1fr))', gap: 12 }}>
         {type === 'receipt' && (
-          <div style={{ ...card, borderTop: '3px solid var(--purple, #6B3FA0)' }}>
-            <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>Open claims</div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 800, marginTop: 4 }}>{openClaimsList.length}</div>
-            <div style={{ fontSize: '0.76rem', color: 'var(--faint)' }}>
-              {readyToClose} ready to close · {openClaimsList.length - readyToClose} awaiting approval
-            </div>
-          </div>
+          <>
+            <StatBox accent="var(--purple, #6B3FA0)" label="Open claims" value={String(openClaimsList.length)}
+              note={`${readyToClose} ready to close · ${openClaimsList.length - readyToClose} still with the Accountant`}
+              share={openClaimsList.length === 0 ? 0 : readyToClose / openClaimsList.length} />
+            <StatBox accent="var(--purple, #6B3FA0)" label="Open claims value" value={inr(claimsTotal)}
+              note={`avg ${avg(claimsTotal, openClaimsList.length)} per claim`} />
+          </>
         )}
+        <StatBox accent="var(--amber)" label="Awaiting your approval" value={String(count)}
+          note={`${count === 1 ? 'entry' : 'entries'} verified by the Accountant, waiting on you`} />
+        <StatBox accent="var(--amber)" label="Awaiting value" value={inr(total)}
+          note={`avg ${avg(total, count)} per entry`} />
       </div>
 
       {type === 'receipt' && openClaimsList.length > 0 && (

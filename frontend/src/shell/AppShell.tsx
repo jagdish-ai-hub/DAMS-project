@@ -20,6 +20,7 @@ import FmQueuePage from '../finance/FmQueuePage'
 import OverrideAuditPage from '../overrideaudit/OverrideAuditPage'
 import DashboardPage from '../owner/DashboardPage'
 import AskDamsPanel from '../owner/AskDamsPanel'
+import { useExitGhost } from './motion'
 
 type NavItem = { to: string; label: string; end?: boolean }
 
@@ -73,7 +74,17 @@ export default function AppShell() {
   const [helpOpen, setHelpOpen] = useState(false)
   const [navOpen, setNavOpen] = useState(false)
   const [askOpen, setAskOpen] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
+  const navGhostRef = useExitGhost<HTMLDivElement>()
   const location = useLocation()
+
+  // The topbar gains depth once content scrolls beneath it.
+  useEffect(() => {
+    function onScroll() { setScrolled(window.scrollY > 4) }
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
 
   // Hooks must run before the early return below (rules-of-hooks) — so the
   // role gate is computed here from the nullable user, not after the return.
@@ -120,7 +131,7 @@ export default function AppShell() {
 
   return (
     <div className="dams-app" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
-      <header style={{
+      <header data-scrolled={scrolled || undefined} style={{
         position: 'sticky', top: 0, zIndex: 40,
         background: 'var(--navy)', color: '#fff', padding: '0 clamp(10px, 2.5vw, 20px)',
       }}>
@@ -134,7 +145,7 @@ export default function AppShell() {
           <button
             type="button"
             onClick={() => setNavOpen(!navOpen)}
-            className="flex sm:hidden"
+            className="dams-burger flex sm:hidden"
             aria-label="Toggle navigation"
             aria-expanded={navOpen}
             // No `display` here on purpose: an inline style outranks every stylesheet rule, so
@@ -235,13 +246,15 @@ export default function AppShell() {
       {/* Mobile navigation slide-out drawer (< 640px only) */}
       {navOpen && (
         <div
-          className="dams-anim-backdrop sm:hidden"
+          ref={navGhostRef}
+          className="dams-anim-backdrop dams-backdrop sm:hidden"
           onClick={() => setNavOpen(false)}
           style={{
             position: 'fixed', inset: 0, background: 'rgba(16,24,40,.45)', zIndex: 45,
           }}
         >
           <div
+            className="dams-anim-nav dams-mobile-nav"
             onClick={(e) => e.stopPropagation()}
             style={{
               position: 'absolute', top: 52, left: 0, bottom: 0, width: 'min(280px, 80vw)',

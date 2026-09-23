@@ -78,7 +78,7 @@ export default function HelpDrawer({ role, open, onClose, initialSlug }: {
 
   return (
     <div
-      className={closing ? 'dams-anim-backdrop-out' : 'dams-anim-backdrop'}
+      className={`dams-backdrop ${closing ? 'dams-anim-backdrop-out' : 'dams-anim-backdrop'}`}
       role="dialog"
       aria-modal="true"
       aria-label="Help Center"
@@ -94,7 +94,7 @@ export default function HelpDrawer({ role, open, onClose, initialSlug }: {
         style={{
           background: 'var(--surface, #fff)', width: 'min(760px, 100%)', maxWidth: '100%', height: '100%',
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
-          boxShadow: '-8px 0 30px rgba(16,24,40,.18)',
+          boxShadow: '-1px 0 0 rgba(16,24,40,.06), -16px 0 48px -12px rgba(16,24,40,.30)',
         }}
       >
         <header style={{

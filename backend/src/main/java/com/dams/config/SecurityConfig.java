@@ -59,6 +59,8 @@ public class SecurityConfig {
                 .requestMatchers(
                     "/api/v1/auth/login",
                     "/api/v1/auth/accept-invite",
+                    // Platform UI font — the login screen needs it before sign-in (rev 50).
+                    "/api/v1/public/appearance",
                     // Signed-URL attachment streaming (local storage backend): the sig + exp
                     // query params ARE the authorisation, like an S3 presigned URL.
                     "/api/v1/attachments/raw",

@@ -9,6 +9,7 @@ import { exportApi } from '../api/export'
 import { card, ErrorBanner, ghostBtn, primaryBtn, Modal, Badge, Skeleton, SkeletonRows, inr, fmtDate, fmtDateShort, inputStyle, th, td } from '../shell/ui'
 import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, type AnyDoc } from '../review/reviewShared'
 import AddPaymentModal from '../cashier/AddPaymentModal'
+import { StatBox, statPanel } from '../review/StatBox'
 import GlobalSearch from '../shared/GlobalSearch'
 import { useAuth } from '../auth/useAuth'
 import SortModeControl, { groupItems, type SortMode } from '../review/SortModeControl'
@@ -43,6 +44,9 @@ function fmtGroupDate(key: string): string {
  */
 type ReceiptBucket = 'awaiting' | 'cash' | 'credit' | 'claim'
 
+/** Row state in the full table: still with the Accountant, verified (with the FM), or closed. */
+type DrillStatus = 'pending' | 'verified' | 'closed'
+
 function inBucket(it: ReviewQueueItem, bucket: ReceiptBucket): boolean {
   switch (bucket) {
     case 'claim': return it.isClaim
@@ -66,7 +70,8 @@ export default function ReviewQueuePage() {
   const [bulkBusy, setBulkBusy] = useState(false)
   const [exportBusy, setExportBusy] = useState(false)
   const [sortMode, setSortMode] = useState<SortMode>('date')
-  const [drilldown, setDrilldown] = useState(false)
+  // null = closed; otherwise the table is open, pre-filtered to these statuses.
+  const [drilldown, setDrilldown] = useState<DrillStatus[] | null>(null)
   // Receipts only — see ReceiptBucket above. Always 'awaiting' for expenses/cash.
   const [receiptBucket, setReceiptBucket] = useState<ReceiptBucket>('awaiting')
   const [cashCreditOpen, setCashCreditOpen] = useState(false)
@@ -118,7 +123,7 @@ export default function ReviewQueuePage() {
     setSelectedIds([])
     setDoc(null)
     setFlash('')
-    setDrilldown(false)
+    setDrilldown(null)
   }
 
   function resetSelection() {
@@ -289,7 +294,7 @@ export default function ReviewQueuePage() {
                 bucket={receiptBucket}
                 onBucket={setBucket}
                 onSelect={setSelectedId}
-                onOpenDrilldown={() => setDrilldown(true)}
+                onOpenDrilldown={(statuses) => setDrilldown(statuses)}
               />
             : doc == null
               ? <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -317,10 +322,12 @@ export default function ReviewQueuePage() {
       {drilldown && (
         <DrilldownModal
           type={type}
-          pending={activeItems ?? []}
-          verified={activeVerified ?? []}
-          onSelect={(id) => { setDrilldown(false); setSelectedId(id) }}
-          onClose={() => setDrilldown(false)}
+          pending={items ?? []}
+          verified={verifiedItems ?? []}
+          initialBucket={receiptBucket}
+          initialStatuses={drilldown}
+          onSelect={(id) => { setDrilldown(null); setSelectedId(id) }}
+          onClose={() => setDrilldown(null)}
         />
       )}
     </div>
@@ -414,7 +421,10 @@ function QueuePane(props: {
           )}
         </div>
       )}
-      <div style={{ padding: '4px 14px 8px', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--faint)', fontWeight: 700 }}>
+      <div style={{
+        padding: '4px 14px 8px', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700,
+        color: props.type === 'receipt' && props.receiptBucket === 'cash' ? 'var(--green)' : 'var(--faint)',
+      }}>
         {bucketLabel}
         <span style={{ background: 'var(--amber-bg)', color: 'var(--amber)', borderRadius: 999, fontSize: '0.66rem', padding: '1px 7px', marginLeft: 6 }}>
           {items?.length ?? 0}
@@ -488,8 +498,8 @@ function QueuePane(props: {
               display: 'inline-block', transition: 'transform var(--dur) var(--ease)',
               transform: closedOpen ? 'rotate(90deg)' : 'none',
             }}>▶</span>
-            Closed entries
-            <span style={{ background: 'var(--green-bg)', color: 'var(--green)', borderRadius: 999, fontSize: '0.66rem', padding: '1px 7px' }}>
+            <span style={{ color: 'var(--red)' }}>Closed entries</span>
+            <span style={{ background: 'var(--red-bg)', color: 'var(--red)', borderRadius: 999, fontSize: '0.66rem', padding: '1px 7px' }}>
               {closed.length}
             </span>
             <span style={{ marginLeft: 'auto', textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>
@@ -688,10 +698,7 @@ const BUCKET_CHIPS: { v: ReceiptBucket; label: string }[] = [
   { v: 'claim', label: 'Claim' },
 ]
 
-const panel = {
-  background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12,
-  padding: '16px 18px',
-} as const
+const panel = statPanel
 
 function Overview(props: {
   type: ReviewType
@@ -700,7 +707,8 @@ function Overview(props: {
   bucket: ReceiptBucket
   onBucket: (b: ReceiptBucket) => void
   onSelect: (id: number) => void
-  onOpenDrilldown: () => void
+  /** Each box opens the full table, pre-filtered to the statuses that box counts. */
+  onOpenDrilldown: (statuses: DrillStatus[]) => void
 }) {
   const { items, verifiedItems } = props
   const pendingTotal = items.reduce((a, r) => a + r.amount, 0)
@@ -755,16 +763,18 @@ function Overview(props: {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 190px), 1fr))', gap: 12, marginBottom: 14 }}>
-        <Stat tone="pending" label="Pending with you" value={String(items.length)}
+        <StatBox accent="var(--amber)" label="Pending with you" value={String(items.length)}
           note={`${items.length === 1 ? 'entry' : 'entries'} still need your verify or query`}
-          share={pendingShare} />
-        <Stat tone="pending" label="Pending value" value={inr(pendingTotal)}
-          note={`avg ${avg(pendingTotal, items.length)} per entry`} />
-        <Stat tone="closed" label="Closed by you" value={String(verifiedItems.length)}
+          share={pendingShare} onClick={() => props.onOpenDrilldown(['pending'])} />
+        <StatBox accent="var(--amber)" label="Pending value" value={inr(pendingTotal)}
+          note={`avg ${avg(pendingTotal, items.length)} per entry`}
+          onClick={() => props.onOpenDrilldown(['pending'])} />
+        <StatBox accent="var(--green)" label="Closed by you" value={String(verifiedItems.length)}
           note="verified or approved — with the FM or done"
-          share={allCount === 0 ? 0 : 1 - pendingShare} />
-        <Stat tone="closed" label="Closed value" value={inr(closedTotal)}
-          note={`avg ${avg(closedTotal, verifiedItems.length)} per entry`} />
+          share={allCount === 0 ? 0 : 1 - pendingShare} onClick={() => props.onOpenDrilldown(['verified', 'closed'])} />
+        <StatBox accent="var(--green)" label="Closed value" value={inr(closedTotal)}
+          note={`avg ${avg(closedTotal, verifiedItems.length)} per entry`}
+          onClick={() => props.onOpenDrilldown(['verified', 'closed'])} />
       </div>
 
       {byBranch.length > 0 && (
@@ -813,15 +823,6 @@ function Overview(props: {
           ))}
         </div>
       )}
-
-      {allCount > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
-          <button type="button" onClick={props.onOpenDrilldown}
-            style={{ ...ghostBtn, minHeight: 36, fontSize: '0.8rem', fontWeight: 700, color: 'var(--navy2)' }}>
-            Open full table — pending &amp; closed, by branch and date →
-          </button>
-        </div>
-      )}
     </div>
   )
 }
@@ -835,71 +836,84 @@ function Legend({ color, text }: { color: string; text: string }) {
   )
 }
 
-/** One summary box: what it counts (label), the figure, and a line saying what it means. */
-function Stat({ tone, label, value, note, share }: {
-  tone: 'pending' | 'closed'
-  label: string
-  value: string
-  note: string
-  /** 0–1 — this box's share of all entries in view; draws a thin meter when given. */
-  share?: number
-}) {
-  const accent = tone === 'pending' ? 'var(--amber)' : 'var(--green)'
-  return (
-    <div style={{ ...panel, display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: '0.76rem', fontWeight: 600, color: 'var(--muted)' }}>
-        <span style={{ width: 7, height: 7, borderRadius: '50%', background: accent, flexShrink: 0 }} />
-        {label}
-      </div>
-      <div style={{ fontSize: 'clamp(1.3rem, 2.4vw, 1.65rem)', fontWeight: 700, color: 'var(--ink)', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, overflowWrap: 'anywhere' }}>
-        {value}
-      </div>
-      {share != null && (
-        <div style={{ height: 4, borderRadius: 999, background: 'var(--bg)', overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${Math.round(share * 100)}%`, background: accent }} />
-        </div>
-      )}
-      <div style={{ fontSize: '0.74rem', color: 'var(--faint)', lineHeight: 1.35 }}>{note}</div>
-    </div>
-  )
-}
-
 // ───────────────────────────── Drill-down: pending vs verified ─────────────────────────────
+
+const STATUS_CHIPS: { v: DrillStatus; label: string; tone: 'amber' | 'gray' | 'green' }[] = [
+  { v: 'pending', label: 'Pending', tone: 'amber' },
+  { v: 'verified', label: 'Verified', tone: 'gray' },
+  { v: 'closed', label: 'Closed', tone: 'green' },
+]
 
 function DrilldownModal(props: {
   type: ReviewType
   pending: ReviewQueueItem[]
   verified: ReviewQueueItem[]
+  initialBucket: ReceiptBucket
+  initialStatuses: DrillStatus[]
   onSelect: (id: number) => void
   onClose: () => void
 }) {
   const [branch, setBranch] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
+  const [bucket, setBucket] = useState<ReceiptBucket>(props.type === 'receipt' ? props.initialBucket : 'awaiting')
+  const [statuses, setStatuses] = useState<DrillStatus[]>(props.initialStatuses)
 
   const combined = useMemo(
     () => [
-      ...props.pending.map((it) => ({ ...it, bucket: 'pending' as const })),
-      ...props.verified.map((it) => ({ ...it, bucket: 'verified' as const })),
+      ...props.pending.map((it) => ({ ...it, bucket: 'pending' as DrillStatus })),
+      // "Verified" = with the FM; "Closed" = approved (or an expense the Accountant closed).
+      ...props.verified.map((it) => ({ ...it, bucket: (it.workflowStatus === 'VERIFIED' ? 'verified' : 'closed') as DrillStatus })),
     ],
     [props.pending, props.verified],
   )
   const branches = useMemo(() => [...new Set(combined.map((it) => it.branchCode))].sort(), [combined])
 
   const filtered = useMemo(() => combined.filter((it) => {
+    if (statuses.length > 0 && !statuses.includes(it.bucket)) return false
+    if (props.type === 'receipt' && !inBucket(it, bucket)) return false
     if (branch && it.branchCode !== branch) return false
     const day = it.submittedAt ? it.submittedAt.slice(0, 10) : null
     if ((from || to) && !day) return false
     if (from && day! < from) return false
     if (to && day! > to) return false
     return true
-  }), [combined, branch, from, to])
+  }), [combined, statuses, bucket, props.type, branch, from, to])
 
   const total = filtered.reduce((a, r) => a + r.amount, 0)
   const label = props.type === 'receipt' ? 'receipts' : props.type === 'expense' ? 'expenses' : 'cash movements'
+  const toggleStatus = (s: DrillStatus) =>
+    setStatuses((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]))
+  const anyFilter = branch || from || to || statuses.length > 0 || bucket !== 'awaiting'
+  const chip = (active: boolean) => ({
+    border: '1px solid var(--line)', borderRadius: 999, padding: '5px 12px', minHeight: 32,
+    fontSize: '0.76rem', fontWeight: 700, cursor: 'pointer',
+    background: active ? 'var(--navy)' : 'var(--surface)',
+    color: active ? '#fff' : 'var(--muted)',
+  })
 
   return (
-    <Modal title={`Pending vs verified — ${label}`} subtitle="click a row to open it" onClose={props.onClose} maxWidth={780}>
+    <Modal title={`Pending & closed — ${label}`} subtitle="click a row to open it" onClose={props.onClose} maxWidth={820}>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 10 }}>
+        {props.type === 'receipt' && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.72rem', color: 'var(--faint)', fontWeight: 700, textTransform: 'uppercase' }}>Type</span>
+            {BUCKET_CHIPS.map((c) => (
+              <button key={c.v} type="button" aria-pressed={bucket === c.v} onClick={() => setBucket(c.v)} style={chip(bucket === c.v)}>
+                {c.label}
+              </button>
+            ))}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.72rem', color: 'var(--faint)', fontWeight: 700, textTransform: 'uppercase' }}>Status</span>
+          {STATUS_CHIPS.map((c) => (
+            <button key={c.v} type="button" aria-pressed={statuses.includes(c.v)} onClick={() => toggleStatus(c.v)} style={chip(statuses.includes(c.v))}>
+              {c.label}
+            </button>
+          ))}
+        </div>
+      </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
         <select value={branch} onChange={(e) => setBranch(e.target.value)} style={{ ...inputStyle, width: 'auto' }}>
           <option value="">All branches</option>
@@ -907,8 +921,8 @@ function DrilldownModal(props: {
         </select>
         <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={{ ...inputStyle, width: 'auto' }} title="Submitted from" />
         <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={{ ...inputStyle, width: 'auto' }} title="Submitted to" />
-        {(branch || from || to) && (
-          <button type="button" onClick={() => { setBranch(''); setFrom(''); setTo('') }} style={{ ...ghostBtn, minHeight: 36 }}>
+        {anyFilter && (
+          <button type="button" onClick={() => { setBranch(''); setFrom(''); setTo(''); setStatuses([]); setBucket('awaiting') }} style={{ ...ghostBtn, minHeight: 36 }}>
             Clear filters
           </button>
         )}
@@ -948,7 +962,11 @@ function DrilldownModal(props: {
                     <td style={{ ...td, fontFamily: 'Consolas, monospace', fontSize: '0.76rem' }}>{it.documentNo ?? 'draft'}</td>
                     <td style={td}>{it.partyName}</td>
                     <td style={td}>{it.branchCode}</td>
-                    <td style={td}><Badge tone={it.bucket === 'pending' ? 'amber' : 'green'}>{it.workflowStatus}</Badge></td>
+                    <td style={td}>
+                      <Badge tone={STATUS_CHIPS.find((c) => c.v === it.bucket)?.tone ?? 'gray'}>
+                        {STATUS_CHIPS.find((c) => c.v === it.bucket)?.label}
+                      </Badge>
+                    </td>
                     <td style={{ ...td, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{inr(it.amount)}</td>
                   </tr>
                 ))}

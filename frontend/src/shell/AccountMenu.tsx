@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import type { Role } from '../auth/AuthContext'
+import { useExitGhost } from './motion'
 
 const ROLE_LABEL: Record<Role, string> = {
   SUPER_ADMIN: 'Super Admin',
@@ -25,6 +26,7 @@ export default function AccountMenu() {
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
+  const menuGhostRef = useExitGhost<HTMLDivElement>()
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -116,6 +118,7 @@ export default function AccountMenu() {
 
       {open && pos && (
         <div
+          ref={menuGhostRef}
           role="menu"
           className="dams-anim-menu"
           style={{
@@ -125,8 +128,8 @@ export default function AccountMenu() {
             background: 'var(--surface)',
             color: 'var(--ink)',
             border: '1px solid var(--line)',
-            borderRadius: 10,
-            boxShadow: 'var(--shadow-lift)',
+            borderRadius: 12,
+            boxShadow: 'var(--shadow-pop)',
             minWidth: 210,
             maxWidth: 'calc(100vw - 24px)',
             overflow: 'hidden',
@@ -147,6 +150,7 @@ export default function AccountMenu() {
           <button
             onClick={handleLogout}
             role="menuitem"
+            className="dams-menu-item"
             style={{
               width: '100%',
               textAlign: 'left',

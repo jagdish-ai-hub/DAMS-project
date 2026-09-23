@@ -1,5 +1,6 @@
-import { type CSSProperties, type ReactNode, useEffect, useRef } from 'react'
+import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useExitGhost } from './motion'
 
 /** Small shared building blocks in the same inline-style idiom as the rest of the app. */
 
@@ -94,14 +95,17 @@ export const td: CSSProperties = { padding: '10px', borderTop: '1px solid var(--
 
 export function primaryBtn(disabled = false): CSSProperties {
   return {
-    background: disabled ? 'var(--navy2)' : 'var(--navy)',
+    // Same navy, lit very slightly from above; disabled stays flat navy2 as before.
+    background: disabled ? 'var(--navy2)' : 'linear-gradient(180deg, var(--navy2) -60%, var(--navy) 100%)',
     color: '#fff',
     border: 'none',
     borderRadius: 8,
     padding: '9px 14px',
     fontWeight: 700,
     fontSize: '0.85rem',
+    letterSpacing: '0.01em',
     cursor: disabled ? 'not-allowed' : 'pointer',
+    boxShadow: disabled ? 'none' : 'inset 0 1px 0 rgba(255,255,255,.14), 0 1px 2px rgba(16,24,40,.14), 0 3px 8px -2px rgba(31,56,100,.35)',
   }
 }
 
@@ -114,6 +118,7 @@ export const ghostBtn: CSSProperties = {
   fontWeight: 600,
   color: 'var(--navy)',
   cursor: 'pointer',
+  boxShadow: 'var(--shadow-xs)',
 }
 
 export const dangerBtn: CSSProperties = {
@@ -182,8 +187,8 @@ export function ErrorBanner({ message }: { message: string }) {
   }, [message])
   if (!message) return null
   return (
-    <div ref={ref} role="alert" className="dams-anim-notice" style={{
-      background: 'var(--red-bg)', border: '1px solid #EBC2C2', color: 'var(--red)',
+    <div ref={ref} role="alert" className="dams-anim-error" style={{
+      background: 'var(--red-bg)', border: '1px solid #EBC2C2', borderLeft: '3px solid var(--red)', color: 'var(--red)',
       borderRadius: 8, padding: '10px 12px', fontSize: '0.82rem',
     }}>
       {message}
@@ -193,6 +198,10 @@ export function ErrorBanner({ message }: { message: string }) {
 
 export function Modal(props: { title: string; subtitle?: string; onClose: () => void; children: ReactNode; footer?: ReactNode; maxWidth?: number; zIndex?: number }) {
   const { onClose } = props
+  // Closing plays an exit however the modal is dismissed — see useExitGhost.
+  const ghostRef = useExitGhost<HTMLDivElement>()
+  // Header gains a hairline shadow once the body scrolls beneath it.
+  const [scrolled, setScrolled] = useState(false)
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
@@ -224,7 +233,8 @@ export function Modal(props: { title: string; subtitle?: string; onClose: () => 
   // dismiss the modal. Backdrop click closes; card click stops propagation.
   return createPortal(
     <div
-      className="dams-anim-backdrop"
+      ref={ghostRef}
+      className="dams-anim-backdrop dams-backdrop dams-modal-backdrop"
       role="dialog"
       aria-modal="true"
       aria-label={props.title}
@@ -236,15 +246,15 @@ export function Modal(props: { title: string; subtitle?: string; onClose: () => 
       }}
     >
       <div
-        className="dams-anim-modal"
+        className="dams-anim-modal dams-modal-card"
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: 'var(--surface)', borderRadius: 12, boxShadow: 'var(--shadow-lift)',
+          background: 'var(--surface)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-pop)',
           width: '100%', maxWidth: props.maxWidth ?? 460, margin: 'auto 0',
           maxHeight: 'min(calc(100dvh - 32px), 720px)', display: 'flex', flexDirection: 'column',
         }}
       >
-        <div style={{
+        <div className="dams-modal-head" data-scrolled={scrolled || undefined} style={{
           display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
           padding: '16px 20px', borderBottom: '1px solid var(--line)', flexShrink: 0,
         }}>
@@ -267,14 +277,17 @@ export function Modal(props: { title: string; subtitle?: string; onClose: () => 
             ✕
           </button>
         </div>
-        <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto', flex: 1, minHeight: 0 }}>
+        <div
+          onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 2)}
+          style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto', flex: 1, minHeight: 0 }}
+        >
           {props.children}
         </div>
         {props.footer && (
           <div style={{
             padding: '12px 20px', borderTop: '1px solid var(--line)', flexShrink: 0,
             display: 'flex', justifyContent: 'flex-end', gap: 9, background: 'var(--surface)',
-            borderBottomLeftRadius: 12, borderBottomRightRadius: 12,
+            borderBottomLeftRadius: 'var(--radius-lg)', borderBottomRightRadius: 'var(--radius-lg)',
           }}>
             {props.footer}
           </div>
@@ -304,7 +317,7 @@ export function Skeleton({ width = '100%', height = 14, radius = 6, style }: {
 export function SkeletonRows({ rows = 4, height = 40, gap = 10 }: { rows?: number; height?: number; gap?: number }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap }}>
-      {Array.from({ length: rows }).map((_, i) => <Skeleton key={i} height={height} />)}
+      {Array.from({ length: rows }).map((_, i) => <Skeleton key={i} height={height} style={{ animationDelay: `${i * 90}ms` }} />)}
     </div>
   )
 }
@@ -327,6 +340,9 @@ export function Badge({ children, tone = 'gray' }: { children: ReactNode; tone?:
     <span style={{
       fontSize: '0.72rem', fontWeight: 700, color: map.c, background: map.b,
       borderRadius: 999, padding: '2px 9px', whiteSpace: 'nowrap',
+      // A hairline in the badge's own colour gives the pill a crisp, printed edge.
+      boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${map.c} 16%, transparent)`,
+      letterSpacing: '0.01em',
     }}>
       {children}
     </span>

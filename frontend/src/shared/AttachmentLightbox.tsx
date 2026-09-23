@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { X, ZoomIn, ZoomOut, RotateCcw, ExternalLink, Download } from 'lucide-react'
 import { ghostBtn } from '../shell/ui'
+import { useExitGhost } from '../shell/motion'
 
 interface Props {
   url: string
@@ -11,6 +12,7 @@ interface Props {
 
 export default function AttachmentLightbox({ url, filename, contentType, onClose }: Props) {
   const [zoom, setZoom] = useState(1)
+  const ghostRef = useExitGhost<HTMLDivElement>()
 
   const isPdf = Boolean(
     (contentType && contentType.includes('pdf')) ||
@@ -32,8 +34,10 @@ export default function AttachmentLightbox({ url, filename, contentType, onClose
 
   return (
     <div
+      ref={ghostRef}
       role="dialog"
       aria-modal="true"
+      className="dams-anim-backdrop"
       style={{
         position: 'fixed',
         inset: 0,

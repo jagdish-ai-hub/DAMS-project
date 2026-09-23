@@ -4,6 +4,7 @@ import { searchApi, type SearchHit } from '../api/search'
 import { customersApi, type CustomerHistory, type CustomerExpenseEntry } from '../api/customers'
 import { card, ErrorBanner, Skeleton, SkeletonRows, inr, initials, fmtDateShort } from '../shell/ui'
 import AddPaymentModal from './AddPaymentModal'
+import { useExitGhost } from '../shell/motion'
 
 /**
  * Cashier home (intial ui prototypes/cashier-home.html): universal search, results, a
@@ -35,6 +36,7 @@ export default function CashierHomePage() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [recent, setRecent] = useState<RecentCustomer[]>(loadRecent)
   const [flash, setFlash] = useState('')
+  const toastGhostRef = useExitGhost<HTMLDivElement>()
   const [params, setParams] = useSearchParams()
 
   // A newly-created receipt navigates back here with ?flash=…
@@ -64,11 +66,12 @@ export default function CashierHomePage() {
   return (
     <>
       {flash && (
-        <div className="dams-anim-toast" style={{
+        <div ref={toastGhostRef} role="status" className="dams-anim-toast" style={{
           position: 'fixed', bottom: 20, right: 20, background: 'var(--ink)', color: '#fff',
-          borderRadius: 9, padding: '10px 16px', fontSize: '0.82rem', boxShadow: 'var(--shadow-lift)', zIndex: 60,
+          borderRadius: 9, padding: '10px 16px', fontSize: '0.82rem', boxShadow: 'var(--shadow-pop)', zIndex: 60,
         }}>
           {flash}
+          <span className="dams-toast-meter" aria-hidden="true" />
         </div>
       )}
       {selectedId != null ? (

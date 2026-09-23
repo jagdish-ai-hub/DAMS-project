@@ -373,6 +373,16 @@ A Super Admin panel (organization list, onboard new org + first Owner) does
 not have a mockup yet — build it in the same visual language as these
 three once the core is working, or ask for a mockup first.
 
+**Appearance — platform font (rev 50).** The UI typeface is a platform-wide
+setting owned by Super Admin (Settings → Appearance), not per-org and not
+per-user. It is chosen from a fixed, code-defined list of vetted fonts —
+currently IBM Plex Sans (default) and Inter — never a free-text name or URL,
+so every offered font is self-hosted and known to carry the ₹ glyph and
+tabular figures. Adding a font = one frontend registry entry + its
+`@fontsource` package + the backend allowlist. The chosen font applies to
+every role and to the login / accept-invite screens. Changing it never
+changes colours, layout, or any workflow.
+
 **In-app help.** Every role's shell has a Help button opening a role-scoped
 help section: short, task-oriented, step-by-step articles written for
 dealership staff, not developers — minimal prose, numbered steps, one
@@ -418,7 +428,7 @@ Where this lives in this repo (verified):
 ## Backend API map (verified — keep this table current when routes change)
 
 All paths prefixed `/api/v1`. Auth: Bearer JWT (`JwtConfig`); public only:
-`/auth/login`, `/auth/accept-invite`, `/attachments/raw` (sig+exp ARE the
+`/auth/login`, `/auth/accept-invite`, `/public/appearance`, `/attachments/raw` (sig+exp ARE the
 auth, like an S3 presigned URL), `/swagger-ui.html`, `/swagger-ui/**`,
 `/api-docs/**`, `/actuator/health` — see `SecurityConfig#filterChain`.
 
@@ -426,6 +436,7 @@ auth, like an S3 presigned URL), `/swagger-ui.html`, `/swagger-ui/**`,
 |---|---|---|
 | Auth | `auth/controller/AuthController` | `POST /auth/login`, `POST /auth/accept-invite`, `POST /auth/change-password` |
 | Admin (cross-org exception) | `admin/controller/AdminOrgController` | `GET|POST /admin/organizations`, `GET|PATCH|DELETE /admin/organizations/{id}` |
+| Appearance (platform) | `appearance/controller/AppearanceController` | `GET /public/appearance` (unauthenticated), `PUT /admin/appearance` (SUPER_ADMIN) |
 | Branches | `branch/controller/BranchController` | `GET /branches`, `GET /branches/{id}`, `POST /branches`, `PATCH /branches/{id}` |
 | Users | `user/controller/UserController` | `GET /users`, `GET /users/{id}`, `POST /users`, `PATCH /users/{id}` |
 | Org settings | `organization/controller/OrgSettingsController` | `GET /organization`, `PATCH /organization` |

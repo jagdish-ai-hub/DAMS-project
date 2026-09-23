@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useExitGhost } from '../shell/motion'
 import { QRCodeSVG } from 'qrcode.react'
 import { mastersApi, type MasterRow } from '../api/masters'
 import { inr, ghostBtn, SkeletonRows } from '../shell/ui'
@@ -22,6 +23,7 @@ function apiError(err: unknown, fallback: string) {
  * message pointing there instead of a fake, useless QR code.
  */
 export default function UpiQrModal({ amount, docRef = 'SERVICE', customerName, onClose }: Props) {
+  const ghostRef = useExitGhost<HTMLDivElement>()
   const [vpas, setVpas] = useState<MasterRow[] | null>(null)
   const [error, setError] = useState('')
 
@@ -54,8 +56,9 @@ export default function UpiQrModal({ amount, docRef = 'SERVICE', customerName, o
       role="dialog"
       aria-modal="true"
       aria-label="Instant UPI Payment QR"
+      ref={ghostRef}
       onMouseDown={onClose}
-      className="dams-anim-backdrop"
+      className="dams-anim-backdrop dams-backdrop dams-modal-backdrop"
       style={{
         position: 'fixed', inset: 0, zIndex: 70, background: 'rgba(16,24,40,.55)',
         display: 'flex', justifyContent: 'center', padding: 'clamp(12px, 3vh, 32px) clamp(10px, 3vw, 16px)',
@@ -64,10 +67,10 @@ export default function UpiQrModal({ amount, docRef = 'SERVICE', customerName, o
     >
       <div
         onMouseDown={(e) => e.stopPropagation()}
-        className="dams-anim-modal"
+        className="dams-anim-modal dams-modal-card"
         style={{
           background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12,
-          boxShadow: 'var(--shadow-lift)', width: '100%', maxWidth: 512, margin: 'auto 0',
+          boxShadow: 'var(--shadow-pop)', width: '100%', maxWidth: 512, margin: 'auto 0',
           maxHeight: 'min(calc(100dvh - 32px), 720px)', display: 'flex', flexDirection: 'column',
         }}
       >

@@ -58,7 +58,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', background: 'var(--bg)' }}>
+    <div className="dams-auth" style={{ minHeight: '100vh', display: 'flex', background: 'var(--bg)' }}>
       {/* ── Brand panel ── */}
       <aside className="dams-login-brand" style={brandPanel}>
         <div style={{ position: 'relative', zIndex: 1 }}>
@@ -82,12 +82,12 @@ export default function LoginPage() {
         <div style={{ position: 'relative', zIndex: 1, fontSize: '0.72rem', opacity: 0.5 }}>
           Test phase · seeded demo dealership “JJ Motors”
         </div>
-        <div style={brandGlow} />
+        <div className="dams-login-glow" style={brandGlow} />
       </aside>
 
       {/* ── Form panel ── */}
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 16px' }}>
-        <div style={{ width: '100%', maxWidth: 'min(380px, 100%)' }}>
+        <div className="dams-auth-card" style={{ width: '100%', maxWidth: 'min(380px, 100%)' }}>
           <div className="dams-login-compact-brand" style={{ alignItems: 'center', gap: 10, marginBottom: 24 }}>
             <div style={{ ...brandMark, width: 30, height: 30, fontSize: '0.72rem', background: 'var(--navy)' }}>DA</div>
             <span style={{ fontWeight: 700, fontSize: '0.98rem', color: 'var(--navy)' }}>DAMS</span>
@@ -153,6 +153,14 @@ export default function LoginPage() {
             ))}
           </div>
         </div>
+
+        {/* Developer credit — a plain <a href> so it is a real, crawlable backlink. */}
+        <footer className="dams-credit" style={{ marginTop: 32, fontSize: '0.74rem', color: 'var(--faint)', textAlign: 'center' }}>
+          Designed &amp; developed by{' '}
+          <a href="https://jjsoftware.in" target="_blank" rel="noopener" style={{ color: 'var(--navy2)', fontWeight: 600, textDecoration: 'none' }}>
+            JJ Software
+          </a>
+        </footer>
       </main>
     </div>
   )

@@ -1,9 +1,11 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { authApi } from '../api/auth'
 import { orgSettingsApi, type OrgSettings } from '../api/orgSettings'
+import { appearanceApi } from '../api/appearance'
+import { FONTS, applyFont, cacheFont, fontDef, type FontKey } from '../lib/fonts'
 import { useAuth } from '../auth/useAuth'
 import type { Role } from '../auth/AuthContext'
-import { card, ErrorBanner, Field, ghostBtn, primaryBtn, Spinner, TextInput, initials } from '../shell/ui'
+import { Badge, card, ErrorBanner, Field, ghostBtn, primaryBtn, Spinner, TextInput, initials } from '../shell/ui'
 
 function apiError(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback
@@ -58,6 +60,12 @@ export default function SettingsPage() {
       {user.role === 'OWNER' && (
         <Collapsible title="Organization" summary="Name and cashier branch access for your dealership group." defaultOpen>
           <OrgSettingsForm />
+        </Collapsible>
+      )}
+
+      {user.role === 'SUPER_ADMIN' && (
+        <Collapsible title="Appearance" summary="The typeface every user sees, across all organizations." defaultOpen>
+          <AppearanceForm />
         </Collapsible>
       )}
     </div>
@@ -142,6 +150,100 @@ function ChangePasswordForm() {
         </button>
       </div>
     </form>
+  )
+}
+
+/**
+ * Platform font (Super Admin only). Picking a card previews it across the app at once;
+ * Save makes it the font for everyone. Leaving without saving puts the saved font back.
+ */
+function AppearanceForm() {
+  const [saved, setSaved] = useState<FontKey | null>(null)
+  const [picked, setPicked] = useState<FontKey | null>(null)
+  const [error, setError] = useState('')
+  const [done, setDone] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    FONTS.forEach((f) => { f.load().catch(() => {}) }) // both specimens render in their real face
+    appearanceApi.get()
+      .then(({ data }) => { const k = fontDef(data.font).key; setSaved(k); setPicked(k) })
+      .catch((e) => setError(apiError(e, 'Could not load the current font.')))
+  }, [])
+
+  // Undo an unsaved preview when the section closes or the page is left.
+  useEffect(() => () => { if (saved) applyFont(saved) }, [saved])
+
+  function pick(k: FontKey) {
+    setPicked(k)
+    setDone(false)
+    applyFont(k)
+  }
+
+  async function save() {
+    if (!picked) return
+    setError('')
+    setSaving(true)
+    try {
+      const { data } = await appearanceApi.setFont(picked)
+      const k = fontDef(data.font).key
+      cacheFont(k)
+      setSaved(k)
+      setDone(true)
+    } catch (e) {
+      setError(apiError(e, 'Could not save the font.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!picked) {
+    return error ? <ErrorBanner message={error} /> : <div style={{ fontSize: '0.82rem', color: 'var(--muted)' }}><Spinner /> Loading…</div>
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div role="radiogroup" aria-label="Platform font" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12 }}>
+        {FONTS.map((f) => {
+          const on = picked === f.key
+          return (
+            <button
+              key={f.key}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => pick(f.key)}
+              style={{
+                textAlign: 'left', padding: '14px 16px', borderRadius: 'var(--radius)', cursor: 'pointer',
+                background: on ? 'var(--navy3)' : 'var(--surface)',
+                border: `1.5px solid ${on ? 'var(--navy2)' : 'var(--line)'}`,
+                boxShadow: on ? 'var(--shadow)' : 'none',
+                fontFamily: `${f.family}, system-ui, sans-serif`, fontFeatureSettings: f.features, color: 'var(--ink)',
+                display: 'flex', flexDirection: 'column', gap: 8,
+              }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--navy)' }}>{f.label}</span>
+                {saved === f.key && <Badge tone="green">In use</Badge>}
+              </span>
+              <span style={{ fontSize: '1.45rem', fontWeight: 700, letterSpacing: '-0.01em' }}>₹1,23,456</span>
+              <span style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--muted)', borderTop: '1px solid var(--line)', paddingTop: 8 }}>
+                <span>R-0142 · Verified</span>
+                <span style={{ fontWeight: 600, color: 'var(--ink)' }}>₹48,900</span>
+              </span>
+              <span style={{ fontSize: '0.76rem', color: 'var(--muted)', lineHeight: 1.45 }}>{f.blurb}</span>
+            </button>
+          )
+        })}
+      </div>
+      <ErrorBanner message={error} />
+      {done && <div className="dams-anim-notice" style={{ fontSize: '0.82rem', color: 'var(--green)', fontWeight: 600 }}>Saved — every user now sees {fontDef(saved).label}.</div>}
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button type="button" onClick={save} style={{ ...primaryBtn(saving || picked === saved), minHeight: 38 }} disabled={saving || picked === saved}>
+          {saving ? <><Spinner /> Saving…</> : 'Save font'}
+        </button>
+      </div>
+    </div>
   )
 }
 

@@ -7,6 +7,18 @@
 
 ## Revision log
 
+- **rev 50 (2026-09-23)** — **Premium polish pass + switchable platform font.** Frontend
+  craft only — no colour hex, layout, field, route or workflow changes: layered shadow tokens,
+  expo/spring easing tokens, exit animations for `Modal` / mobile nav / menus / custom modals
+  (shared `useExitTransition` hook in `shell/ui.tsx`), bottom-sheet modals on phones, backdrop
+  blur, staggered route/list entrances, count-up figures on StatBox + Owner dashboard, refined
+  buttons/inputs/badges/skeletons, login ambient gradient; all reduced-motion safe. New
+  platform setting: UI font chosen by Super Admin from a code-defined list (IBM Plex Sans
+  default, Inter). `V29__platform_setting.sql` (key/value, platform-level, no `org_id`),
+  `GET /api/v1/public/appearance` (unauthenticated — login screen needs it),
+  `PUT /api/v1/admin/appearance` (SUPER_ADMIN, allowlisted keys). AGENT.md updated first
+  (Super Admin "Appearance" paragraph + API map).
+
 - **rev 49 (2026-09-21)** — Two FM-queue changes, same batch. (1) **A second, distinct
   query state.** Today, both the Accountant's query on a SUBMITTED entry and the FM's query
   on a VERIFIED entry collapse into the same `QUERIED` status, so both land back with the
@@ -1284,6 +1296,9 @@
 **UserBranchAccess** *(join table — ACCOUNTANT only)*
 `user_id` BIGINT, `branch_id` BIGINT — PK `(user_id, branch_id)`
 
+**PlatformSetting** *(rev 50 — platform-wide key/value, Super Admin-owned)*
+`key` VARCHAR PK, `value` VARCHAR NOT NULL, `updated_at`, `updated_by` BIGINT nullable → `app_user`. Only key today: `ui.font` ∈ {`plex`, `inter`} (default `plex`).
+
 ---
 
 ### Org-level master tables (all carry `org_id`)
@@ -1426,6 +1441,7 @@ Flyway callback / profile guard and instead runs a masters-only seed.
 | V18 | **seed** — OOR opening ₹10,000, cash docs C-001…C-004 (one QUERIED), one historical `cash_day_close` | 6 ✅ |
 | V19 | `audit_event` add `branch_id` (nullable, FK), backfilled from each row's document; index `(org_id, event_type, created_at DESC)` for Override Audit | 8 ✅ |
 | ~~V20~~ | **dropped (rev 15)** — full demo seed. Owner asked to skip; testers add their own data. | — |
+| V29 | `platform_setting` (key/value, no `org_id`); seeds `ui.font = plex` *(rev 50)* | polish ✅ |
 
 ---
 
@@ -1448,6 +1464,12 @@ POST   /api/v1/admin/organizations          # creates org + first Owner + invite
 GET    /api/v1/admin/organizations/{id}
 PATCH  /api/v1/admin/organizations/{id}      # active toggle etc.
 DELETE /api/v1/admin/organizations/{id}      # permanently removes the org + all its data (branches/users/masters)
+```
+
+### Appearance (rev 50)
+```
+GET /api/v1/public/appearance     # unauthenticated — { font }; the login screen needs it
+PUT /api/v1/admin/appearance      # SUPER_ADMIN — { font } ∈ allowlist (plex | inter); 400 otherwise
 ```
 
 ### Org Masters

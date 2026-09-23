@@ -17,6 +17,7 @@ import { Download, AlertTriangle } from 'lucide-react'
 import ExportModal from '../shared/ExportModal'
 import MoneyBreakdownModal, { type BreakdownRow, moneyMovementsToRows, cashMovementsToRows } from '../shell/MoneyBreakdownModal'
 import { useNavigate } from 'react-router-dom'
+import { CountUp } from '../shell/motion'
 
 /**
  * Owner dashboard (intial ui prototypes/owner-dashboard.html, dashboard tab). Read-only
@@ -429,11 +430,11 @@ const bcCell = { padding: '7px 8px', borderTop: '1px solid var(--line)', vertica
 
 function Kpi({ label, value, tone, sub, onClick }: { label: string; value: string; tone: string; sub?: string; onClick?: () => void }) {
   return (
-    <div onClick={onClick} style={{ ...card, borderTop: `3px solid ${tone}`, cursor: onClick ? 'pointer' : undefined }}>
+    <div onClick={onClick} className="dams-kpi" data-clickable={onClick ? '' : undefined} style={{ ...card, borderTop: `3px solid ${tone}`, cursor: onClick ? 'pointer' : undefined }}>
       <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', fontWeight: 600 }}>
         {label}{onClick && <span style={{ color: 'var(--navy2)' }}> ⓘ</span>}
       </div>
-      <div style={{ fontSize: '1.5rem', fontWeight: 800, marginTop: 5, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+      <div style={{ fontSize: '1.5rem', fontWeight: 800, marginTop: 5, fontVariantNumeric: 'tabular-nums' }}><CountUp value={value} /></div>
       <div style={{ fontSize: '0.74rem', color: 'var(--faint)', marginTop: 2 }}>{sub ?? ' '}</div>
     </div>
   )
