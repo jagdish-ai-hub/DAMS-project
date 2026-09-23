@@ -413,15 +413,38 @@ class ReceiveDocumentServiceTest {
     }
 
     @Test
-    void addPayment_toASettledDocument_isRejected() {
-        ReceiveDocument settled = openDoc();
+    void addPayment_toASettledDocument_unsettlesIt_andReopensToSubmitted_sinceItWasApproved() {
+        ReceiveDocument settled = openDoc(); // APPROVED by default
         settled.setSettled(true);
         when(receiveDocumentRepo.findByIdAndOrgId(500L, ORG)).thenReturn(Optional.of(settled));
 
-        assertThatThrownBy(() -> service.addLine(500L, lineInput(new BigDecimal("10"))))
-            .isInstanceOf(DamsException.class)
-            .hasMessageContaining("settled");
-        verify(settlementLineRepo, never()).save(any());
+        service.addLine(500L, lineInput(new BigDecimal("10")));
+
+        assertThat(settled.isSettled()).isFalse();
+        assertThat(settled.getWorkflowStatus()).isEqualTo(WorkflowStatus.SUBMITTED);
+        verify(settlementLineRepo).save(any());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<java.util.Map<String, Object>> detail = ArgumentCaptor.forClass(java.util.Map.class);
+        verify(auditService, org.mockito.Mockito.times(3)).recordUserEvent(
+            eq("ReceiveDocument"), eq(500L), any(), any(), eq(CASHIER_ID), detail.capture());
+        assertThat(detail.getAllValues()).anySatisfy(d -> assertThat(d).containsEntry("unsettled", true));
+        assertThat(detail.getAllValues()).anySatisfy(d -> assertThat(d).containsEntry("reopenedFrom", "APPROVED"));
+    }
+
+    @Test
+    void addPayment_toASettledDocument_thatWasStillSubmitted_unsettlesWithoutReopening() {
+        ReceiveDocument settled = openDoc();
+        settled.setWorkflowStatus(WorkflowStatus.SUBMITTED);
+        settled.setSettled(true);
+        when(receiveDocumentRepo.findByIdAndOrgId(500L, ORG)).thenReturn(Optional.of(settled));
+
+        service.addLine(500L, lineInput(new BigDecimal("10")));
+
+        assertThat(settled.isSettled()).isFalse();
+        // Already SUBMITTED — nothing to reopen, just one un-settle event alongside LINE_ADDED.
+        assertThat(settled.getWorkflowStatus()).isEqualTo(WorkflowStatus.SUBMITTED);
+        verify(auditService, org.mockito.Mockito.times(2)).recordUserEvent(
+            eq("ReceiveDocument"), eq(500L), any(), any(), eq(CASHIER_ID), any());
     }
 
     @Test

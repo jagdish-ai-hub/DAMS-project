@@ -125,6 +125,12 @@ has `org_id = null`.
    A receipt stays open, accepting new settlement lines, until Pending
    Amount reaches zero — status then flips to Close automatically.
    Accountant verification does **not** close a receipt.
+   **A settled (auto-closed) receipt still reopens the same way a
+   VERIFIED/APPROVED one does: "Add Payment" un-settles it and appends the
+   new line, with every existing line staying locked.** If the document was
+   VERIFIED or APPROVED at the time, it also moves back to SUBMITTED for
+   re-review, same as the VERIFIED/APPROVED reopen case — a self-closed
+   receipt is not a dead end, it's just the strictest starting point.
 2. **Expenses are closed explicitly by the Accountant.** Status flow: Open
    → In Progress → Awaiting Receipt → Received Receipt → Closed (or
    Transfer to Claim).

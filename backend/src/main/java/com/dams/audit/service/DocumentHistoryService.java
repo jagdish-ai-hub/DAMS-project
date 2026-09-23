@@ -88,7 +88,9 @@ public class DocumentHistoryService {
             case REJECTED -> "Rejected";
             case OVERRIDE -> "Overrode a line amount";
             case CLOSED -> "Closed";
-            case SETTLED -> "Auto-settled — paid in full";
+            case SETTLED -> Boolean.TRUE.equals(d.get("unsettled"))
+                ? "Reopened after being paid in full (new payment added)"
+                : "Auto-settled — paid in full";
             case CATEGORY_CHANGED -> "Category changed";
             case CLAIM_TYPE_CHANGED -> "Claim type changed";
             case TRANSFERRED_TO_CLAIM -> "Transferred to claim";

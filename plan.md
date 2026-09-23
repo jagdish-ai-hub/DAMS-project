@@ -7,6 +7,30 @@
 
 ## Revision log
 
+- **rev 51 (2026-09-23)** — Bug fix: a settled (auto-closed) receipt refused every new
+  settlement line outright (`"Document X is settled — it accepts no more payments"`),
+  even a non-claim, VERIFIED one a cashier was trying to top up — reported live against
+  `OOR-SEP26-R-037` (invoice ₹8,943 = lines total ₹8,943, `settled=true`, `VERIFIED`).
+  `settled` is a one-way flag (`settleIfFullyPaid()`) that nothing ever cleared, so once a
+  receipt fully paid off it was permanently dead to Add Payment — a stricter, undocumented
+  dead end sitting on top of the already-built VERIFIED/APPROVED reopen mechanism (rev 29/
+  33/34/49). AGENT.md's closing rule #1 amended first: a settled receipt now reopens the
+  same way — `ReceiveDocumentService.addLine()` un-settles it, appends the line (existing
+  lines still locked), and — only if it was VERIFIED/APPROVED when it settled — also drops
+  back to SUBMITTED for re-review, same as the unsettled case. A settled-but-still-SUBMITTED/
+  QUERIED/FM_QUERIED document just un-settles without a second status change. New `SETTLED`
+  audit event carries `unsettled: true`; `DocumentHistoryService` renders it as "Reopened
+  after being paid in full (new payment added)". No migration — reuses the existing
+  `EventType.SETTLED` value with a detail flag. Frontend unchanged: `canRecordPayment`
+  already excludes settled docs server-side, so the Add Payment button reappears once
+  un-settled; `AddPaymentModal`/`NewReceiptPage` already called `addLine` regardless of
+  status. Accountant's narrower add-while-reviewing window (SUBMITTED/FM_QUERIED only,
+  rev 49) is untouched — this only affects the Cashier's own Add Payment.
+  New tests: `addPayment_toASettledDocument_unsettlesIt_andReopensToSubmitted_sinceItWasApproved`,
+  `addPayment_toASettledDocument_thatWasStillSubmitted_unsettlesWithoutReopening` (replacing
+  the old `addPayment_toASettledDocument_isRejected`).
+  Verified: `mvn test` 240 green (0 failures/errors, 4 pre-existing Docker-only skips).
+
 - **rev 50 (2026-09-23)** — **Premium polish pass + switchable platform font.** Frontend
   craft only — no colour hex, layout, field, route or workflow changes: layered shadow tokens,
   expo/spring easing tokens, exit animations for `Modal` / mobile nav / menus / custom modals

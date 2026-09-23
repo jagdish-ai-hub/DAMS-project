@@ -76,6 +76,8 @@ import java.util.stream.Collectors;
  *  - No new document may be opened on a job card that has a ClaimClose (409).
  *  - Adding a line (Add Payment) to a VERIFIED/APPROVED document reopens it to SUBMITTED —
  *    a payment nobody has reviewed should never sit under an already-approved status.
+ *  - Adding a line to a settled (auto-closed) document un-settles it the same way — and, if
+ *    it was VERIFIED/APPROVED when it settled, also reopens it to SUBMITTED as above.
  */
 @Service
 public class ReceiveDocumentService {
@@ -261,15 +263,21 @@ public class ReceiveDocumentService {
             ? requireAccountantCanAddLine(orgId, jobCard, doc)
             : paymentGuard.requireCanPost(orgId, jobCard);
 
-        if (doc.isSettled()) {
-            throw DamsException.conflict("Document " + describe(doc) + " is settled — it accepts no more payments");
-        }
         if (doc.getWorkflowStatus() == WorkflowStatus.REJECTED) {
             throw DamsException.conflict("Document " + describe(doc) + " was rejected — add the payment to a new receipt");
         }
         if (claimCloseRepo.existsByOrgIdAndJobCardId(orgId, jobCard.getId())) {
             throw DamsException.conflict("Job card " + referenceOf(orgId, jobCard)
                 + " already has a closed claim — no new receipts or payments can be recorded against it");
+        }
+
+        // A settled (auto-closed) document reopens the same way a VERIFIED/APPROVED one does:
+        // un-settle it here and let the new line through. Every existing line stays locked
+        // (appendLines only ever adds); if it was VERIFIED/APPROVED it also drops back to
+        // SUBMITTED below, same as the unsettled reopen case.
+        boolean wasSettled = doc.isSettled();
+        if (wasSettled) {
+            doc.setSettled(false);
         }
 
         SettlementLine line = appendLines(orgId, doc, List.of(input), me.getId(), jobCard.getClaimTypeId() != null).get(0);
@@ -281,6 +289,11 @@ public class ReceiveDocumentService {
             lineAddedDetail.put("addedByAccountant", true);
         }
         auditService.recordUserEvent(ENTITY, doc.getId(), doc.getBranchId(), EventType.LINE_ADDED, me.getId(), lineAddedDetail);
+
+        if (wasSettled) {
+            auditService.recordUserEvent(ENTITY, doc.getId(), doc.getBranchId(), EventType.SETTLED, me.getId(),
+                orderedDetail("documentNo", doc.getDocumentNo(), "unsettled", true));
+        }
 
         // A new payment on an already-reviewed document means the Accountant/FM approved a
         // smaller picture than what's now on record — reopen it for re-review rather than
