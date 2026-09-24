@@ -7,6 +7,28 @@
 
 ## Revision log
 
+- **rev 52 (2026-09-24)** — Bug fix: an Accountant's own "Add Payment" (rev 49) silently
+  locked them out of ever resending or verifying that same document — a real backend 409,
+  not just a hidden button — found live testing the rev 51 fix (add payment to answer an
+  FM query on `OOR-SEP26-R-043`; Resend-to-FM then vanished for that same Accountant).
+  `ReceiveDocumentService.addLine()` set `last_modified_by` to whoever added the line,
+  Cashier or Accountant alike. For the Cashier that's correct — the maker whose entry the
+  Accountant/FM must still check fresh. For the Accountant it directly contradicts the
+  precedent everywhere else in the codebase: `ReviewService`'s own header says review
+  actions **never** touch `last_modified_by`, "so one accountant may override a line and
+  still verify the same document" (rev 13), and `ReviewGuard.requireCanReview()` enforces
+  exactly that as a hard 409 the moment `last_modified_by` is the caller. The three-role
+  chain (Cashier → Accountant → Finance Manager) *is* the maker-checker — it was never
+  meant to require a second person in the same role, confirmed against the live org (one
+  Accountant, one Finance Manager, by design). `addLine()` now only sets
+  `last_modified_by` on the Cashier path; an Accountant's Add Payment leaves it alone,
+  same as a line override, so they can still Resend-to-FM or Verify their own fix — the
+  FM's later look stays the genuine independent check. `addedByAccountant` audit marker on
+  `LINE_ADDED` is unchanged (still visible in history, just doesn't gate anything).
+  Test renamed/reworked: `addPayment_asAccountant_allowedWhileSubmitted_neverTouchesLastModifiedBy`
+  (was `...setsLastModifiedByToThatAccountant`, asserting the old, wrong behavior).
+  Verified: `mvn test` 241 green (0 failures/errors, 4 pre-existing Docker-only skips).
+
 - **rev 51 (2026-09-23)** — Bug fix: a settled (auto-closed) receipt refused every new
   settlement line outright (`"Document X is settled — it accepts no more payments"`),
   even a non-claim, VERIFIED one a cashier was trying to top up — reported live against
@@ -26,10 +48,16 @@
   un-settled; `AddPaymentModal`/`NewReceiptPage` already called `addLine` regardless of
   status. Accountant's narrower add-while-reviewing window (SUBMITTED/FM_QUERIED only,
   rev 49) is untouched — this only affects the Cashier's own Add Payment.
+  Since `addLine()` is shared between the Cashier and Accountant (rev 49) paths, an
+  Accountant hitting the same "is settled" error while a document was still SUBMITTED/
+  FM_QUERIED at ₹0 pending is fixed by the same change — no separate code needed there.
+  The Accountant's narrower window itself (SUBMITTED/FM_QUERIED only, blocked once
+  VERIFIED/APPROVED) is unchanged, on purpose.
   New tests: `addPayment_toASettledDocument_unsettlesIt_andReopensToSubmitted_sinceItWasApproved`,
-  `addPayment_toASettledDocument_thatWasStillSubmitted_unsettlesWithoutReopening` (replacing
-  the old `addPayment_toASettledDocument_isRejected`).
-  Verified: `mvn test` 240 green (0 failures/errors, 4 pre-existing Docker-only skips).
+  `addPayment_toASettledDocument_thatWasStillSubmitted_unsettlesWithoutReopening`,
+  `addPayment_asAccountant_onASettledFmQueriedDocument_unsettlesIt` (replacing the old
+  `addPayment_toASettledDocument_isRejected`).
+  Verified: `mvn test` 241 green (0 failures/errors, 4 pre-existing Docker-only skips).
 
 - **rev 50 (2026-09-23)** — **Premium polish pass + switchable platform font.** Frontend
   craft only — no colour hex, layout, field, route or workflow changes: layered shadow tokens,

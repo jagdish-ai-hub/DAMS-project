@@ -207,9 +207,13 @@ class ReceiveDocumentServiceTest {
     // ---- rev 49: an Accountant may also add a payment, while actively reviewing it ----
 
     @Test
-    void addPayment_asAccountant_allowedWhileSubmitted_setsLastModifiedByToThatAccountant() {
+    void addPayment_asAccountant_allowedWhileSubmitted_neverTouchesLastModifiedBy() {
+        // Same rule as every other review action (ReviewService/ReviewGuard): an Accountant's
+        // own Add Payment must not lock them out of verifying or resending their own fix — a
+        // different accountant was never required, same as a line override.
         ReceiveDocument submitted = openDoc();
         submitted.setWorkflowStatus(WorkflowStatus.SUBMITTED);
+        submitted.setLastModifiedBy(CASHIER_ID); // the maker's own last touch
         when(receiveDocumentRepo.findByIdAndOrgId(500L, ORG)).thenReturn(Optional.of(submitted));
         when(branchScope.currentRole()).thenReturn(Role.ACCOUNTANT);
         when(branchScope.currentUserId()).thenReturn(ACCOUNTANT_ID);
@@ -217,7 +221,7 @@ class ReceiveDocumentServiceTest {
 
         service.addLine(500L, lineInput(new BigDecimal("500")));
 
-        assertThat(submitted.getLastModifiedBy()).isEqualTo(ACCOUNTANT_ID);
+        assertThat(submitted.getLastModifiedBy()).isEqualTo(CASHIER_ID);
         verify(paymentGuard, never()).requireCanPost(any(), any());
     }
 
@@ -232,6 +236,25 @@ class ReceiveDocumentServiceTest {
 
         service.addLine(500L, lineInput(new BigDecimal("500")));
 
+        verify(settlementLineRepo).save(any(SettlementLine.class));
+    }
+
+    @Test
+    void addPayment_asAccountant_onASettledFmQueriedDocument_unsettlesIt() {
+        // Pending can hit zero while a document still sits FM_QUERIED, before the
+        // Accountant has resent it — same shared un-settle path as the cashier case.
+        ReceiveDocument fmQueried = openDoc();
+        fmQueried.setWorkflowStatus(WorkflowStatus.FM_QUERIED);
+        fmQueried.setSettled(true);
+        when(receiveDocumentRepo.findByIdAndOrgId(500L, ORG)).thenReturn(Optional.of(fmQueried));
+        when(branchScope.currentRole()).thenReturn(Role.ACCOUNTANT);
+        when(branchScope.currentUserId()).thenReturn(ACCOUNTANT_ID);
+        when(userRepo.findByIdAndOrganization_Id(ACCOUNTANT_ID, ORG)).thenReturn(Optional.of(accountant()));
+
+        service.addLine(500L, lineInput(new BigDecimal("500")));
+
+        assertThat(fmQueried.isSettled()).isFalse();
+        assertThat(fmQueried.getWorkflowStatus()).isEqualTo(WorkflowStatus.FM_QUERIED);
         verify(settlementLineRepo).save(any(SettlementLine.class));
     }
 

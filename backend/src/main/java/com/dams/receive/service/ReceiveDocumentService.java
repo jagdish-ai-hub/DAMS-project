@@ -249,8 +249,14 @@ public class ReceiveDocumentService {
      * "Add Payment" — one line onto the job card's open document. Never a second document.
      * Normally the Cashier, in their own home branch. An Accountant may also add one (rev 49)
      * while they're actively reviewing the document (SUBMITTED or FM_QUERIED) — branch-scoped
-     * by their assigned branches, not a home branch. Either way, {@code last_modified_by} moves
-     * to whoever just added money, so that person can't be the one who verifies it afterward.
+     * by their assigned branches, not a home branch.
+     * <p>
+     * {@code last_modified_by} only moves for the <b>Cashier</b> — the maker whose entry the
+     * Accountant/FM must still check fresh. An Accountant's own Add Payment leaves it alone,
+     * same as every other review action ({@code ReviewService}/{@code ReviewGuard}): the
+     * three-role chain (Cashier → Accountant → Finance Manager) is the maker-checker, not a
+     * second person in the same role — an Accountant may fix a line and still verify or
+     * resend-to-FM the same document, exactly as they already can with a line override.
      */
     @Transactional
     public ReceiveDocumentResponse addLine(Long documentId, SettlementLineInput input) {
@@ -281,7 +287,15 @@ public class ReceiveDocumentService {
         }
 
         SettlementLine line = appendLines(orgId, doc, List.of(input), me.getId(), jobCard.getClaimTypeId() != null).get(0);
-        doc.setLastModifiedBy(me.getId());
+        // Cashier: this is the maker's own edit, same as any other line — last_modified_by
+        // moves to them so the Accountant/FM checks it fresh. Accountant: same rule as every
+        // other review action (ReviewService/ReviewGuard) — never touch last_modified_by, so
+        // the same Accountant can still verify or resend-to-FM their own fix afterward. The
+        // FM's later look stays the genuine third pair of eyes; it was never meant to require
+        // a second Accountant.
+        if (!asAccountant) {
+            doc.setLastModifiedBy(me.getId());
+        }
         Map<String, Object> lineAddedDetail = new LinkedHashMap<>();
         lineAddedDetail.put("lineNo", line.getLineNo());
         lineAddedDetail.put("amount", line.getAmount());
