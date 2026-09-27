@@ -1034,7 +1034,9 @@ function RecordDetail(props: {
   // rev 53 — an FM pre-approval that still covers the total counts as that approval: the
   // Accountant closes it after verifying, with no second trip to the FM.
   const preApproved = expense ? (doc as { preApprovalCovers: boolean }).preApprovalCovers : false
-  const closeBlocked = overLimit && wf !== 'APPROVED' && !preApproved
+  // rev 54 — over a limit, or a status flagged "requires FM approval".
+  const needsFm = expense ? (doc as { needsFmApproval: boolean }).needsFmApproval : false
+  const closeBlocked = needsFm && wf !== 'APPROVED' && !preApproved
   // rev 49: an Accountant may add a payment too, same window as the override tools —
   // while they're actively reviewing it, not after it's moved on.
   const canAddPayment = receipt != null && (canReview || canResendToFm)
@@ -1143,7 +1145,7 @@ function RecordDetail(props: {
               <button type="button" onClick={() => run(() => reviewApi.closeExpense(doc.id), `${docNo} closed`)}
                 disabled={busy || closeBlocked}
                 style={{ ...primaryBtn(busy || closeBlocked), minHeight: 36 }}
-                title={closeBlocked ? 'Over-limit expense — needs Finance Manager approval first' : undefined}>
+                title={closeBlocked ? (overLimit ? 'Over-limit expense' : 'This status') + ' — needs Finance Manager approval first' : undefined}>
                 Close expense
               </button>
             )}

@@ -15,7 +15,7 @@ From your home screen press **New Expense**. From a customer's page, **＋ New E
 - **Receiver Name** *(required)* — the person or firm the money actually went to. Type a new one and DAMS keeps it for next time.
 - **Job Card** — pick the job this expense is for, or leave it as **branch overhead** if it isn't tied to one job.
 - **Expenses Category** — from your owner's list. This decides which **sub-categories** you can pick on the lines.
-- **Status** — where this expense is in its own handling (Open, Awaiting Receipt, …).
+- **Status** — where this expense is in its own handling (Open, Awaiting Receipt, …). Picking **Requires Finance Approval** (or any status your owner set up the same way) sends it to the finance manager first — see *Send for Review* below.
 
 ## Step 3 — add the expense lines
 
@@ -29,9 +29,9 @@ If an amount is **above the sub-category's limit**, you'll see a warning. It sti
 - **Submit** — sends it for checking and locks the **DAMS-Expenses-ID** (like `OOR-AUG26-E-001`), which is permanent.
 - **Send for Review** — shown instead of Submit when a line is over its limit. See below.
 
-## Over-limit expenses — Send for Review
+## Send for Review — when the finance manager must approve first
 
-When any line is over its sub-category limit, you can't submit straight away. Press **Send for Review** instead:
+When any line is over its sub-category limit, **or** you pick a status that needs the finance manager's approval (such as **Requires Finance Approval**), you can't submit straight away. Press **Send for Review** instead:
 
 1. The expense goes to the **finance manager** as an approval request. It stays a draft (no number yet) and is **locked** while they look at it — My Entries shows it as **Waiting for FM approval**.
 2. The finance manager either **approves** it or **queries** it back to you with a note.

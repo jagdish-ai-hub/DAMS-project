@@ -264,6 +264,9 @@ public class MastersService {
             if (req.getTriggersClaim() != null) {
                 ebs.setTriggersClaim(req.getTriggersClaim());
             }
+            if (req.getRequiresFmApproval() != null) {
+                ebs.setRequiresFmApproval(req.getRequiresFmApproval());
+            }
         } else if (type.isExpenseSubCategory() && entity instanceof ExpenseSubCategory esc) {
             Long parentId = req.getExpenseCategoryId();
             if (isCreate && parentId == null) {

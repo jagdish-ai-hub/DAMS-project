@@ -2,8 +2,9 @@ import type { ReviewQueueItem } from '../api/review'
 import { card, inr, fmtDateShort } from '../shell/ui'
 
 /**
- * rev 53 — the card at the top of the Finance Manager's home: over-limit expenses cashiers
- * sent for approval before submitting. Each request opens straight into its detail, where
+ * rev 53 — the card at the top of the Finance Manager's home: expenses cashiers sent for
+ * approval before submitting (over a sub-category limit, or — rev 54 — in a status flagged
+ * "requires FM approval"). Each request opens straight into its detail, where
  * the FM approves it or queries it back; the same list also sits in the Expenses tab.
  */
 export default function ExpenseRequestBanner(props: {
@@ -22,7 +23,7 @@ export default function ExpenseRequestBanner(props: {
             ? 'New expense approval request from a cashier'
             : `${requests.length} new expense approval requests from cashiers`}
         </strong>
-        <span style={{ color: 'var(--muted)' }}>above the sub-category limit · waiting for you before they can submit</span>
+        <span style={{ color: 'var(--muted)' }}>waiting for your approval before the cashier can submit</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         {shown.map((r) => (

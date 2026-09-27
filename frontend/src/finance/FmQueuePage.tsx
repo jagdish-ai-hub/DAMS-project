@@ -562,8 +562,9 @@ function FmDetail(props: {
 
       {isApprovalRequest && expense && (
         <div style={{ ...card, background: 'var(--navy3)', borderColor: '#C9D8F2', marginBottom: 14, fontSize: '0.84rem' }}>
-          <strong>Approval request from {expense.createdByName ?? 'the cashier'}</strong> — this expense is above its
-          sub-category limit, so the cashier needs your approval before they can submit it.
+          <strong>Approval request from {expense.createdByName ?? 'the cashier'}</strong> — this expense
+          {expense.overLimit ? ' is above its sub-category limit' : ` is in the “${expense.businessStatusName ?? ''}” status`},
+          so the cashier needs your approval before they can submit it.
           Approving it lets them submit up to <strong>{inr(expense.totalAmount)}</strong>; after that the
           Accountant verifies and closes it without coming back to you. Query sends it back with your note.
         </div>

@@ -145,7 +145,8 @@ public class MasterProvisioningService {
             expenseBusinessStatus(orgId, "Awaiting Receipt", false, 3),
             expenseBusinessStatus(orgId, "Received Receipt", false, 4),
             expenseBusinessStatus(orgId, "Closed", false, 5),
-            expenseBusinessStatus(orgId, "Transfer to Claim", true, 6)));
+            expenseBusinessStatus(orgId, "Transfer to Claim", true, 6),
+            requiresFmApprovalStatus(orgId, "Requires Finance Approval", 7)));
 
         bankRepo.saveAll(List.of(
             named(new Bank(), orgId, "State Bank of India", 1),
@@ -219,6 +220,13 @@ public class MasterProvisioningService {
     private static ExpenseBusinessStatus expenseBusinessStatus(Long orgId, String name, boolean triggersClaim, int sort) {
         ExpenseBusinessStatus m = named(new ExpenseBusinessStatus(), orgId, name, sort);
         m.setTriggersClaim(triggersClaim);
+        return m;
+    }
+
+    /** rev 54 — a status that sends the expense through FM pre-approval before submit. */
+    private static ExpenseBusinessStatus requiresFmApprovalStatus(Long orgId, String name, int sort) {
+        ExpenseBusinessStatus m = expenseBusinessStatus(orgId, name, false, sort);
+        m.setRequiresFmApproval(true);
         return m;
     }
 

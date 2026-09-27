@@ -294,9 +294,9 @@ public class ExpenseDocumentService {
             throw DamsException.badRequest("Add at least one expense line before sending it for review");
         }
         recomputeOverLimit(orgId, doc);
-        if (!doc.isOverLimit()) {
-            throw DamsException.badRequest("Expense " + describe(doc)
-                + " is within every sub-category limit — it doesn't need approval, just Submit it");
+        if (!requiresFmApproval(orgId, doc)) {
+            throw DamsException.badRequest("Expense " + describe(doc) + " is within every sub-category limit and"
+                + " its status doesn't need Finance Manager approval — just Submit it");
         }
         BigDecimal total = sum(lines);
         if (preApprovalCovers(doc, total)) {
@@ -312,7 +312,7 @@ public class ExpenseDocumentService {
         doc.setLastModifiedBy(me.getId());
         expenseDocumentRepo.save(doc);
         auditService.recordUserEvent(ENTITY, doc.getId(), doc.getBranchId(), EventType.APPROVAL_REQUESTED, me.getId(),
-            orderedDetail("amount", total, "overLimit", true));
+            orderedDetail("amount", total, "overLimit", doc.isOverLimit()));
         log.info("Expense sent for FM pre-approval: orgId={} docId={} amount={}", orgId, doc.getId(), total);
         return assemble(doc);
     }
@@ -326,6 +326,27 @@ public class ExpenseDocumentService {
         return doc.getPreApprovalStatus() == PreApprovalStatus.APPROVED
             && doc.getPreApprovedAmount() != null
             && total.compareTo(doc.getPreApprovedAmount()) <= 0;
+    }
+
+    /**
+     * rev 54 — is the expense's business status one that needs FM approval before submit
+     * (flag {@code requires_fm_approval}, never the label)? Public — ReviewService's close
+     * check pairs it with {@code over_limit}.
+     */
+    public boolean statusRequiresFmApproval(Long orgId, ExpenseDocument doc) {
+        return statusRepo.findByIdAndOrgId(doc.getBusinessStatusId(), orgId)
+            .map(ExpenseBusinessStatus::isRequiresFmApproval)
+            .orElse(false);
+    }
+
+    /** Over any sub-category limit (rev 53), or in a status flagged for FM approval (rev 54). */
+    private boolean requiresFmApproval(Long orgId, ExpenseDocument doc) {
+        return doc.isOverLimit() || statusRequiresFmApproval(orgId, doc);
+    }
+
+    /** Why this expense needs FM approval — for the refusal messages. */
+    private String approvalReason(ExpenseDocument doc) {
+        return doc.isOverLimit() ? "is over its sub-category limit" : "is in a status that needs Finance Manager approval";
     }
 
     /** Fix-and-resubmit: a QUERIED document goes back to SUBMITTED after the cashier's edits. */
@@ -573,11 +594,11 @@ public class ExpenseDocumentService {
         if (!resubmit) {
             recomputeOverLimit(orgId, doc);
             BigDecimal total = sum(lines);
-            if (doc.isOverLimit() && !preApprovalCovers(doc, total)) {
+            if (requiresFmApproval(orgId, doc) && !preApprovalCovers(doc, total)) {
                 throw DamsException.conflict(doc.getPreApprovalStatus() == PreApprovalStatus.APPROVED
                     ? "Expense " + describe(doc) + " now totals ₹" + total + ", above the ₹" + doc.getPreApprovedAmount()
                         + " the Finance Manager approved — send it for review again before submitting"
-                    : "Expense " + describe(doc) + " is over its sub-category limit — send it to the Finance Manager"
+                    : "Expense " + describe(doc) + " " + approvalReason(doc) + " — send it to the Finance Manager"
                         + " for review before submitting");
             }
         }
@@ -789,6 +810,7 @@ public class ExpenseDocumentService {
             doc.getPreApprovedAt(),
             doc.getApprovalRequestedAt(),
             preApprovalCovers(doc, total),
+            requiresFmApproval(orgId, doc),
             lineDtos,
             documentHistoryService.forDocument(ENTITY, doc.getId()));
     }

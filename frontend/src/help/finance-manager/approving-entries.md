@@ -4,7 +4,7 @@ Your home screen is **Approvals & Claims**. It lists every entry the accountant 
 
 ## Expense approval requests from cashiers
 
-When a cashier's expense has a line **above its sub-category limit**, they can't submit it — they send it to you first. You'll see a card at the top of **Approvals & Claims** saying how many requests are waiting, and the same requests at the top of the **Expenses** tab under **Approval requests from cashiers**.
+When a cashier's expense has a line **above its sub-category limit**, or is in a status that needs your approval (such as **Requires Finance Approval**), they can't submit it — they send it to you first. You'll see a card at the top of **Approvals & Claims** saying how many requests are waiting, and the same requests at the top of the **Expenses** tab under **Approval requests from cashiers**.
 
 Click a request (from the card or the list) to open it, then:
 

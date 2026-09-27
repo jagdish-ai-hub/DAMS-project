@@ -25,6 +25,8 @@ export interface MasterRow {
   requiresBank?: boolean
   requiresRef?: boolean
   triggersClaim?: boolean
+  /** expense-statuses only (rev 54): an expense in this status needs FM approval before submit. */
+  requiresFmApproval?: boolean
   expenseCategoryId?: number
   limitAmount?: number | null
   vpa?: string
@@ -41,6 +43,7 @@ export interface MasterRequest {
   requiresBank?: boolean
   requiresRef?: boolean
   triggersClaim?: boolean
+  requiresFmApproval?: boolean
   expenseCategoryId?: number
   limitAmount?: number | null
   vpa?: string

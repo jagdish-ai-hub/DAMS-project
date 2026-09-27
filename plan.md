@@ -7,6 +7,36 @@
 
 ## Revision log
 
+- **rev 54 (2026-09-27)** — **"Requires Finance Approval" expense status.** A business
+  status can now send an expense through the rev 53 FM pre-approval flow even when every
+  line is within its limit. AGENT.md closing rule #2 extended first. Decision (confirmed):
+  choosing the status switches Submit to **Send for Review** — the cashier still presses it;
+  saving doesn't auto-send.
+  - `V32__expense_status_requires_fm_approval.sql` — `expense_business_status.requires_fm_approval`
+    (default false) and a **Requires Finance Approval** row (flag true, sorted last) for every
+    existing organization (`ON CONFLICT (org_id, name)` sets the flag on an existing
+    same-named row). New orgs get it from `MasterProvisioningService`. New migration rather
+    than editing V31, in case V31 has already run somewhere.
+  - Checked by flag, never the label: `ExpenseDocumentService.statusRequiresFmApproval` +
+    private `requiresFmApproval` (= `over_limit` OR the status flag) now drive the first-submit
+    gate and `requestApproval`'s eligibility; `ReviewService.closeExpense` uses the same pair.
+    Messages say which reason applies. `ExpenseDocumentResponse.needsFmApproval`;
+    `MasterRequest/Response.requiresFmApproval` (Owner-editable, expense-statuses only).
+  - Frontend: `NewExpensePage` switches to Send for Review when the chosen status is flagged
+    (with a banner saying why); Accountant Close + `RecordCard` note use `needsFmApproval`;
+    FM request card / detail wording no longer assumes over-limit; Owner Masters gains a
+    "Needs FM approval" column + tick box on Expense statuses (and the sub-category limit
+    hint no longer says "flagged, not blocked").
+  - Help: `owner/masters.md`, `cashier/recording-an-expense.md`,
+    `finance-manager/approving-entries.md`, `accountant/closing-an-expense.md`.
+  - Tests: `ExpenseDocumentServiceTest` +3 (status blocks submit within limits, status request
+    goes PENDING, submit once approved), `ReviewServiceTest` +2 (close refused / allowed with
+    pre-approval for a flagged status).
+  Verified: `mvn test` 261 green (0 failures/errors, 4 pre-existing Docker-only skips);
+  frontend `tsc`, `eslint`, `vitest` clean; production build green with the new tick box,
+  `needsFmApproval` and the status banner present in `dist/assets/*.js`. Not checked on the
+  live Neon DB (MCP connection timed out); V32 applies through CI/CD.
+
 - **rev 53 (2026-09-27)** — **Finance Manager pre-approval of over-limit expenses.** An
   expense with any line above its sub-category limit can no longer be submitted straight
   away: the Cashier presses **Send for Review** instead of Submit, the FM approves or queries
@@ -1554,6 +1584,7 @@ Flyway callback / profile guard and instead runs a masters-only seed.
 | ~~V20~~ | **dropped (rev 15)** — full demo seed. Owner asked to skip; testers add their own data. | — |
 | V29 | `platform_setting` (key/value, no `org_id`); seeds `ui.font = plex` *(rev 50)* | polish ✅ |
 | V31 | `expense_document` pre-approval columns (`pre_approval_status` CHECK, `pre_approved_amount/_by/_at`, `approval_requested_at`) + pending partial index; `audit_event` CHECK += `APPROVAL_REQUESTED`, `PRE_APPROVED` *(rev 53)* | expense pre-approval ✅ |
+| V32 | `expense_business_status.requires_fm_approval` + a "Requires Finance Approval" status per org *(rev 54)* | expense pre-approval ✅ |
 
 ---
 

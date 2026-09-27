@@ -893,10 +893,13 @@ public class ReviewService {
         }
         // rev 53: an FM pre-approval that still covers the total counts as that approval —
         // no second FM step. If the total has grown past it, the normal FM Approve applies.
-        if (doc.isOverLimit() && s != ExpenseWorkflowStatus.APPROVED
+        // rev 54: a status flagged requires_fm_approval needs the same approval as over-limit.
+        boolean statusNeedsFm = !doc.isOverLimit() && expenseDocumentService.statusRequiresFmApproval(orgId, doc);
+        if ((doc.isOverLimit() || statusNeedsFm) && s != ExpenseWorkflowStatus.APPROVED
             && !ExpenseDocumentService.preApprovalCovers(doc, expenseTotal(orgId, doc.getId()))) {
-            throw DamsException.conflict("Expense " + label + " is over its category limit — it needs "
-                + "Finance Manager approval before it can be closed");
+            throw DamsException.conflict("Expense " + label
+                + (doc.isOverLimit() ? " is over its category limit" : " is in a status that needs Finance Manager approval")
+                + " — it needs Finance Manager approval before it can be closed");
         }
 
         doc.setWorkflowStatus(ExpenseWorkflowStatus.CLOSED);

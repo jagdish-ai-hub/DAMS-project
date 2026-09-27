@@ -614,7 +614,9 @@ export default function NewExpensePage() {
   const awaitingApproval = preApproval === 'PENDING'
   const approvedAmount = loadedDoc?.preApprovedAmount ?? null
   const approvalCovers = preApproval === 'APPROVED' && approvedAmount != null && total <= approvedAmount
-  const needsApproval = limitWarnings.length > 0 && !approvalCovers
+  // rev 54 — a status flagged "requires FM approval" goes through the same flow as over-limit.
+  const statusNeedsApproval = statuses.find((s) => s.id === businessStatusId)?.requiresFmApproval === true
+  const needsApproval = (limitWarnings.length > 0 || statusNeedsApproval) && !approvalCovers
   const linesEditable = !awaitingApproval
     && (!loadedDoc || loadedDoc.workflowStatus === 'DRAFT' || loadedDoc.workflowStatus === 'QUERIED')
   const showTransferButton =
@@ -670,6 +672,13 @@ export default function NewExpensePage() {
           Send it for review again before submitting.
         </div>
       ))}
+      {statusNeedsApproval && !awaitingApproval && !approvalCovers
+        && (!loadedDoc || loadedDoc.workflowStatus === 'DRAFT') && (
+        <div role="status" style={{ ...approvalBanner, background: 'var(--navy3)', border: '1px solid #C9D8F2', color: 'var(--navy)' }}>
+          <strong>This status needs the Finance Manager&apos;s approval.</strong>{' '}
+          Press <strong>Send for Review</strong> — once they approve it, you can submit it.
+        </div>
+      )}
       {preApproval === 'QUERIED' && (
         <div role="status" style={{ ...approvalBanner, background: 'var(--amber-bg)', border: '1px solid #EAD3AE', color: 'var(--amber)' }}>
           <strong>Query from the Finance Manager:</strong> {fmApprovalNote(loadedDoc?.history ?? []) ?? 'see the history for details.'}{' '}
@@ -908,7 +917,7 @@ export default function NewExpensePage() {
                 <button type="button" onClick={saveDraftExisting} style={ghostBtn} disabled={busy}>Save Draft</button>
                 {needsApproval ? (
                   <button type="button" onClick={sendDraftForReview} style={primaryBtn(busy)} disabled={busy}
-                    title="Over its limit — the Finance Manager approves it before you submit">
+                    title="Needs Finance Manager approval before you submit">
                     {busy ? <><Spinner /> Sending…</> : 'Send for Review'}
                   </button>
                 ) : (
@@ -929,7 +938,7 @@ export default function NewExpensePage() {
                 <button type="button" onClick={() => saveNew(false)} style={ghostBtn} disabled={busy}>Save Draft</button>
                 {needsApproval ? (
                   <button type="button" onClick={sendNewForReview} style={primaryBtn(busy)} disabled={busy}
-                    title="Over its limit — the Finance Manager approves it before you submit">
+                    title="Needs Finance Manager approval before you submit">
                     {busy ? <><Spinner /> Sending…</> : 'Send for Review'}
                   </button>
                 ) : (

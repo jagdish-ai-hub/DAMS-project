@@ -36,6 +36,7 @@ public class MasterRequest {
 
     // expense-statuses only
     private Boolean triggersClaim;
+    private Boolean requiresFmApproval;   // rev 54 — needs FM approval before submit
 
     // expense-sub-categories only
     private Long expenseCategoryId;

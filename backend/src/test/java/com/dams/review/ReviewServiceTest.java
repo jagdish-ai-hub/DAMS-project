@@ -636,6 +636,33 @@ class ReviewServiceTest {
         assertThat(queue.awaitingApproval()).extracting(ReviewQueueItem::id).containsExactly(601L);
     }
 
+    @Test
+    void closeExpense_inAStatusThatNeedsFmApproval_isRefused_withoutAnyFmApproval() {
+        ExpenseDocument doc = expenseDoc(ExpenseWorkflowStatus.VERIFIED, false);   // within every limit
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+        when(expenseDocumentService.statusRequiresFmApproval(ORG, doc)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.closeExpense(E_ID))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("status that needs Finance Manager approval");
+        assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.VERIFIED);
+    }
+
+    @Test
+    void closeExpense_inAStatusThatNeedsFmApproval_closes_whenPreApproved() {
+        ExpenseDocument doc = expenseDoc(ExpenseWorkflowStatus.VERIFIED, false);
+        doc.setPreApprovalStatus(PreApprovalStatus.APPROVED);
+        doc.setPreApprovedAmount(new BigDecimal("500"));
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+        when(expenseDocumentService.statusRequiresFmApproval(ORG, doc)).thenReturn(true);
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, E_ID))
+            .thenReturn(List.of(expenseLine(1, new BigDecimal("500"))));
+
+        service.closeExpense(E_ID);
+
+        assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.CLOSED);
+    }
+
     /** An over-limit draft the cashier sent for review — no number yet. */
     private static ExpenseDocument pendingRequest() {
         ExpenseDocument d = expenseDoc(ExpenseWorkflowStatus.DRAFT, true);

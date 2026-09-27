@@ -78,6 +78,8 @@ export interface ExpenseDocument {
   approvalRequestedAt: string | null
   /** Approved and the total is still within the approved amount — may be submitted / closed. */
   preApprovalCovers: boolean
+  /** rev 54 — needs FM approval: over a limit, or its status is flagged "requires FM approval". */
+  needsFmApproval: boolean
   lines: ExpenseLine[]
   history: DocumentHistoryEntry[]
 }

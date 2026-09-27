@@ -60,6 +60,8 @@ public record ExpenseDocumentResponse(
     Instant preApprovedAt,
     Instant approvalRequestedAt,
     boolean preApprovalCovers,
+    // rev 54 — FM approval is needed for this expense: over a limit, or its status is flagged.
+    boolean needsFmApproval,
 
     List<ExpenseLineResponse> lines,
     List<DocumentHistoryEntry> history   // oldest-first; drives the review pane + the cashier's "why queried"

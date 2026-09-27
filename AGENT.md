@@ -146,6 +146,12 @@ has `org_id = null`.
    approval again (Send for Review before Submit; after Submit, the normal
    FM Approve before Close). The same or a lower total submits directly.
    The server enforces all of this — not just the buttons.
+   **A business status can require the same approval (rev 54).** An expense
+   status flagged "needs Finance Manager approval" (the seeded **Requires
+   Finance Approval** status, or any status an Owner marks that way in
+   masters) sends the expense through exactly this flow even when every
+   line is within its limit: choosing it switches Submit to Send for Review.
+   Checked by the flag, never the status name.
 3. **Warranty / AMC / CG claims are closed explicitly by the Finance
    Manager.** FM may override the final settled amount at closing (e.g.
    accepting Eicher's partial payment as final). That override is

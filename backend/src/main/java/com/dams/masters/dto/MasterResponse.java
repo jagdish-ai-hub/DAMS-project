@@ -26,6 +26,7 @@ public record MasterResponse(
     Boolean requiresRef,
     Boolean isCash,
     Boolean triggersClaim,
+    Boolean requiresFmApproval,     // expense-statuses only (rev 54)
     Long expenseCategoryId,
     BigDecimal limitAmount,
     String vpa,
@@ -46,6 +47,7 @@ public record MasterResponse(
         Boolean requiresRef = null;
         Boolean isCash = null;
         Boolean triggersClaim = null;
+        Boolean requiresFmApproval = null;
         Long expenseCategoryId = null;
         BigDecimal limitAmount = null;
         String vpa = null;
@@ -61,6 +63,7 @@ public record MasterResponse(
             isCash = em.isCash();
         } else if (m instanceof ExpenseBusinessStatus ebs) {
             triggersClaim = ebs.isTriggersClaim();
+            requiresFmApproval = ebs.isRequiresFmApproval();
         } else if (m instanceof ExpenseSubCategory esc) {
             expenseCategoryId = esc.getExpenseCategoryId();
             limitAmount = esc.getLimitAmount();
@@ -74,7 +77,7 @@ public record MasterResponse(
 
         return new MasterResponse(
             m.getId(), type.slug(), m.getName(), m.isActive(), m.getSortOrder(),
-            requiresBank, requiresRef, isCash, triggersClaim, expenseCategoryId, limitAmount, vpa,
+            requiresBank, requiresRef, isCash, triggersClaim, requiresFmApproval, expenseCategoryId, limitAmount, vpa,
             deprecated, allowedRoles);
     }
 }

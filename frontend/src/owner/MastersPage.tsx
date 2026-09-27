@@ -7,7 +7,7 @@ import {
 import AiMastersStrip from './AiMastersStrip'
 import ReceiversSection from './ReceiversSection'
 
-type Extra = 'mode' | 'sub' | 'upi' | 'roles' | undefined
+type Extra = 'mode' | 'sub' | 'upi' | 'roles' | 'estatus' | undefined
 
 /** Only these roles ever set a job-card status; the Owner is read-only on transactions. */
 const STATUS_ROLES: { value: StatusRole; label: string }[] = [
@@ -26,7 +26,7 @@ const TABS: { slug: MasterTypeSlug; label: string; extra: Extra }[] = [
   { slug: 'expense-categories', label: 'Expense departments', extra: undefined },
   { slug: 'expense-sub-categories', label: 'Expense sub-categories', extra: 'sub' },
   { slug: 'expense-modes', label: 'Expense modes', extra: undefined },
-  { slug: 'expense-statuses', label: 'Expense statuses', extra: undefined },
+  { slug: 'expense-statuses', label: 'Expense statuses', extra: 'estatus' },
   { slug: 'banks', label: 'Banks', extra: undefined },
   { slug: 'upi-vpas', label: 'UPI IDs', extra: 'upi' },
 ]
@@ -137,6 +137,7 @@ export default function MastersPage() {
                   <th style={th}>Name</th>
                   {tab.extra === 'mode' && <th style={th}>Requires</th>}
                   {tab.extra === 'sub' && <th style={th}>Limit</th>}
+                  {tab.extra === 'estatus' && <th style={th}>Needs FM approval</th>}
                   {tab.extra === 'upi' && <th style={th}>UPI ID</th>}
                   {tab.extra === 'roles' && <th style={th}>Can be set by</th>}
                   <th style={th}>Status</th><th style={th}></th>
@@ -159,6 +160,7 @@ export default function MastersPage() {
                       </td>
                     )}
                     {tab.extra === 'sub' && <td style={td}>{r.limitAmount != null ? inr(r.limitAmount) : '—'}</td>}
+                    {tab.extra === 'estatus' && <td style={td}>{r.requiresFmApproval ? 'Yes' : '—'}</td>}
                     {tab.extra === 'upi' && <td style={{ ...td, fontFamily: 'Consolas, monospace', fontSize: '0.78rem' }}>{r.vpa}</td>}
                     {tab.extra === 'roles' && (
                       <td style={td}>
@@ -212,6 +214,7 @@ function MasterModal(props: {
   const [requiresRef, setRequiresRef] = useState(editing?.requiresRef ?? false)
   const [limitAmount, setLimitAmount] = useState(editing?.limitAmount != null ? String(editing.limitAmount) : '')
   const [vpa, setVpa] = useState(editing?.vpa ?? '')
+  const [requiresFmApproval, setRequiresFmApproval] = useState(editing?.requiresFmApproval ?? false)
   // A new status starts available to everyone, matching how the pre-role-mapping
   // statuses were treated — the Owner narrows it from there.
   const [roles, setRoles] = useState<StatusRole[]>(
@@ -238,6 +241,7 @@ function MasterModal(props: {
         body.limitAmount = limitAmount === '' ? null : Number(limitAmount)
       }
       if (tab.extra === 'upi') body.vpa = vpa.trim()
+      if (tab.extra === 'estatus') body.requiresFmApproval = requiresFmApproval
       if (tab.extra === 'roles') {
         if (roles.length === 0) {
           setError('Pick at least one role — a status nobody can set would never appear.')
@@ -285,8 +289,14 @@ function MasterModal(props: {
             </label>
           </div>
         )}
+        {tab.extra === 'estatus' && (
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.85rem' }}>
+            <input type="checkbox" checked={requiresFmApproval} onChange={(e) => setRequiresFmApproval(e.target.checked)} />
+            Needs Finance Manager approval before the cashier can submit
+          </label>
+        )}
         {tab.extra === 'sub' && (
-          <Field label="Per-line limit (₹)" hint="Optional — over this, the expense is flagged (not blocked)">
+          <Field label="Per-line limit (₹)" hint="Optional — over this, the expense needs Finance Manager approval before it's submitted">
             <TextInput value={limitAmount} onChange={setLimitAmount} type="number" placeholder="e.g. 2000" />
           </Field>
         )}

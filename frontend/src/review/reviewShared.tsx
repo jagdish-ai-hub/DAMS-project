@@ -172,14 +172,14 @@ export function RecordCard(props: {
             </div>
           )}
         </div>
-        {expense && doc.overLimit && doc.workflowStatus !== 'DRAFT' && (doc.preApprovalCovers ? (
+        {expense && doc.needsFmApproval && doc.workflowStatus !== 'DRAFT' && (doc.preApprovalCovers ? (
           <div style={{ fontSize: '0.76rem', color: 'var(--green)', marginTop: 10 }}>
-            ✓ Over the category limit, but pre-approved by {doc.preApprovedByName ?? 'the Finance Manager'} for
+            ✓ {doc.overLimit ? 'Over the category limit' : `Status “${doc.businessStatusName ?? ''}” needs Finance Manager approval`}, but pre-approved by {doc.preApprovedByName ?? 'the Finance Manager'} for
             {' '}{inr(doc.preApprovedAmount ?? 0)} before it was submitted — it can be closed once verified, no second FM approval.
           </div>
         ) : (
           <div style={{ fontSize: '0.76rem', color: 'var(--amber)', marginTop: 10 }}>
-            ⚠ Over the category limit — needs Finance Manager approval before it can be closed
+            ⚠ {doc.overLimit ? 'Over the category limit' : `Status “${doc.businessStatusName ?? ''}”`} — needs Finance Manager approval before it can be closed
             {doc.preApprovalStatus === 'APPROVED' && doc.preApprovedAmount != null
               ? ` (it was pre-approved for ${inr(doc.preApprovedAmount)}, but the total has grown past that).`
               : '.'}

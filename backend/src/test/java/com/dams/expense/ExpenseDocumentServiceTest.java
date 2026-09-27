@@ -79,6 +79,7 @@ class ExpenseDocumentServiceTest {
     private static final long CATEGORY_ID = 20L;
     private static final long STATUS_ID = 30L;         // ordinary status
     private static final long CLAIM_STATUS_ID = 31L;   // triggers_claim = true
+    private static final long FM_STATUS_ID = 32L;      // requires_fm_approval = true (rev 54)
     private static final long SUBCAT_ID = 40L;         // limit 1000, under CATEGORY_ID
     private static final long MODE_ID = 50L;           // Cash — no flags
     private static final long RECEIVER_ID = 60L;
@@ -126,6 +127,7 @@ class ExpenseDocumentServiceTest {
         lenient().when(statusRepo.findByIdAndOrgId(STATUS_ID, ORG)).thenReturn(Optional.of(status(STATUS_ID, false)));
         lenient().when(statusRepo.findByIdAndOrgId(CLAIM_STATUS_ID, ORG))
             .thenReturn(Optional.of(status(CLAIM_STATUS_ID, true)));
+        lenient().when(statusRepo.findByIdAndOrgId(FM_STATUS_ID, ORG)).thenReturn(Optional.of(fmStatus()));
         lenient().when(subCategoryRepo.findByIdAndOrgId(SUBCAT_ID, ORG)).thenReturn(Optional.of(sub()));
         lenient().when(subCategoryRepo.findByOrgIdOrderBySortOrderAscIdAsc(ORG)).thenReturn(List.of(sub()));
         lenient().when(expenseModeRepo.findByIdAndOrgId(MODE_ID, ORG)).thenReturn(Optional.of(mode()));
@@ -378,7 +380,7 @@ class ExpenseDocumentServiceTest {
 
         assertThatThrownBy(() -> service.requestApproval(DOC_ID))
             .isInstanceOf(DamsException.class)
-            .hasMessageContaining("doesn't need approval");
+            .hasMessageContaining("just Submit it");
         assertThat(draft.getPreApprovalStatus()).isNull();
     }
 
@@ -433,6 +435,53 @@ class ExpenseDocumentServiceTest {
         service.requestApproval(DOC_ID);
         assertThat(draft.getPreApprovalStatus()).isEqualTo(PreApprovalStatus.PENDING);
         assertThat(draft.getPreApprovedAmount()).isNull();
+    }
+
+    // --- rev 54: a status flagged requires_fm_approval takes the same path, within every limit ---
+
+    @Test
+    void submit_inAStatusThatNeedsFmApproval_isRefused_evenWithinEveryLimit() {
+        ExpenseDocument draft = draftDoc();
+        draft.setBusinessStatusId(FM_STATUS_ID);
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(draft));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, DOC_ID))
+            .thenReturn(List.of(persistedLine(1, new BigDecimal("500"))));   // under the 1000 limit
+
+        assertThatThrownBy(() -> service.submit(DOC_ID))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("status that needs Finance Manager approval");
+        verify(documentNumberService, never()).nextNumber(any(), any(), any());
+        assertThat(draft.isOverLimit()).isFalse();
+    }
+
+    @Test
+    void requestApproval_inAStatusThatNeedsFmApproval_goesPending_evenWithinEveryLimit() {
+        ExpenseDocument draft = draftDoc();
+        draft.setBusinessStatusId(FM_STATUS_ID);
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(draft));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, DOC_ID))
+            .thenReturn(List.of(persistedLine(1, new BigDecimal("500"))));
+
+        service.requestApproval(DOC_ID);
+
+        assertThat(draft.getPreApprovalStatus()).isEqualTo(PreApprovalStatus.PENDING);
+    }
+
+    @Test
+    void submit_inAStatusThatNeedsFmApproval_goesThrough_onceApproved() {
+        ExpenseDocument draft = draftDoc();
+        draft.setBusinessStatusId(FM_STATUS_ID);
+        draft.setPreApprovalStatus(PreApprovalStatus.APPROVED);
+        draft.setPreApprovedAmount(new BigDecimal("500"));
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(draft));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, DOC_ID))
+            .thenReturn(List.of(persistedLine(1, new BigDecimal("500"))));
+        when(documentNumberService.nextNumber(eq(ORG), any(Branch.class), eq(DocType.E)))
+            .thenReturn("OOR-SEP26-E-011");
+
+        service.submit(DOC_ID);
+
+        assertThat(draft.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.SUBMITTED);
     }
 
     // --- fixtures ---
@@ -511,6 +560,16 @@ class ExpenseDocumentServiceTest {
         c.setName("Service");
         c.setActive(true);
         return c;
+    }
+
+    private static ExpenseBusinessStatus fmStatus() {
+        ExpenseBusinessStatus s = new ExpenseBusinessStatus();
+        ReflectionTestUtils.setField(s, "id", FM_STATUS_ID);
+        s.setOrgId(ORG);
+        s.setName("Requires Finance Approval");
+        s.setActive(true);
+        s.setRequiresFmApproval(true);
+        return s;
     }
 
     private static ExpenseBusinessStatus status(long id, boolean triggersClaim) {

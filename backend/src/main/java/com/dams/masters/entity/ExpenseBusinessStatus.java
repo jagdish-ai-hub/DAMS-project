@@ -28,4 +28,11 @@ public class ExpenseBusinessStatus extends OrgMaster {
 
     @Column(name = "triggers_claim", nullable = false)
     private boolean triggersClaim = false;
+
+    /**
+     * rev 54 (V32): an expense in this status needs Finance Manager approval before it's
+     * submitted — the same pre-approval flow as an over-limit expense. Checked by flag.
+     */
+    @Column(name = "requires_fm_approval", nullable = false)
+    private boolean requiresFmApproval = false;
 }
