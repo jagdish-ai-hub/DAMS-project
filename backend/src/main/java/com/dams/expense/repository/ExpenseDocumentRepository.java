@@ -75,4 +75,8 @@ public interface ExpenseDocumentRepository extends JpaRepository<ExpenseDocument
 
     /** Super Admin org-purge only. */
     long deleteByOrgId(Long orgId);
+
+    /** The FM's pending pre-approval requests (rev 53), oldest first. */
+    List<ExpenseDocument> findByOrgIdAndPreApprovalStatusOrderByApprovalRequestedAtAscIdAsc(
+        Long orgId, com.dams.expense.entity.PreApprovalStatus preApprovalStatus);
 }

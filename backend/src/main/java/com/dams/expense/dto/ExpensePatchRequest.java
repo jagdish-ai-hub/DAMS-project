@@ -12,6 +12,10 @@ import lombok.Setter;
  *
  * A job card cannot be <i>removed</i> here (only changed to another in the same branch);
  * untagging an expense from its job card is not a Stage 5 flow.
+ *
+ * {@code customerName} / {@code vehicleNo} / {@code invoiceNo} / {@code dbmId} are manual
+ * reference fields (see {@code ExpenseDocument}): null leaves them as-is, an empty string
+ * clears them — same convention as {@code JobCardPatchRequest}.
  */
 @Getter
 @Setter
@@ -19,6 +23,11 @@ import lombok.Setter;
 public class ExpensePatchRequest {
 
     private Long jobCardId;
+
+    @Size(max = 160) private String customerName;
+    @Size(max = 20) private String vehicleNo;
+    @Size(max = 60) private String invoiceNo;
+    @Size(max = 40) private String dbmId;
 
     private Long receiverId;
     @Size(max = 160) private String receiverName;

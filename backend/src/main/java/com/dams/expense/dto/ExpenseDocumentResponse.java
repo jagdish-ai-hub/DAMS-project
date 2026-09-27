@@ -30,8 +30,10 @@ public record ExpenseDocumentResponse(
     String receiverPhone,
 
     Long customerId,                 // from the job card, or null
-    String customerName,
-    String vehicleNo,
+    String customerName,             // the document's own value, else the job card's
+    String vehicleNo,                // the document's own value, else the job card's
+    String invoiceNo,
+    String dbmId,
 
     Long expenseCategoryId,
     String expenseCategoryName,
@@ -48,6 +50,16 @@ public record ExpenseDocumentResponse(
     Long lastModifiedBy,
     Instant createdAt,
     Instant submittedAt,
+
+    // FM pre-approval of an over-limit expense (rev 53). preApprovalStatus is null when never
+    // requested, else PENDING | APPROVED | QUERIED. preApprovalCovers = approved and the total
+    // is still within the approved amount — the Cashier may Submit, the Accountant may Close.
+    String preApprovalStatus,
+    BigDecimal preApprovedAmount,
+    String preApprovedByName,
+    Instant preApprovedAt,
+    Instant approvalRequestedAt,
+    boolean preApprovalCovers,
 
     List<ExpenseLineResponse> lines,
     List<DocumentHistoryEntry> history   // oldest-first; drives the review pane + the cashier's "why queried"

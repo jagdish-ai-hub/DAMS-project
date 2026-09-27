@@ -91,6 +91,13 @@ public class ReviewController {
         return reviewService.fmReceiptQueue();
     }
 
+    @GetMapping("/review/fm/expense-requests")
+    @Operation(summary = "Finance Manager: over-limit expense drafts cashiers sent for pre-approval (rev 53)")
+    @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
+    public List<ReviewQueueItem> fmExpenseApprovalRequests() {
+        return reviewService.fmExpenseApprovalRequests();
+    }
+
     @GetMapping("/review/fm/expenses")
     @Operation(summary = "Finance Manager expense queue — expenses awaiting final approval")
     @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
@@ -231,10 +238,24 @@ public class ReviewController {
     }
 
     @PostMapping("/expenses/{id}/close")
-    @Operation(summary = "Close an expense (VERIFIED/APPROVED; an over-limit expense needs FM approval first)")
+    @Operation(summary = "Close an expense (VERIFIED/APPROVED; an over-limit expense needs FM approval — up front via pre-approval, or FM Approve)")
     @PreAuthorize("hasAuthority('ACCOUNTANT')")
     public ExpenseDocumentResponse closeExpense(@PathVariable Long id) {
         return reviewService.closeExpense(id);
+    }
+
+    @PostMapping("/expenses/{id}/pre-approve")
+    @Operation(summary = "Finance Manager: approve an over-limit expense before the Cashier submits it (rev 53)")
+    @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
+    public ExpenseDocumentResponse preApproveExpense(@PathVariable Long id) {
+        return reviewService.preApproveExpense(id);
+    }
+
+    @PostMapping("/expenses/{id}/query-approval")
+    @Operation(summary = "Finance Manager: send an expense approval request back to the Cashier with a note (rev 53)")
+    @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
+    public ExpenseDocumentResponse queryExpenseApproval(@PathVariable Long id, @Valid @RequestBody QueryRequest request) {
+        return reviewService.queryExpenseApproval(id, request.note().trim());
     }
 
     @PostMapping("/expenses/{id}/approve")

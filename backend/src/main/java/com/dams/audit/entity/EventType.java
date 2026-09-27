@@ -18,5 +18,9 @@ public enum EventType {
     SETTLED,
     CATEGORY_CHANGED,
     CLAIM_TYPE_CHANGED,
-    TRANSFERRED_TO_CLAIM
+    TRANSFERRED_TO_CLAIM,
+    /** Cashier sent an over-limit expense draft to the FM for pre-approval (rev 53). */
+    APPROVAL_REQUESTED,
+    /** FM pre-approved an over-limit expense draft (rev 53). */
+    PRE_APPROVED
 }

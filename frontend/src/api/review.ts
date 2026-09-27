@@ -24,6 +24,11 @@ export interface ReviewQueueItem {
   /** Receipts only — the direct-approve rule: no claim, status isn't "Credit", every
    * settlement line is cash-mode. Powers the Cash/Credit/Claim Transaction split. */
   isCashEligible: boolean
+  /** Expenses only (rev 53) — FM pre-approved it and the total is still within it: the
+   * Accountant may close it without a second FM approval. */
+  preApproved: boolean
+  /** Expenses only (rev 53) — when the Cashier sent it for the FM's review. */
+  approvalRequestedAt: string | null
 }
 
 /** The Finance Manager's queue for one document type (open claims / recently closed are receipts only). */
@@ -115,6 +120,16 @@ export const reviewApi = {
   },
   bulkDirectApproveReceipts(ids: number[]) {
     return api.post<BulkApproveResponse>('/api/v1/receipts/direct-approve', { ids })
+  },
+  /** FM (rev 53) — over-limit expense drafts cashiers sent for pre-approval, oldest first. */
+  fmExpenseRequests() {
+    return api.get<ReviewQueueItem[]>('/api/v1/review/fm/expense-requests')
+  },
+  preApproveExpense(id: number) {
+    return api.post<ExpenseDocument>(`/api/v1/expenses/${id}/pre-approve`)
+  },
+  queryExpenseApproval(id: number, note: string) {
+    return api.post<ExpenseDocument>(`/api/v1/expenses/${id}/query-approval`, { note })
   },
   closeExpense(id: number) {
     return api.post<ExpenseDocument>(`/api/v1/expenses/${id}/close`)

@@ -11,7 +11,11 @@ Once closed, the expense is locked — its lines and attachments can't be change
 
 ## Over-limit expenses
 
-If any line went over its sub-category limit, **Close expense** stays disabled until the **finance manager has approved** the expense. Verifying it yourself isn't enough for an over-limit expense — it needs finance sign-off first, then you can close it.
+If any line went over its sub-category limit, the expense needs the **finance manager's approval** before you can close it. Verifying it yourself isn't enough.
+
+Usually the finance manager has already approved it **before the cashier submitted it** — the expense shows **Pre-approved by FM**, and you can close it right after verifying, with no second trip to the finance manager.
+
+If it wasn't pre-approved, or its total has grown past what was approved, **Close expense** stays disabled until the finance manager approves it the normal way.
 
 ## Good to know
 

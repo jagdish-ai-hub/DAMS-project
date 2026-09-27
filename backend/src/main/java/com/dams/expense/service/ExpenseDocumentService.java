@@ -23,6 +23,7 @@ import com.dams.expense.dto.ExpensePatchRequest;
 import com.dams.expense.entity.ExpenseDocument;
 import com.dams.expense.entity.ExpenseLine;
 import com.dams.expense.entity.ExpenseWorkflowStatus;
+import com.dams.expense.entity.PreApprovalStatus;
 import com.dams.expense.repository.ExpenseDocumentRepository;
 import com.dams.expense.repository.ExpenseLineRepository;
 import com.dams.jobcard.dto.JobCardResponse;
@@ -190,6 +191,10 @@ public class ExpenseDocumentService {
         doc.setOrgId(orgId);
         doc.setBranchId(me.getHomeBranchId());   // never from the request
         doc.setJobCardId(jobCard != null ? jobCard.getId() : null);
+        doc.setCustomerName(blankToNull(request.getCustomerName()));
+        doc.setVehicleNo(blankToNull(request.getVehicleNo()));
+        doc.setInvoiceNo(blankToNull(request.getInvoiceNo()));
+        doc.setDbmId(blankToNull(request.getDbmId()));
         doc.setReceiverId(receiver.getId());
         doc.setExpenseCategoryId(category.getId());
         doc.setBusinessStatusId(status.getId());
@@ -206,10 +211,11 @@ public class ExpenseDocumentService {
                 orderedDetail("lineNo", l.getLineNo(), "amount", l.getAmount()));
         }
 
+        // Before any submit: the pre-approval gate reads over_limit, so it must be current.
+        recomputeOverLimit(orgId, doc);
         if (request.isSubmit()) {
             submitInternal(orgId, doc, me.getId(), false);
         }
-        recomputeOverLimit(orgId, doc);
         expenseDocumentRepo.save(doc);
 
         log.info("Expense document created: orgId={} docId={} branchId={} jobCardId={} lines={} submitted={}",
@@ -224,6 +230,7 @@ public class ExpenseDocumentService {
         ExpenseDocument doc = load(orgId, documentId);
         AppUser me = postingGuard.requireCanPost(orgId, jobCardOrNull(orgId, doc));
         requireAcceptsLines(doc);
+        requireNotAwaitingApproval(doc);
 
         ExpenseLine line = appendLines(orgId, doc, List.of(input), me.getId(), doc.getExpenseCategoryId()).get(0);
         doc.setLastModifiedBy(me.getId());
@@ -259,9 +266,66 @@ public class ExpenseDocumentService {
             throw DamsException.conflict("Only a draft can be submitted (document " + describe(doc)
                 + " is " + doc.getWorkflowStatus() + ")");
         }
+        requireNotAwaitingApproval(doc);
         submitInternal(orgId, doc, me.getId(), false);
         expenseDocumentRepo.save(doc);
         return assemble(doc);
+    }
+
+    /**
+     * "Send for Review" (rev 53): an over-limit draft goes to the Finance Manager for
+     * pre-approval instead of being submitted. The document stays DRAFT with no number and is
+     * locked for the Cashier until the FM approves or queries it. Allowed from a fresh draft,
+     * after an FM query, or after an approval the total has since outgrown.
+     */
+    @Transactional
+    public ExpenseDocumentResponse requestApproval(Long documentId) {
+        Long orgId = TenantContext.requireOrgId();
+        ExpenseDocument doc = load(orgId, documentId);
+        AppUser me = postingGuard.requireCanPost(orgId, jobCardOrNull(orgId, doc));
+
+        if (doc.getWorkflowStatus() != ExpenseWorkflowStatus.DRAFT) {
+            throw DamsException.conflict("Only a draft can be sent for review (document " + describe(doc)
+                + " is " + doc.getWorkflowStatus() + ")");
+        }
+        requireNotAwaitingApproval(doc);
+        List<ExpenseLine> lines = expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(orgId, doc.getId());
+        if (lines.isEmpty()) {
+            throw DamsException.badRequest("Add at least one expense line before sending it for review");
+        }
+        recomputeOverLimit(orgId, doc);
+        if (!doc.isOverLimit()) {
+            throw DamsException.badRequest("Expense " + describe(doc)
+                + " is within every sub-category limit — it doesn't need approval, just Submit it");
+        }
+        BigDecimal total = sum(lines);
+        if (preApprovalCovers(doc, total)) {
+            throw DamsException.conflict("Expense " + describe(doc) + " is already approved for ₹"
+                + doc.getPreApprovedAmount() + " — Submit it");
+        }
+
+        doc.setPreApprovalStatus(PreApprovalStatus.PENDING);
+        doc.setApprovalRequestedAt(Instant.now());
+        doc.setPreApprovedAmount(null);
+        doc.setPreApprovedBy(null);
+        doc.setPreApprovedAt(null);
+        doc.setLastModifiedBy(me.getId());
+        expenseDocumentRepo.save(doc);
+        auditService.recordUserEvent(ENTITY, doc.getId(), doc.getBranchId(), EventType.APPROVAL_REQUESTED, me.getId(),
+            orderedDetail("amount", total, "overLimit", true));
+        log.info("Expense sent for FM pre-approval: orgId={} docId={} amount={}", orgId, doc.getId(), total);
+        return assemble(doc);
+    }
+
+    /**
+     * True when an FM pre-approval covers this document as it stands: approved, and the
+     * total hasn't grown past the approved amount (rev 53). Public — ReviewService uses the
+     * same rule to let the Accountant close without a second FM approval.
+     */
+    public static boolean preApprovalCovers(ExpenseDocument doc, BigDecimal total) {
+        return doc.getPreApprovalStatus() == PreApprovalStatus.APPROVED
+            && doc.getPreApprovedAmount() != null
+            && total.compareTo(doc.getPreApprovedAmount()) <= 0;
     }
 
     /** Fix-and-resubmit: a QUERIED document goes back to SUBMITTED after the cashier's edits. */
@@ -286,12 +350,25 @@ public class ExpenseDocumentService {
         ExpenseDocument doc = load(orgId, documentId);
         AppUser me = postingGuard.requireCanPost(orgId, jobCardOrNull(orgId, doc));
         requireEditableHeader(doc);
+        requireNotAwaitingApproval(doc);
 
         if (request.getJobCardId() != null && !request.getJobCardId().equals(doc.getJobCardId())) {
             JobCard next = jobCardRepo.findByIdAndOrgId(request.getJobCardId(), orgId)
                 .orElseThrow(() -> DamsException.notFound("Job card", request.getJobCardId()));
             postingGuard.requireCanPost(orgId, next); // must be in the cashier's home branch
             doc.setJobCardId(next.getId());
+        }
+        if (request.getCustomerName() != null) {
+            doc.setCustomerName(blankToNull(request.getCustomerName()));
+        }
+        if (request.getVehicleNo() != null) {
+            doc.setVehicleNo(blankToNull(request.getVehicleNo()));
+        }
+        if (request.getInvoiceNo() != null) {
+            doc.setInvoiceNo(blankToNull(request.getInvoiceNo()));
+        }
+        if (request.getDbmId() != null) {
+            doc.setDbmId(blankToNull(request.getDbmId()));
         }
         if (request.getReceiverId() != null || (request.getReceiverName() != null && !request.getReceiverName().isBlank())) {
             CreateExpenseRequest shim = new CreateExpenseRequest();
@@ -323,6 +400,7 @@ public class ExpenseDocumentService {
         ExpenseDocument doc = load(orgId, documentId);
         AppUser me = postingGuard.requireCanPost(orgId, jobCardOrNull(orgId, doc));
         requireEditableLines(doc);
+        requireNotAwaitingApproval(doc);
 
         ExpenseLine line = expenseLineRepo.findByOrgIdAndExpenseDocumentIdAndLineNo(orgId, documentId, lineNo)
             .orElseThrow(() -> DamsException.notFound("Expense line", "lineNo", lineNo));
@@ -346,6 +424,7 @@ public class ExpenseDocumentService {
         ExpenseDocument doc = load(orgId, documentId);
         AppUser me = postingGuard.requireCanPost(orgId, jobCardOrNull(orgId, doc));
         requireEditableLines(doc);
+        requireNotAwaitingApproval(doc);
 
         ExpenseLine line = expenseLineRepo.findByOrgIdAndExpenseDocumentIdAndLineNo(orgId, documentId, lineNo)
             .orElseThrow(() -> DamsException.notFound("Expense line", "lineNo", lineNo));
@@ -378,6 +457,7 @@ public class ExpenseDocumentService {
             throw DamsException.conflict("Document " + describe(doc) + " is " + doc.getWorkflowStatus()
                 + " — it can no longer be transferred to a claim");
         }
+        requireNotAwaitingApproval(doc);
         requireClaimEligible(orgId, jobCardOrNull(orgId, doc));
 
         List<ExpenseBusinessStatus> claimStatuses = statusRepo.findByOrgIdAndTriggersClaimTrue(orgId);
@@ -487,6 +567,20 @@ public class ExpenseDocumentService {
         if (lines.isEmpty()) {
             throw DamsException.badRequest("Add at least one expense line before submitting");
         }
+        // rev 53: an over-limit expense needs the FM's pre-approval before its first submit.
+        // A resubmit after an Accountant query is past that gate — if its total has grown,
+        // closeExpense falls back to the normal FM Approve instead.
+        if (!resubmit) {
+            recomputeOverLimit(orgId, doc);
+            BigDecimal total = sum(lines);
+            if (doc.isOverLimit() && !preApprovalCovers(doc, total)) {
+                throw DamsException.conflict(doc.getPreApprovalStatus() == PreApprovalStatus.APPROVED
+                    ? "Expense " + describe(doc) + " now totals ₹" + total + ", above the ₹" + doc.getPreApprovedAmount()
+                        + " the Finance Manager approved — send it for review again before submitting"
+                    : "Expense " + describe(doc) + " is over its sub-category limit — send it to the Finance Manager"
+                        + " for review before submitting");
+            }
+        }
         // A cash-mode line added before the day-close must not slip into the locked
         // day on submit — line-add time checks are not enough. Before numbering, so a
         // refusal never consumes a document number.
@@ -553,6 +647,18 @@ public class ExpenseDocumentService {
             throw DamsException.conflict("Document " + describe(doc) + " is " + doc.getWorkflowStatus()
                 + " — it accepts no more expense lines");
         }
+    }
+
+    /** A draft sent for FM pre-approval is locked until the FM approves or queries it (rev 53). */
+    private void requireNotAwaitingApproval(ExpenseDocument doc) {
+        if (doc.getPreApprovalStatus() == PreApprovalStatus.PENDING) {
+            throw DamsException.conflict("Expense " + describe(doc) + " is waiting for the Finance Manager's"
+                + " approval — it can't be changed until they approve or query it");
+        }
+    }
+
+    private static BigDecimal sum(List<ExpenseLine> lines) {
+        return lines.stream().map(ExpenseLine::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private void requireEditableLines(ExpenseDocument doc) {
@@ -629,6 +735,17 @@ public class ExpenseDocumentService {
             : vehicleRepo.findByIdAndOrgId(jc.getVehicleId(), orgId).orElse(null);
         boolean claimEligible = jc != null && jc.getClaimTypeId() != null;
 
+        // The document's own manual reference wins; fall back to the linked job card's
+        // for a doc that only ever set it there (or was created before these existed).
+        String customerName = doc.getCustomerName() != null ? doc.getCustomerName()
+            : (customer != null ? customer.getName() : null);
+        String vehicleNo = doc.getVehicleNo() != null ? doc.getVehicleNo()
+            : (vehicle != null ? vehicle.getVehicleNo() : null);
+        String invoiceNo = doc.getInvoiceNo() != null ? doc.getInvoiceNo()
+            : (jc != null ? jc.getInvoiceNo() : null);
+        String dbmId = doc.getDbmId() != null ? doc.getDbmId()
+            : (jc != null ? jc.getDbmId() : null);
+
         String branchCode = branch != null ? branch.getCode() : "?";
         List<ExpenseLine> lines = expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(orgId, doc.getId());
         List<ExpenseLineResponse> lineDtos = toLineDtos(orgId, lines);
@@ -649,8 +766,10 @@ public class ExpenseDocumentService {
             receiver != null ? receiver.getName() : null,
             receiver != null ? receiver.getPhone() : null,
             jc != null ? jc.getCustomerId() : null,
-            customer != null ? customer.getName() : null,
-            vehicle != null ? vehicle.getVehicleNo() : null,
+            customerName,
+            vehicleNo,
+            invoiceNo,
+            dbmId,
             doc.getExpenseCategoryId(),
             category != null ? category.getName() : null,
             doc.getBusinessStatusId(),
@@ -663,6 +782,13 @@ public class ExpenseDocumentService {
             doc.getLastModifiedBy(),
             doc.getCreatedAt(),
             doc.getSubmittedAt(),
+            doc.getPreApprovalStatus() != null ? doc.getPreApprovalStatus().name() : null,
+            doc.getPreApprovedAmount(),
+            doc.getPreApprovedBy() == null ? null
+                : userRepo.findByIdAndOrganization_Id(doc.getPreApprovedBy(), orgId).map(AppUser::getName).orElse(null),
+            doc.getPreApprovedAt(),
+            doc.getApprovalRequestedAt(),
+            preApprovalCovers(doc, total),
             lineDtos,
             documentHistoryService.forDocument(ENTITY, doc.getId()));
     }

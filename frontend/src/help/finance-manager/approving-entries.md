@@ -2,12 +2,23 @@
 
 Your home screen is **Approvals & Claims**. It lists every entry the accountant has verified and passed up to you for the final decision. Nothing counts as real money in the business until you approve it here.
 
+## Expense approval requests from cashiers
+
+When a cashier's expense has a line **above its sub-category limit**, they can't submit it — they send it to you first. You'll see a card at the top of **Approvals & Claims** saying how many requests are waiting, and the same requests at the top of the **Expenses** tab under **Approval requests from cashiers**.
+
+Click a request (from the card or the list) to open it, then:
+
+- **Approve** — the cashier can now submit it, up to the total you approved. After they submit, the accountant verifies and closes it — it does **not** come back to you for a second approval.
+- **Query** — send it back to the cashier with a note. They fix it and send it for review again.
+
+A request has no document number yet — it's still the cashier's draft. It shows as *Request #id*. If the cashier later raises the total above what you approved, it needs your approval again.
+
 ## Work an entry
 
 1. Use the toggle to switch between **Receipts** and **Expenses**.
 2. Under **Awaiting final approval**, click an entry. The right pane shows its header, every line (with any accountant override struck through), and the full history.
 3. Decide:
-   - **Approve** — the entry is final. It now shows in the owner's dashboard. For an over-limit expense, your approval is also what lets the accountant close it.
+   - **Approve** — the entry is final. It now shows in the owner's dashboard. For an over-limit expense that wasn't approved up front (or whose total grew past what you approved), your approval is also what lets the accountant close it.
    - **Query** — send it back with a question. It goes straight back to the **accountant**, not the cashier — they already own the verification you're questioning. They fix it (or explain, with a remark) and resend it to you; it does not need to go through the cashier again.
    - **Reject** — the entry shouldn't stand. Give a reason; a rejected entry is closed.
 

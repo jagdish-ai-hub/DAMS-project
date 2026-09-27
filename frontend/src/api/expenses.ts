@@ -13,6 +13,9 @@ export type ExpenseWorkflowStatus =
   | 'REJECTED'
   | 'CLOSED'
 
+/** FM pre-approval of an over-limit expense (rev 53); null = never requested. */
+export type PreApprovalStatus = 'PENDING' | 'APPROVED' | 'QUERIED'
+
 export interface ExpenseLine {
   id: number
   lineNo: number
@@ -53,6 +56,8 @@ export interface ExpenseDocument {
   customerId: number | null
   customerName: string | null
   vehicleNo: string | null
+  invoiceNo: string | null
+  dbmId: string | null
   expenseCategoryId: number
   expenseCategoryName: string | null
   businessStatusId: number
@@ -65,6 +70,14 @@ export interface ExpenseDocument {
   lastModifiedBy: number | null
   createdAt: string
   submittedAt: string | null
+  /** rev 53 — FM pre-approval of an over-limit expense, before it's submitted. */
+  preApprovalStatus: PreApprovalStatus | null
+  preApprovedAmount: number | null
+  preApprovedByName: string | null
+  preApprovedAt: string | null
+  approvalRequestedAt: string | null
+  /** Approved and the total is still within the approved amount — may be submitted / closed. */
+  preApprovalCovers: boolean
   lines: ExpenseLine[]
   history: DocumentHistoryEntry[]
 }
@@ -82,6 +95,10 @@ export interface ExpenseLineInput {
 
 export interface CreateExpenseRequest {
   jobCardId?: number
+  customerName?: string
+  vehicleNo?: string
+  invoiceNo?: string
+  dbmId?: string
   receiverId?: number
   receiverName?: string
   receiverPhone?: string
@@ -93,6 +110,10 @@ export interface CreateExpenseRequest {
 
 export interface ExpensePatchRequest {
   jobCardId?: number
+  customerName?: string
+  vehicleNo?: string
+  invoiceNo?: string
+  dbmId?: string
   receiverId?: number
   receiverName?: string
   receiverPhone?: string
@@ -115,6 +136,10 @@ export const expensesApi = {
   },
   resubmit(id: number) {
     return api.post<ExpenseDocument>(`/api/v1/expenses/${id}/resubmit`)
+  },
+  /** rev 53 — send an over-limit draft to the Finance Manager for pre-approval instead of submitting. */
+  requestApproval(id: number) {
+    return api.post<ExpenseDocument>(`/api/v1/expenses/${id}/request-approval`)
   },
   transferToClaim(id: number) {
     return api.post<ExpenseDocument>(`/api/v1/expenses/${id}/transfer-to-claim`)

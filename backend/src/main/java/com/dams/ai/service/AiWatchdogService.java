@@ -188,9 +188,13 @@ public class AiWatchdogService {
             if (!visible(allowed, branchId, doc.getBranchId()) || !doc.isOverLimit()) {
                 continue;
             }
+            // rev 53: an FM pre-approved one isn't waiting on an approval decision any more.
+            boolean preApproved = doc.getPreApprovalStatus() == com.dams.expense.entity.PreApprovalStatus.APPROVED;
             items.add(new AnomalyItem("near-limit", "watch",
                 "Expense " + label(doc.getDocumentNo(), doc.getId())
-                    + " is over its sub-category limit — confirm the override reason before approving.",
+                    + (preApproved
+                        ? " is over its sub-category limit but was pre-approved by the Finance Manager — check the bills match the approved amount."
+                        : " is over its sub-category limit — confirm the override reason before approving."),
                 codes.get(doc.getBranchId()), doc.getDocumentNo()));
         }
         return items;

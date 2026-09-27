@@ -7,6 +7,65 @@
 
 ## Revision log
 
+- **rev 53 (2026-09-27)** — **Finance Manager pre-approval of over-limit expenses.** An
+  expense with any line above its sub-category limit can no longer be submitted straight
+  away: the Cashier presses **Send for Review** instead of Submit, the FM approves or queries
+  it, and only then does the Cashier submit it. AGENT.md closing rule #2 updated first.
+  Decisions (confirmed with the user): after an approved submit the Accountant verifies and
+  closes it with **no second FM approval**; a total raised **above** the approved amount
+  needs approval again (same or lower submits directly); the FM can **Approve or Query**
+  (no Reject).
+  - **Model** — pre-approval is its own small state machine on the still-DRAFT document, so
+    the review workflow, queues, dashboards and numbering are untouched: `V31__expense_pre_approval.sql`
+    adds `pre_approval_status` (NULL / PENDING / APPROVED / QUERIED, CHECKed),
+    `pre_approved_amount`, `pre_approved_by`, `pre_approved_at`, `approval_requested_at`, a
+    partial index for the FM's pending list, and widens `audit_event_event_type_chk` with
+    `APPROVAL_REQUESTED` / `PRE_APPROVED` (the FM's query reuses `QUERIED` with
+    `preApproval: true`). New enum `PreApprovalStatus`.
+  - **Cashier** — `POST /expenses/{id}/request-approval` (DRAFT, over-limit, lines present;
+    refused when within every limit or already covered). While PENDING the draft is locked:
+    patch / add / update / delete line / transfer-to-claim / submit all 409. The first
+    submit (`submitInternal`, not a resubmit) refuses an over-limit document unless
+    `ExpenseDocumentService.preApprovalCovers(doc, total)` — approved and total ≤ approved
+    amount. Fixed alongside: `create()` recomputed `over_limit` only *after* a
+    submit-on-create, so the gate would have read a stale flag — it now recomputes first.
+  - **FM** — `GET /review/fm/expense-requests`, `POST /expenses/{id}/pre-approve` (stores the
+    total as the approved amount, never touches `last_modified_by`), `POST
+    /expenses/{id}/query-approval` (note required). `fmExpenseQueue` leaves out verified
+    expenses the FM already pre-approved (still covered), so they don't come back for a
+    second approval.
+  - **Accountant** — `closeExpense` accepts a covering pre-approval in place of the FM
+    Approve for an over-limit expense; past the approved amount the old FM Approve path
+    still applies. `ReviewQueueItem` gains `preApproved` + `approvalRequestedAt`;
+    `ExpenseDocumentResponse` gains the pre-approval fields + `preApprovalCovers`;
+    `MyEntryResponse` gains `preApprovalStatus` + `preApprovalCovers` (an FM query also
+    highlights the row as queried).
+  - **Frontend** — `NewExpensePage`: Send for Review replaces Submit when over limit and not
+    covered (new form or draft); waiting / approved / total-raised / FM-query banners; whole
+    form locked (`<fieldset disabled>`) while waiting. `MyEntriesPage`: "Waiting for FM
+    approval" / "Approved — ready to submit" / "Queried by FM" badges and Open & Submit /
+    Fix & Resend actions. `FmQueuePage`: new `ExpenseRequestBanner` card at the top on every
+    tab (click opens the request), "Approval requests from cashiers" section in the Expenses
+    tab, Approve / Query on an open request. Accountant: "Pre-approved by FM" tag, Close
+    enabled from VERIFIED when covered, `RecordCard` note explains which approval applies.
+    `DocumentHistoryService` renders the new events. AI watchdog's over-limit note no
+    longer says "before approving" for a pre-approved expense.
+  - Help: `cashier/recording-an-expense.md`, `finance-manager/approving-entries.md`,
+    `accountant/closing-an-expense.md`.
+  - Note: `V30__expense_document_customer_fields.sql` (+ its entity/DTO/page changes) was
+    already in the working tree, uncommitted, from separate work — built on top, not touched.
+  - Tests: `ExpenseDocumentServiceTest` +7 (submit refused without approval, create+submit
+    refused, request → PENDING + audit, within-limit request refused, PENDING locks the
+    draft, submit within approved amount, raised total refused then re-requested),
+    `ReviewServiceTest` +7 (close with covering pre-approval, close refused past it,
+    pre-approve records total, pre-approve with nothing waiting, query with note, FM request
+    list, FM queue excludes pre-approved), `ReviewControllerSecurityTest` +1 (FM-only).
+  Verified: `mvn test` 256 green (0 failures/errors, 4 pre-existing Docker-only skips);
+  frontend `tsc`, `eslint`, `vitest` clean; production build green, and the new endpoints +
+  UI strings ("Send for Review", "Approval requests from cashiers", "Pre-approved by FM", …)
+  confirmed present in `dist/assets/*.js`. Not verified on the live Neon DB — the Neon MCP
+  connection timed out this session; V31 applies through CI/CD as usual.
+
 - **rev 52 (2026-09-24)** — Bug fix: an Accountant's own "Add Payment" (rev 49) silently
   locked them out of ever resending or verifying that same document — a real backend 409,
   not just a hidden button — found live testing the rev 51 fix (add payment to answer an
@@ -1494,6 +1553,7 @@ Flyway callback / profile guard and instead runs a masters-only seed.
 | V19 | `audit_event` add `branch_id` (nullable, FK), backfilled from each row's document; index `(org_id, event_type, created_at DESC)` for Override Audit | 8 ✅ |
 | ~~V20~~ | **dropped (rev 15)** — full demo seed. Owner asked to skip; testers add their own data. | — |
 | V29 | `platform_setting` (key/value, no `org_id`); seeds `ui.font = plex` *(rev 50)* | polish ✅ |
+| V31 | `expense_document` pre-approval columns (`pre_approval_status` CHECK, `pre_approved_amount/_by/_at`, `approval_requested_at`) + pending partial index; `audit_event` CHECK += `APPROVAL_REQUESTED`, `PRE_APPROVED` *(rev 53)* | expense pre-approval ✅ |
 
 ---
 

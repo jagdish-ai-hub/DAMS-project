@@ -114,9 +114,9 @@ function Group({ title, rows, onOpen }: { title: string; rows: MyEntry[]; onOpen
                     ⚠ over limit
                   </span>
                 )}
-                <Badge tone={badgeTone(e)}>{e.settled ? 'SETTLED' : e.workflowStatus}</Badge>
+                <Badge tone={badgeTone(e)}>{statusLabel(e)}</Badge>
                 <button type="button" onClick={() => onOpen(e)} style={{ ...ghostBtn, minHeight: 34, display: 'inline-flex', alignItems: 'center' }}>
-                  {e.queried ? 'Fix & Resubmit' : 'Open'}
+                  {actionLabel(e)}
                 </button>
               </div>
             </div>
@@ -127,7 +127,30 @@ function Group({ title, rows, onOpen }: { title: string; rows: MyEntry[]; onOpen
   )
 }
 
+/** An expense draft still in the FM pre-approval step (rev 53) — null once it's submitted. */
+function preApproval(e: MyEntry) {
+  return e.kind === 'EXPENSE' && e.workflowStatus === 'DRAFT' ? e.preApprovalStatus : null
+}
+
+function statusLabel(e: MyEntry): string {
+  const pre = preApproval(e)
+  if (pre === 'PENDING') return 'Waiting for FM approval'
+  if (pre === 'QUERIED') return 'Queried by FM'
+  if (pre === 'APPROVED') return e.preApprovalCovers ? 'Approved — ready to submit' : 'Approved — total changed'
+  return e.settled ? 'SETTLED' : e.workflowStatus
+}
+
+function actionLabel(e: MyEntry): string {
+  const pre = preApproval(e)
+  if (pre === 'APPROVED') return e.preApprovalCovers ? 'Open & Submit' : 'Open'
+  if (pre === 'QUERIED') return 'Fix & Resend'
+  return e.queried ? 'Fix & Resubmit' : 'Open'
+}
+
 function badgeTone(e: MyEntry): 'green' | 'amber' | 'gray' | 'red' {
+  const pre = preApproval(e)
+  if (pre === 'APPROVED') return e.preApprovalCovers ? 'green' : 'amber'
+  if (pre === 'PENDING') return 'gray'
   if (e.queried) return 'amber'
   if (e.workflowStatus === 'REJECTED') return 'red'
   if (e.settled || e.workflowStatus === 'APPROVED' || e.workflowStatus === 'CLOSED') return 'green'

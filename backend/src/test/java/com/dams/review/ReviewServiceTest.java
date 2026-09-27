@@ -11,6 +11,7 @@ import com.dams.customer.repository.CustomerRepository;
 import com.dams.expense.entity.ExpenseDocument;
 import com.dams.expense.entity.ExpenseLine;
 import com.dams.expense.entity.ExpenseWorkflowStatus;
+import com.dams.expense.entity.PreApprovalStatus;
 import com.dams.expense.repository.ExpenseDocumentRepository;
 import com.dams.expense.repository.ExpenseLineRepository;
 import com.dams.expense.service.ExpenseDocumentService;
@@ -525,6 +526,123 @@ class ReviewServiceTest {
         service.closeExpense(E_ID);
 
         assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.CLOSED);
+    }
+
+    // ---------------------------------------------------- rev 53: FM pre-approval
+
+    @Test
+    void closeExpense_overLimitButPreApproved_closesFromVerified_withoutASecondFmApproval() {
+        ExpenseDocument doc = expenseDoc(ExpenseWorkflowStatus.VERIFIED, true);
+        doc.setPreApprovalStatus(PreApprovalStatus.APPROVED);
+        doc.setPreApprovedAmount(new BigDecimal("1400"));
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, E_ID))
+            .thenReturn(List.of(expenseLine(1, new BigDecimal("1400"))));
+
+        service.closeExpense(E_ID);
+
+        assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.CLOSED);
+    }
+
+    @Test
+    void closeExpense_preApprovedButTheTotalGrewPastIt_stillNeedsFmApproval() {
+        ExpenseDocument doc = expenseDoc(ExpenseWorkflowStatus.VERIFIED, true);
+        doc.setPreApprovalStatus(PreApprovalStatus.APPROVED);
+        doc.setPreApprovedAmount(new BigDecimal("1400"));
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, E_ID))
+            .thenReturn(List.of(expenseLine(1, new BigDecimal("1400")), expenseLine(2, new BigDecimal("200"))));
+
+        assertThatThrownBy(() -> service.closeExpense(E_ID))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("Finance Manager approval");
+        assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.VERIFIED);
+    }
+
+    @Test
+    void preApproveExpense_recordsTheApprovedTotal_keepsItADraft_andAudits() {
+        ExpenseDocument doc = pendingRequest();
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, E_ID))
+            .thenReturn(List.of(expenseLine(1, new BigDecimal("1400")), expenseLine(2, new BigDecimal("200"))));
+
+        service.preApproveExpense(E_ID);
+
+        assertThat(doc.getPreApprovalStatus()).isEqualTo(PreApprovalStatus.APPROVED);
+        assertThat(doc.getPreApprovedAmount()).isEqualByComparingTo("1600");
+        assertThat(doc.getPreApprovedBy()).isEqualTo(ACTOR_ID);
+        assertThat(doc.getPreApprovedAt()).isNotNull();
+        assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.DRAFT);
+        verify(auditService).recordUserEvent(eq("ExpenseDocument"), eq(E_ID), eq(BRANCH),
+            eq(EventType.PRE_APPROVED), eq(ACTOR_ID), any());
+    }
+
+    @Test
+    void preApproveExpense_conflict_whenNoRequestIsWaiting() {
+        ExpenseDocument doc = pendingRequest();
+        doc.setPreApprovalStatus(null);
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+
+        assertThatThrownBy(() -> service.preApproveExpense(E_ID))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("no approval request waiting");
+    }
+
+    @Test
+    void queryExpenseApproval_sendsItBackToTheCashier_withTheNote() {
+        ExpenseDocument doc = pendingRequest();
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+
+        service.queryExpenseApproval(E_ID, "Why is the labour this high?");
+
+        assertThat(doc.getPreApprovalStatus()).isEqualTo(PreApprovalStatus.QUERIED);
+        assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.DRAFT);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> detail = ArgumentCaptor.forClass(Map.class);
+        verify(auditService).recordUserEvent(eq("ExpenseDocument"), eq(E_ID), eq(BRANCH),
+            eq(EventType.QUERIED), eq(ACTOR_ID), detail.capture());
+        assertThat(detail.getValue())
+            .containsEntry("note", "Why is the labour this high?")
+            .containsEntry("preApproval", true);
+    }
+
+    @Test
+    void fmExpenseApprovalRequests_listsThePendingDrafts() {
+        ExpenseDocument doc = pendingRequest();
+        when(expenseDocumentRepo.findByOrgIdAndPreApprovalStatusOrderByApprovalRequestedAtAscIdAsc(ORG, PreApprovalStatus.PENDING))
+            .thenReturn(List.of(doc));
+
+        List<ReviewQueueItem> items = service.fmExpenseApprovalRequests();
+
+        assertThat(items).extracting(ReviewQueueItem::id).containsExactly(E_ID);
+        assertThat(items.get(0).approvalRequestedAt()).isNotNull();
+        assertThat(items.get(0).documentNo()).isNull();
+    }
+
+    @Test
+    void fmExpenseQueue_leavesOutExpensesTheFmAlreadyPreApproved() {
+        ExpenseDocument preApproved = expenseDoc(ExpenseWorkflowStatus.VERIFIED, true);
+        preApproved.setPreApprovalStatus(PreApprovalStatus.APPROVED);
+        preApproved.setPreApprovedAmount(new BigDecimal("1400"));
+        ExpenseDocument ordinary = expenseDoc(ExpenseWorkflowStatus.VERIFIED, true);
+        ReflectionTestUtils.setField(ordinary, "id", 601L);
+        when(expenseDocumentRepo.findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(ORG, ExpenseWorkflowStatus.VERIFIED))
+            .thenReturn(List.of(preApproved, ordinary));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdInOrderByLineNoAsc(eq(ORG), any()))
+            .thenReturn(List.of(expenseLine(1, new BigDecimal("1400"))));   // belongs to E_ID (the pre-approved one)
+
+        var queue = service.fmExpenseQueue();
+
+        assertThat(queue.awaitingApproval()).extracting(ReviewQueueItem::id).containsExactly(601L);
+    }
+
+    /** An over-limit draft the cashier sent for review — no number yet. */
+    private static ExpenseDocument pendingRequest() {
+        ExpenseDocument d = expenseDoc(ExpenseWorkflowStatus.DRAFT, true);
+        d.setDocumentNo(null);
+        d.setPreApprovalStatus(PreApprovalStatus.PENDING);
+        d.setApprovalRequestedAt(Instant.now());
+        return d;
     }
 
     // ---------------------------------------------------- finance manager

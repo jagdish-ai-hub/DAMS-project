@@ -13,6 +13,8 @@ import com.dams.customer.repository.CustomerRepository;
 import com.dams.expense.entity.ExpenseDocument;
 import com.dams.expense.entity.ExpenseLine;
 import com.dams.expense.entity.ExpenseWorkflowStatus;
+import com.dams.expense.entity.PreApprovalStatus;
+import com.dams.expense.service.ExpenseDocumentService;
 import com.dams.expense.repository.ExpenseDocumentRepository;
 import com.dams.expense.repository.ExpenseLineRepository;
 import com.dams.jobcard.dto.JobCardResponse;
@@ -149,7 +151,9 @@ public class MyEntriesService {
                 isToday(doc.getCreatedAt(), today),
                 doc.getWorkflowStatus() == WorkflowStatus.QUERIED,
                 doc.getCreatedAt(),
-                doc.getSubmittedAt());
+                doc.getSubmittedAt(),
+                null,
+                false);
         }).toList();
     }
 
@@ -192,9 +196,13 @@ public class MyEntriesService {
                 lines.size(),
                 doc.isOverLimit(),
                 isToday(doc.getCreatedAt(), today),
-                doc.getWorkflowStatus() == ExpenseWorkflowStatus.QUERIED,
+                // An FM query on the approval request needs the cashier too — highlight it.
+                doc.getWorkflowStatus() == ExpenseWorkflowStatus.QUERIED
+                    || doc.getPreApprovalStatus() == PreApprovalStatus.QUERIED,
                 doc.getCreatedAt(),
-                doc.getSubmittedAt());
+                doc.getSubmittedAt(),
+                doc.getPreApprovalStatus() != null ? doc.getPreApprovalStatus().name() : null,
+                ExpenseDocumentService.preApprovalCovers(doc, total));
         }).toList();
     }
 
@@ -221,7 +229,9 @@ public class MyEntriesService {
                 isToday(doc.getCreatedAt(), today),
                 doc.getWorkflowStatus() == CashWorkflowStatus.QUERIED,
                 doc.getCreatedAt(),
-                doc.getSubmittedAt());
+                doc.getSubmittedAt(),
+                null,
+                false);
         }).toList();
     }
 

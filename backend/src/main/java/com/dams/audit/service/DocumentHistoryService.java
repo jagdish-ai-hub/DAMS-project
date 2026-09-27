@@ -84,7 +84,7 @@ public class DocumentHistoryService {
             case LINE_ADDED -> "Line added";
             case VERIFIED -> "Verified";
             case APPROVED -> "Approved";
-            case QUERIED -> "Queried";
+            case QUERIED -> Boolean.TRUE.equals(d.get("preApproval")) ? "Approval request queried" : "Queried";
             case REJECTED -> "Rejected";
             case OVERRIDE -> "Overrode a line amount";
             case CLOSED -> "Closed";
@@ -94,6 +94,10 @@ public class DocumentHistoryService {
             case CATEGORY_CHANGED -> "Category changed";
             case CLAIM_TYPE_CHANGED -> "Claim type changed";
             case TRANSFERRED_TO_CLAIM -> "Transferred to claim";
+            case APPROVAL_REQUESTED -> "Sent to Finance Manager for approval"
+                + (d.get("amount") != null ? " (₹" + d.get("amount") + ")" : "");
+            case PRE_APPROVED -> "Approved by Finance Manager"
+                + (d.get("amount") != null ? " for ₹" + d.get("amount") : "") + " — ready to submit";
         };
     }
 

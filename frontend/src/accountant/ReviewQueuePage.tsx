@@ -678,10 +678,11 @@ export function QueueRow({
           {it.categoryName} · <strong style={{ fontVariantNumeric: 'tabular-nums' }}>{inr(it.amount)}</strong>
         </div>
         {(it.workflowStatus === 'FM_QUERIED' || it.overLimit || it.hasOverride) && (
-          <div style={{ display: 'flex', gap: 5, marginTop: 2 }}>
+          <div style={{ display: 'flex', gap: 5, marginTop: 2, flexWrap: 'wrap' }}>
             {it.workflowStatus === 'FM_QUERIED' && <Tag>Queried by Finance</Tag>}
             {it.hasOverride && <Tag>Overridden</Tag>}
             {it.overLimit && <Tag>Above limit</Tag>}
+            {it.preApproved && <Tag>Pre-approved by FM</Tag>}
           </div>
         )}
       </button>
@@ -1030,6 +1031,10 @@ function RecordDetail(props: {
   const canResendToFm = wf === 'FM_QUERIED' && !isMaker
   const canClose = expense && (wf === 'VERIFIED' || wf === 'APPROVED') && !isMaker
   const overLimit = expense ? (doc as { overLimit: boolean }).overLimit : false
+  // rev 53 — an FM pre-approval that still covers the total counts as that approval: the
+  // Accountant closes it after verifying, with no second trip to the FM.
+  const preApproved = expense ? (doc as { preApprovalCovers: boolean }).preApprovalCovers : false
+  const closeBlocked = overLimit && wf !== 'APPROVED' && !preApproved
   // rev 49: an Accountant may add a payment too, same window as the override tools —
   // while they're actively reviewing it, not after it's moved on.
   const canAddPayment = receipt != null && (canReview || canResendToFm)
@@ -1136,9 +1141,9 @@ function RecordDetail(props: {
             )}
             {canClose && (
               <button type="button" onClick={() => run(() => reviewApi.closeExpense(doc.id), `${docNo} closed`)}
-                disabled={busy || (overLimit && wf !== 'APPROVED')}
-                style={{ ...primaryBtn(busy || (overLimit && wf !== 'APPROVED')), minHeight: 36 }}
-                title={overLimit && wf !== 'APPROVED' ? 'Over-limit expense — needs Finance Manager approval first' : undefined}>
+                disabled={busy || closeBlocked}
+                style={{ ...primaryBtn(busy || closeBlocked), minHeight: 36 }}
+                title={closeBlocked ? 'Over-limit expense — needs Finance Manager approval first' : undefined}>
                 Close expense
               </button>
             )}

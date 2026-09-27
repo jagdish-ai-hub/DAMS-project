@@ -112,6 +112,29 @@ class ReviewControllerSecurityTest {
     }
 
     @Test
+    void expensePreApproval_isFinanceManagerOnly() throws Exception {
+        stubToken("fm-token", 8L, 1L, Role.FINANCE_MANAGER);
+        when(reviewService.preApproveExpense(1L)).thenReturn(mock(ExpenseDocumentResponse.class));
+        mockMvc.perform(post("/api/v1/expenses/1/pre-approve").header("Authorization", "Bearer fm-token"))
+            .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/review/fm/expense-requests").header("Authorization", "Bearer fm-token"))
+            .andExpect(status().isOk());
+
+        stubToken("acct-token", 6L, 1L, Role.ACCOUNTANT);
+        mockMvc.perform(post("/api/v1/expenses/1/pre-approve").header("Authorization", "Bearer acct-token"))
+            .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/review/fm/expense-requests").header("Authorization", "Bearer acct-token"))
+            .andExpect(status().isForbidden());
+
+        stubToken("cashier-token", 7L, 1L, Role.CASHIER);
+        mockMvc.perform(post("/api/v1/expenses/1/pre-approve").header("Authorization", "Bearer cashier-token"))
+            .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/expenses/1/query-approval").header("Authorization", "Bearer cashier-token")
+                .contentType("application/json").content("{\"note\":\"x\"}"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
     void closeExpense_okForAccountant_forbiddenForFinanceManager() throws Exception {
         stubToken("acct-token", 6L, 1L, Role.ACCOUNTANT);
         when(reviewService.closeExpense(1L)).thenReturn(mock(ExpenseDocumentResponse.class));

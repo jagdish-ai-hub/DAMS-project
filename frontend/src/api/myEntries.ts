@@ -19,6 +19,9 @@ export interface MyEntry {
   queried: boolean
   createdAt: string
   submittedAt: string | null
+  /** Expenses only (rev 53) — FM pre-approval of an over-limit expense. */
+  preApprovalStatus: 'PENDING' | 'APPROVED' | 'QUERIED' | null
+  preApprovalCovers: boolean
 }
 
 export const myEntriesApi = {

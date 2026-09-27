@@ -16,6 +16,7 @@ import com.dams.expense.dto.ExpenseLineInput;
 import com.dams.expense.entity.ExpenseDocument;
 import com.dams.expense.entity.ExpenseLine;
 import com.dams.expense.entity.ExpenseWorkflowStatus;
+import com.dams.expense.entity.PreApprovalStatus;
 import com.dams.expense.repository.ExpenseDocumentRepository;
 import com.dams.expense.repository.ExpenseLineRepository;
 import com.dams.expense.service.ExpenseDocumentService;
@@ -318,6 +319,120 @@ class ExpenseDocumentServiceTest {
         assertThat(doc.getBusinessStatusId()).isEqualTo(CLAIM_STATUS_ID);
         verify(auditService).recordUserEvent(eq("ExpenseDocument"), eq(DOC_ID), any(),
             eq(EventType.TRANSFERRED_TO_CLAIM), eq(CASHIER_ID), any());
+    }
+
+    // --- rev 53: FM pre-approval of over-limit expenses (sub-category limit is 1000) ---
+
+    @Test
+    void submit_overLimitWithoutPreApproval_isRefused_withoutConsumingANumber() {
+        ExpenseDocument draft = draftDoc();
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(draft));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, DOC_ID))
+            .thenReturn(List.of(persistedLine(1, new BigDecimal("1400"))));
+
+        assertThatThrownBy(() -> service.submit(DOC_ID))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("send it to the Finance Manager");
+        verify(documentNumberService, never()).nextNumber(any(), any(), any());
+        assertThat(draft.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.DRAFT);
+    }
+
+    @Test
+    void createAndSubmit_overLimit_isRefused_sinceOverLimitIsKnownBeforeTheSubmit() {
+        CreateExpenseRequest req = baseRequest();
+        req.setReceiverId(RECEIVER_ID);
+        req.getLines().add(lineInput(new BigDecimal("1400")));
+        req.setSubmit(true);
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, DOC_ID))
+            .thenReturn(List.of(persistedLine(1, new BigDecimal("1400"))));
+
+        assertThatThrownBy(() -> service.create(req))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("send it to the Finance Manager");
+        verify(documentNumberService, never()).nextNumber(any(), any(), any());
+    }
+
+    @Test
+    void requestApproval_onAnOverLimitDraft_goesPending_andIsAudited() {
+        ExpenseDocument draft = draftDoc();
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(draft));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, DOC_ID))
+            .thenReturn(List.of(persistedLine(1, new BigDecimal("1400"))));
+
+        service.requestApproval(DOC_ID);
+
+        assertThat(draft.getPreApprovalStatus()).isEqualTo(PreApprovalStatus.PENDING);
+        assertThat(draft.getApprovalRequestedAt()).isNotNull();
+        assertThat(draft.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.DRAFT);
+        assertThat(draft.getDocumentNo()).isNull();
+        verify(auditService).recordUserEvent(eq("ExpenseDocument"), eq(DOC_ID), any(), eq(EventType.APPROVAL_REQUESTED),
+            eq(CASHIER_ID), any());
+    }
+
+    @Test
+    void requestApproval_withinEveryLimit_isRefused() {
+        ExpenseDocument draft = draftDoc();
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(draft));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, DOC_ID))
+            .thenReturn(List.of(persistedLine(1, new BigDecimal("500"))));
+
+        assertThatThrownBy(() -> service.requestApproval(DOC_ID))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("doesn't need approval");
+        assertThat(draft.getPreApprovalStatus()).isNull();
+    }
+
+    @Test
+    void aPendingRequest_locksTheDraft_forEditsAndSubmit() {
+        ExpenseDocument draft = draftDoc();
+        draft.setPreApprovalStatus(PreApprovalStatus.PENDING);
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(draft));
+
+        assertThatThrownBy(() -> service.addLine(DOC_ID, lineInput(new BigDecimal("100"))))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("waiting for the Finance Manager");
+        assertThatThrownBy(() -> service.submit(DOC_ID))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("waiting for the Finance Manager");
+        verify(expenseLineRepo, never()).save(any());
+    }
+
+    @Test
+    void submit_afterPreApproval_withinTheApprovedAmount_goesThrough() {
+        ExpenseDocument draft = draftDoc();
+        draft.setPreApprovalStatus(PreApprovalStatus.APPROVED);
+        draft.setPreApprovedAmount(new BigDecimal("1400"));
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(draft));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, DOC_ID))
+            .thenReturn(List.of(persistedLine(1, new BigDecimal("1300"))));   // lower than approved
+        when(documentNumberService.nextNumber(eq(ORG), any(Branch.class), eq(DocType.E)))
+            .thenReturn("OOR-SEP26-E-010");
+
+        service.submit(DOC_ID);
+
+        assertThat(draft.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.SUBMITTED);
+        assertThat(draft.getDocumentNo()).isEqualTo("OOR-SEP26-E-010");
+        assertThat(draft.getPreApprovalStatus()).isEqualTo(PreApprovalStatus.APPROVED);
+    }
+
+    @Test
+    void submit_afterPreApproval_withTheTotalRaised_needsApprovalAgain() {
+        ExpenseDocument draft = draftDoc();
+        draft.setPreApprovalStatus(PreApprovalStatus.APPROVED);
+        draft.setPreApprovedAmount(new BigDecimal("1400"));
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(draft));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, DOC_ID))
+            .thenReturn(List.of(persistedLine(1, new BigDecimal("1600"))));
+
+        assertThatThrownBy(() -> service.submit(DOC_ID))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("send it for review again");
+        verify(documentNumberService, never()).nextNumber(any(), any(), any());
+
+        // ...and sending it again resets it to a fresh request.
+        service.requestApproval(DOC_ID);
+        assertThat(draft.getPreApprovalStatus()).isEqualTo(PreApprovalStatus.PENDING);
+        assertThat(draft.getPreApprovedAmount()).isNull();
     }
 
     // --- fixtures ---

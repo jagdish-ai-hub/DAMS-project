@@ -20,6 +20,15 @@ function queryNote(history: DocumentHistoryEntry[]): string | null {
   return null
 }
 
+/** The Finance Manager's note when they sent an approval request back (rev 53). */
+function fmApprovalNote(history: DocumentHistoryEntry[]): string | null {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const h = history[i]
+    if (h.action === 'Approval request queried' && h.note) return h.note
+  }
+  return null
+}
+
 /**
  * Expense Entry (intial ui prototypes/cashier-home.html). One continuous flow: the header
  * names the receiver (created inline, deduped by name) and optionally tags a job card; the
@@ -70,6 +79,10 @@ export default function NewExpensePage() {
 
   // header
   const [receiverName, setReceiverName] = useState('')
+  const [customerName, setCustomerName] = useState('')
+  const [vehicleNo, setVehicleNo] = useState('')
+  const [dbmId, setDbmId] = useState('')
+  const [invoiceNo, setInvoiceNo] = useState('')
   const [jobCardId, setJobCardId] = useState<number | ''>(prefillJobCardId ?? '')
   const [expenseCategoryId, setExpenseCategoryId] = useState<number | ''>('')
   const [businessStatusId, setBusinessStatusId] = useState<number | ''>('')
@@ -142,6 +155,8 @@ export default function NewExpensePage() {
       .then(({ data }) => {
         setJobCardOpts(data.jobCards.map((j) => ({ id: j.id, reference: j.reference, categoryName: j.categoryName })))
         if (!editDocId) {
+          setCustomerName(data.customerName)
+          setVehicleNo(data.vehicles[0]?.vehicleNo ?? '')
           setNotice(`New expense in ${data.customerName}'s context — pick the job card it belongs to, or leave it as branch overhead.`)
         }
       })
@@ -156,6 +171,10 @@ export default function NewExpensePage() {
       .then(({ data }) => {
         setLoadedDoc(data)
         setReceiverName(data.receiverName ?? '')
+        setCustomerName(data.customerName ?? '')
+        setVehicleNo(data.vehicleNo ?? '')
+        setDbmId(data.dbmId ?? '')
+        setInvoiceNo(data.invoiceNo ?? '')
         setJobCardId(data.jobCardId ?? '')
         setExpenseCategoryId(data.expenseCategoryId)
         setBusinessStatusId(data.businessStatusId)
@@ -208,7 +227,7 @@ export default function NewExpensePage() {
           const sc = subCats.find((s) => s.id === l.subCategoryId)
           const amt = Number(l.amount) || 0
           if (sc && sc.limitAmount != null && amt > sc.limitAmount) {
-            return `${sc.name} (${inr(amt)}) is above its ${inr(sc.limitAmount)} limit — will need Finance Manager approval.`
+            return `${sc.name} (${inr(amt)}) is above its ${inr(sc.limitAmount)} limit — needs Finance Manager approval before you can submit.`
           }
           return null
         })
@@ -260,6 +279,10 @@ export default function NewExpensePage() {
   function buildBody(submit: boolean): CreateExpenseRequest {
     return {
       jobCardId: jobCardId === '' ? undefined : Number(jobCardId),
+      customerName: customerName.trim() || undefined,
+      vehicleNo: vehicleNo.trim() || undefined,
+      dbmId: dbmId.trim() || undefined,
+      invoiceNo: invoiceNo.trim() || undefined,
       receiverName: receiverName.trim(),
       expenseCategoryId: Number(expenseCategoryId),
       businessStatusId: Number(businessStatusId),
@@ -416,6 +439,10 @@ export default function NewExpensePage() {
     if (!loadedDoc) return
     await expensesApi.patch(loadedDoc.id, {
       jobCardId: jobCardId === '' ? undefined : Number(jobCardId),
+      customerName: customerName.trim(),
+      vehicleNo: vehicleNo.trim(),
+      dbmId: dbmId.trim(),
+      invoiceNo: invoiceNo.trim(),
       receiverName: receiverName.trim(),
       expenseCategoryId: Number(expenseCategoryId),
       businessStatusId: Number(businessStatusId),
@@ -462,6 +489,61 @@ export default function NewExpensePage() {
     } finally {
       setBusy(false)
     }
+  }
+
+  /**
+   * rev 53 — an over-limit expense can't be submitted; it goes to the Finance Manager for
+   * approval first. New form: save as draft, then send it. The draft already exists if the
+   * second call fails, so the cashier lands on it to retry.
+   */
+  async function sendNewForReview() {
+    const problem = validate(true)
+    if (problem) {
+      setError(problem)
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      const { data } = await expensesApi.create(buildBody(false))
+      try {
+        await expensesApi.requestApproval(data.id)
+      } catch (e) {
+        setError(apiError(e, 'Saved as a draft, but it could not be sent for review. Try Send for Review again.'))
+        navigate(`/app/new-expense?editDoc=${data.id}`, { replace: true })
+        return
+      }
+      sentForReview(data)
+    } catch (e) {
+      setError(apiError(e, 'Could not save the expense.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function sendDraftForReview() {
+    if (!loadedDoc) return
+    const problem = validate(true)
+    if (problem) {
+      setError(problem)
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      await patchHeader()
+      await syncLines(loadedDoc.id)
+      const { data } = await expensesApi.requestApproval(loadedDoc.id)
+      sentForReview(data)
+    } catch (e) {
+      setError(apiError(e, 'Could not send it for review.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function sentForReview(doc: ExpenseDocument) {
+    navigate(`/app?flash=${encodeURIComponent(`Expense #${doc.id} sent to the Finance Manager for approval`)}`)
   }
 
   async function saveDraftExisting() {
@@ -525,8 +607,18 @@ export default function NewExpensePage() {
   // already checked what's on record — an existing line stays locked for the cashier.
   // A brand-new row (lineNo == null) is always addable; the server reopens the document
   // for re-review when that happens (see ExpenseDocumentService.addLine).
-  const linesEditable = !loadedDoc || loadedDoc.workflowStatus === 'DRAFT' || loadedDoc.workflowStatus === 'QUERIED'
+  // rev 53 — FM pre-approval of an over-limit draft. While the request waits, the whole
+  // draft is locked (the server refuses edits too). Once approved, it may be submitted as
+  // long as the total stays within the approved amount; above it, it needs approval again.
+  const preApproval = loadedDoc?.workflowStatus === 'DRAFT' ? loadedDoc.preApprovalStatus : null
+  const awaitingApproval = preApproval === 'PENDING'
+  const approvedAmount = loadedDoc?.preApprovedAmount ?? null
+  const approvalCovers = preApproval === 'APPROVED' && approvedAmount != null && total <= approvedAmount
+  const needsApproval = limitWarnings.length > 0 && !approvalCovers
+  const linesEditable = !awaitingApproval
+    && (!loadedDoc || loadedDoc.workflowStatus === 'DRAFT' || loadedDoc.workflowStatus === 'QUERIED')
   const showTransferButton =
+    !awaitingApproval &&
     inEditMode &&
     loadedDoc != null &&
     loadedDoc.claimEligible &&
@@ -560,6 +652,31 @@ export default function NewExpensePage() {
         </div>
       )}
 
+      {awaitingApproval && (
+        <div role="status" style={{ ...approvalBanner, background: 'var(--navy3)', border: '1px solid #C9D8F2', color: 'var(--navy)' }}>
+          <strong>⏳ Waiting for Finance Manager approval.</strong>{' '}
+          Sent{loadedDoc?.approvalRequestedAt ? ` on ${new Date(loadedDoc.approvalRequestedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}` : ''}.
+          This expense is locked until they approve it or send it back.
+        </div>
+      )}
+      {preApproval === 'APPROVED' && approvedAmount != null && (approvalCovers ? (
+        <div role="status" style={{ ...approvalBanner, background: 'var(--green-bg)', border: '1px solid #BBDCC9', color: 'var(--green)' }}>
+          <strong>✓ Approved by {loadedDoc?.preApprovedByName ?? 'the Finance Manager'} for {inr(approvedAmount)}.</strong>{' '}
+          Submit it when you&apos;re ready.
+        </div>
+      ) : (
+        <div role="status" style={{ ...approvalBanner, background: 'var(--amber-bg)', border: '1px solid #EAD3AE', color: 'var(--amber)' }}>
+          <strong>The Finance Manager approved {inr(approvedAmount)}, but the total is now {inr(total)}.</strong>{' '}
+          Send it for review again before submitting.
+        </div>
+      ))}
+      {preApproval === 'QUERIED' && (
+        <div role="status" style={{ ...approvalBanner, background: 'var(--amber-bg)', border: '1px solid #EAD3AE', color: 'var(--amber)' }}>
+          <strong>Query from the Finance Manager:</strong> {fmApprovalNote(loadedDoc?.history ?? []) ?? 'see the history for details.'}{' '}
+          Fix it and send it for review again.
+        </div>
+      )}
+
       <section style={{ ...card, padding: 0, marginTop: 12 }}>
         <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 10 }}>
           <h3 style={{ fontSize: '0.94rem', fontWeight: 700 }}>Expense Entry</h3>
@@ -568,14 +685,21 @@ export default function NewExpensePage() {
           <span style={{
             fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em',
             padding: '2px 9px', borderRadius: 999,
-            background: loadedDoc?.workflowStatus === 'QUERIED' ? 'var(--amber-bg)' : 'var(--gray-bg)',
-            color: loadedDoc?.workflowStatus === 'QUERIED' ? 'var(--amber)' : 'var(--gray)',
+            background: loadedDoc?.workflowStatus === 'QUERIED' || preApproval === 'QUERIED' ? 'var(--amber-bg)'
+              : preApproval === 'APPROVED' ? 'var(--green-bg)' : 'var(--gray-bg)',
+            color: loadedDoc?.workflowStatus === 'QUERIED' || preApproval === 'QUERIED' ? 'var(--amber)'
+              : preApproval === 'APPROVED' ? 'var(--green)' : 'var(--gray)',
           }}>
-            {loadedDoc?.workflowStatus ?? 'DRAFT'}
+            {preApproval === 'PENDING' ? 'Awaiting FM approval'
+              : preApproval === 'APPROVED' ? 'Approved by FM'
+              : preApproval === 'QUERIED' ? 'Queried by FM'
+              : loadedDoc?.workflowStatus ?? 'DRAFT'}
           </span>
         </div>
 
         <div style={{ padding: '16px 18px' }}>
+          {/* Locked as a whole while the FM approval request waits (rev 53). */}
+          <fieldset disabled={awaitingApproval} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-y-0 gap-x-8">
             {/* left column */}
             <div>
@@ -587,7 +711,19 @@ export default function NewExpensePage() {
                   style={inputStyle}
                 />
               </Row>
-              <Row label="Job Card">
+              <Row label="Customer Name">
+                <input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Type a customer name" style={inputStyle} />
+              </Row>
+              <Row label="Vehicle #">
+                <input value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value)} placeholder="OD05CA4177" style={inputStyle} />
+              </Row>
+              <Row label="Job Card / DBM">
+                <input value={dbmId} onChange={(e) => setDbmId(e.target.value)} placeholder="4009941587" style={inputStyle} />
+              </Row>
+              <Row label="Invoice #">
+                <input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="7731122600388" style={inputStyle} />
+              </Row>
+              <Row label="Ooriba ID">
                 <select
                   value={jobCardId}
                   onChange={(e) => setJobCardId(e.target.value === '' ? '' : Number(e.target.value))}
@@ -739,6 +875,7 @@ export default function NewExpensePage() {
           >
             ＋ Add expense row
           </button>
+          </fieldset>
 
           {limitWarnings.length > 0 && (
             <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -766,12 +903,19 @@ export default function NewExpensePage() {
               <button type="button" onClick={resubmitEdited} style={primaryBtn(busy)} disabled={busy}>
                 {busy ? <><Spinner /> Resubmitting…</> : 'Resubmit'}
               </button>
-            ) : loadedDoc != null && loadedDoc.workflowStatus === 'DRAFT' ? (
+            ) : awaitingApproval ? null : loadedDoc != null && loadedDoc.workflowStatus === 'DRAFT' ? (
               <>
                 <button type="button" onClick={saveDraftExisting} style={ghostBtn} disabled={busy}>Save Draft</button>
-                <button type="button" onClick={submitDraft} style={primaryBtn(busy)} disabled={busy}>
-                  {busy ? <><Spinner /> Submitting…</> : 'Submit'}
-                </button>
+                {needsApproval ? (
+                  <button type="button" onClick={sendDraftForReview} style={primaryBtn(busy)} disabled={busy}
+                    title="Over its limit — the Finance Manager approves it before you submit">
+                    {busy ? <><Spinner /> Sending…</> : 'Send for Review'}
+                  </button>
+                ) : (
+                  <button type="button" onClick={submitDraft} style={primaryBtn(busy)} disabled={busy}>
+                    {busy ? <><Spinner /> Submitting…</> : 'Submit'}
+                  </button>
+                )}
               </>
             ) : loadedDoc != null ? (
               // Already reviewed (SUBMITTED/VERIFIED/APPROVED/REJECTED/CLOSED) — existing
@@ -783,9 +927,16 @@ export default function NewExpensePage() {
             ) : (
               <>
                 <button type="button" onClick={() => saveNew(false)} style={ghostBtn} disabled={busy}>Save Draft</button>
-                <button type="button" onClick={() => saveNew(true)} style={primaryBtn(busy)} disabled={busy}>
-                  {busy ? <><Spinner /> Submitting…</> : 'Submit'}
-                </button>
+                {needsApproval ? (
+                  <button type="button" onClick={sendNewForReview} style={primaryBtn(busy)} disabled={busy}
+                    title="Over its limit — the Finance Manager approves it before you submit">
+                    {busy ? <><Spinner /> Sending…</> : 'Send for Review'}
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => saveNew(true)} style={primaryBtn(busy)} disabled={busy}>
+                    {busy ? <><Spinner /> Submitting…</> : 'Submit'}
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -795,6 +946,7 @@ export default function NewExpensePage() {
   )
 }
 
+const approvalBanner = { borderRadius: 8, padding: '10px 13px', fontSize: '0.82rem', marginBottom: 12 }
 const cellStyle = { padding: 6, borderBottom: '1px solid var(--line)', verticalAlign: 'middle' as const, minWidth: 110 }
 const cellInput = { border: '1.5px solid var(--line)', borderRadius: 6, padding: '6px 7px', width: '100%', fontSize: '0.82rem', minWidth: 0 }
 

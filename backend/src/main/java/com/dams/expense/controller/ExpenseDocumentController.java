@@ -78,6 +78,13 @@ public class ExpenseDocumentController {
         return expenseDocumentService.resubmit(id);
     }
 
+    @PostMapping("/{id}/request-approval")
+    @Operation(summary = "Send an over-limit expense draft to the Finance Manager for pre-approval (rev 53)")
+    @PreAuthorize("hasAuthority('CASHIER')")
+    public ExpenseDocumentResponse requestApproval(@PathVariable Long id) {
+        return expenseDocumentService.requestApproval(id);
+    }
+
     @PostMapping("/{id}/transfer-to-claim")
     @Operation(summary = "Move the expense onto a warranty / AMC / goodwill claim")
     @PreAuthorize("hasAuthority('CASHIER')")

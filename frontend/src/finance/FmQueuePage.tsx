@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { receiptsApi, type ReceiveDocument } from '../api/receipts'
-import { expensesApi } from '../api/expenses'
+import { expensesApi, type ExpenseDocument } from '../api/expenses'
 import { cashApi, type CashDocument } from '../api/cash'
 import { reviewApi, type FmQueue, type ReviewQueueItem, type ReviewType } from '../api/review'
 import { jobCardsApi } from '../api/jobCards'
@@ -10,6 +10,7 @@ import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, type AnyDoc 
 import GlobalSearch from '../shared/GlobalSearch'
 import { useAuth } from '../auth/useAuth'
 import AiClaimBanner from './AiClaimBanner'
+import ExpenseRequestBanner from './ExpenseRequestBanner'
 import { useRiskMap, RiskDot } from '../review/AiRiskBadge'
 import SortModeControl, { groupItems, type SortMode } from '../review/SortModeControl'
 import { StatBox } from '../review/StatBox'
@@ -71,8 +72,19 @@ export default function FmQueuePage() {
   const [tick, setTick] = useState(0)
   const [claimBucket, setClaimBucket] = useState<AgingBucket>('all')
   const [sortMode, setSortMode] = useState<SortMode>('date')
+  // rev 53 — over-limit expense drafts cashiers sent for pre-approval. Loaded on every tab:
+  // the card at the top of the page points at them whichever tab is open.
+  const [requests, setRequests] = useState<ReviewQueueItem[]>([])
 
   const reload = useCallback(() => setTick((n) => n + 1), [])
+
+  useEffect(() => {
+    let live = true
+    reviewApi.fmExpenseRequests()
+      .then(({ data }) => { if (live) setRequests(data) })
+      .catch(() => { if (live) setRequests([]) })
+    return () => { live = false }
+  }, [tick])
   const riskMap = useRiskMap(type)
 
   const filteredOpenClaims = useMemo(() => {
@@ -119,6 +131,11 @@ export default function FmQueuePage() {
     setType(t); setSelectedId(null); setDoc(null); setFlash('')
   }
 
+  /** Open one approval request straight from the top card (switches to the Expenses tab). */
+  function openRequest(id: number) {
+    setType('expense'); setDoc(null); setFlash(''); setSelectedId(id)
+  }
+
   function afterAction(message: string, keepOpen: boolean) {
     setFlash(message)
     setTimeout(() => setFlash(''), 3000)
@@ -153,6 +170,7 @@ export default function FmQueuePage() {
         </div>
       )}
 
+      <ExpenseRequestBanner requests={requests} onOpen={openRequest} />
       {type === 'receipt' && <AiClaimBanner />}
 
       <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] border border-[var(--line)] rounded-[var(--radius)] overflow-hidden bg-[var(--surface)] min-h-[68vh]">
@@ -183,6 +201,9 @@ export default function FmQueuePage() {
               totalCount={queue.openClaims.length}
               sortMode={sortMode}
             />
+          )}
+          {type === 'expense' && requests.length > 0 && (
+            <Section title="Approval requests from cashiers" items={requests} selectedId={selectedId} onSelect={setSelectedId} sortMode={sortMode} />
           )}
           <Section title="Awaiting final approval" items={awaitingRegular} selectedId={selectedId} onSelect={setSelectedId} riskMap={riskMap} sortMode={sortMode} />
           {type === 'receipt' && (
@@ -285,10 +306,10 @@ function Section(props: {
                 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                   <span style={{ fontFamily: 'Consolas, monospace', fontSize: '0.7rem', fontWeight: 700, color: 'var(--navy2)' }}>
-                    {it.documentNo ?? 'draft'}
+                    {it.documentNo ?? (it.approvalRequestedAt ? `Request #${it.id}` : 'draft')}
                   </span>
                   <span style={{ marginLeft: 'auto', fontSize: '0.68rem', color: 'var(--faint)', whiteSpace: 'nowrap' }}>
-                    {it.submittedAt ? `${fmtDateShort(it.submittedAt)} · ` : ''}{it.branchCode}
+                    {(it.submittedAt ?? it.approvalRequestedAt) ? `${fmtDateShort((it.submittedAt ?? it.approvalRequestedAt)!)} · ` : ''}{it.branchCode}
                   </span>
                 </div>
                 <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{it.partyName}</div>
@@ -297,6 +318,7 @@ function Section(props: {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
                   {it.hasOverride && <Tag>Overridden</Tag>}
+                  {it.overLimit && it.approvalRequestedAt && !it.documentNo && <Tag>Above limit</Tag>}
                   {props.showAging && <AgingBadge days={claimAgeDays(it.submittedAt)} />}
                   {props.riskMap?.get(it.id) != null && props.riskMap.get(it.id)!.score > 0 && (
                     <RiskDot risk={props.riskMap.get(it.id)} />
@@ -451,6 +473,9 @@ function FmDetail(props: {
   // (non-claim) path only — a claim's approval now happens inside Close Claim itself.
   const canQuery = wf === 'VERIFIED' && !isMaker
   const canApprove = canQuery && !isClaim
+  // rev 53 — an over-limit expense draft the cashier sent for pre-approval.
+  const expense = type === 'expense' ? (doc as ExpenseDocument) : null
+  const isApprovalRequest = !!expense && wf === 'DRAFT' && expense.preApprovalStatus === 'PENDING'
 
   const isOpenClaim = isClaim && (wf === 'VERIFIED' || wf === 'APPROVED') && !claimSettled
   const isClosedClaim = claimSettled
@@ -474,6 +499,10 @@ function FmDetail(props: {
   function submitBox() {
     const text = boxText.trim()
     if (!text) { setError('Type the question for the cashier'); return }
+    if (isApprovalRequest) {
+      run(() => reviewApi.queryExpenseApproval(doc.id, text), `Request #${doc.id} sent back to the cashier with your note`)
+      return
+    }
     run(() => reviewApi.query(type, doc.id, text), `${docNo} queried — sent back to the cashier`)
   }
 
@@ -531,7 +560,16 @@ function FmDetail(props: {
         </div>
       )}
 
-      {!canQuery && !isOpenClaim ? (
+      {isApprovalRequest && expense && (
+        <div style={{ ...card, background: 'var(--navy3)', borderColor: '#C9D8F2', marginBottom: 14, fontSize: '0.84rem' }}>
+          <strong>Approval request from {expense.createdByName ?? 'the cashier'}</strong> — this expense is above its
+          sub-category limit, so the cashier needs your approval before they can submit it.
+          Approving it lets them submit up to <strong>{inr(expense.totalAmount)}</strong>; after that the
+          Accountant verifies and closes it without coming back to you. Query sends it back with your note.
+        </div>
+      )}
+
+      {!canQuery && !isOpenClaim && !isApprovalRequest ? (
         <div style={{ ...card, textAlign: 'center', color: 'var(--faint)', fontSize: '0.84rem' }}>
           {isMaker
             ? 'You created or last edited this entry — maker-checker requires another reviewer.'
@@ -548,9 +586,13 @@ function FmDetail(props: {
             />
           )}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-            {canQuery && (
+            {(canQuery || isApprovalRequest) && (
               <button type="button" onClick={() => { setBox(box === 'query' ? null : 'query'); setBoxText(''); setError('') }}
                 style={{ ...ghostBtn, color: 'var(--amber)', minHeight: 36 }}>Query</button>
+            )}
+            {isApprovalRequest && (
+              <button type="button" onClick={() => run(() => reviewApi.preApproveExpense(doc.id), `Request #${doc.id} approved — the cashier can submit it now`)}
+                disabled={busy} style={{ ...primaryBtn(busy), minHeight: 36 }}>Approve</button>
             )}
             {canApprove && (
               <button type="button" onClick={() => run(() => reviewApi.approve(type, doc.id), `${docNo} approved`)}

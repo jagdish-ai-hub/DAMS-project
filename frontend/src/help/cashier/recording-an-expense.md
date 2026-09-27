@@ -21,12 +21,23 @@ From your home screen press **New Expense**. From a customer's page, **＋ New E
 
 One **Expense Line** per payment made. For each: the date, the **Sub-category**, the **Amount**, and the **Payment Mode**. Bank and transaction ID appear only when the mode needs them.
 
-If an amount is **above the sub-category's limit**, you'll see a warning. It still saves — but the finance manager will have to approve it before it can be closed.
+If an amount is **above the sub-category's limit**, you'll see a warning. It still saves as a draft — but the finance manager has to approve it before you can submit it (see *Over-limit expenses* below).
 
 ## Step 4 — save or submit
 
 - **Save Draft** — editable, no number yet.
 - **Submit** — sends it for checking and locks the **DAMS-Expenses-ID** (like `OOR-AUG26-E-001`), which is permanent.
+- **Send for Review** — shown instead of Submit when a line is over its limit. See below.
+
+## Over-limit expenses — Send for Review
+
+When any line is over its sub-category limit, you can't submit straight away. Press **Send for Review** instead:
+
+1. The expense goes to the **finance manager** as an approval request. It stays a draft (no number yet) and is **locked** while they look at it — My Entries shows it as **Waiting for FM approval**.
+2. The finance manager either **approves** it or **queries** it back to you with a note.
+   - **Approved** — My Entries shows **Approved — ready to submit**. Open it and press **Submit**. After that the accountant checks and closes it as usual; it doesn't go back to the finance manager.
+   - **Queried by FM** — open it, read their note at the top, fix it, and press **Send for Review** again.
+3. If you raise the total **above what was approved**, it needs approval again — the button switches back to **Send for Review**. The same or a lower total can be submitted directly.
 
 You can keep adding lines to an expense right up until the accountant closes it.
 

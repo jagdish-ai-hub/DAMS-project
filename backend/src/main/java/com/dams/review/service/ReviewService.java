@@ -19,6 +19,7 @@ import com.dams.expense.dto.ExpenseDocumentResponse;
 import com.dams.expense.entity.ExpenseDocument;
 import com.dams.expense.entity.ExpenseLine;
 import com.dams.expense.entity.ExpenseWorkflowStatus;
+import com.dams.expense.entity.PreApprovalStatus;
 import com.dams.expense.repository.ExpenseDocumentRepository;
 import com.dams.expense.repository.ExpenseLineRepository;
 import com.dams.expense.service.ExpenseDocumentService;
@@ -289,8 +290,11 @@ public class ReviewService {
     public FmQueue fmExpenseQueue() {
         Long orgId = TenantContext.requireOrgId();
         guard.requireFinanceManager();
+        // rev 53: an expense the FM already pre-approved (total still within it) doesn't come
+        // back for a second approval — the Accountant closes it after verifying.
         List<ReviewQueueItem> awaiting = toExpenseItems(orgId, expenseDocumentRepo
-            .findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(orgId, ExpenseWorkflowStatus.VERIFIED));
+            .findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(orgId, ExpenseWorkflowStatus.VERIFIED))
+            .stream().filter(it -> !it.preApproved()).toList();
         return new FmQueue(awaiting, List.of(), List.of());
     }
 
@@ -387,7 +391,7 @@ public class ReviewService {
             out.add(new ReviewQueueItem("cash", d.getId(), d.getDocumentNo(),
                 d.getBranchId(), branchCode(orgId, d.getBranchId(), branchCodes),
                 party, "Cash movement", d.getAmount(), false, false, d.getSubmittedAt(),
-                d.getWorkflowStatus().name(), false, false));
+                d.getWorkflowStatus().name(), false, false, false, null));
         }
         return out;
     }
@@ -759,6 +763,77 @@ public class ReviewService {
             ExpenseWorkflowStatus.VERIFIED, ExpenseWorkflowStatus.APPROVED, EventType.APPROVED, null, null);
     }
 
+    // ============================================================ FM expense pre-approval (rev 53)
+
+    /**
+     * The FM's approval requests: over-limit expense drafts cashiers sent for review, oldest
+     * first, org-wide (the FM sees every branch). Drives both the card at the top of the FM
+     * home and the "Approval requests" section of their Expenses tab.
+     */
+    @Transactional(readOnly = true)
+    public List<ReviewQueueItem> fmExpenseApprovalRequests() {
+        Long orgId = TenantContext.requireOrgId();
+        guard.requireFinanceManager();
+        return toExpenseItems(orgId, expenseDocumentRepo
+            .findByOrgIdAndPreApprovalStatusOrderByApprovalRequestedAtAscIdAsc(orgId, PreApprovalStatus.PENDING));
+    }
+
+    /**
+     * FM approves an over-limit draft before it's submitted. Records the total approved: the
+     * Cashier may Submit up to that amount, and once the Accountant verifies it they may close
+     * it without a second FM approval. The document stays DRAFT — the Cashier still submits it.
+     */
+    @Transactional
+    public ExpenseDocumentResponse preApproveExpense(Long id) {
+        Long orgId = TenantContext.requireOrgId();
+        AppUser me = guard.requireFinanceManager();
+        ExpenseDocument doc = loadExpense(orgId, id);
+        requirePendingApproval(me, doc);
+
+        BigDecimal total = expenseTotal(orgId, doc.getId());
+        doc.setPreApprovalStatus(PreApprovalStatus.APPROVED);
+        doc.setPreApprovedAmount(total);
+        doc.setPreApprovedBy(me.getId());
+        doc.setPreApprovedAt(Instant.now());
+        expenseDocumentRepo.save(doc);
+        auditService.recordUserEvent(EXPENSE, doc.getId(), doc.getBranchId(), EventType.PRE_APPROVED, me.getId(),
+            detail("amount", total));
+        log.info("Expense pre-approved by FM: orgId={} branchId={} docId={} amount={} by={}",
+            orgId, doc.getBranchId(), doc.getId(), total, me.getId());
+        return expenseDocumentService.get(id);
+    }
+
+    /** FM sends the approval request back to the Cashier with a note; they edit and resend it. */
+    @Transactional
+    public ExpenseDocumentResponse queryExpenseApproval(Long id, String note) {
+        Long orgId = TenantContext.requireOrgId();
+        AppUser me = guard.requireFinanceManager();
+        ExpenseDocument doc = loadExpense(orgId, id);
+        requirePendingApproval(me, doc);
+
+        doc.setPreApprovalStatus(PreApprovalStatus.QUERIED);
+        expenseDocumentRepo.save(doc);
+        auditService.recordUserEvent(EXPENSE, doc.getId(), doc.getBranchId(), EventType.QUERIED, me.getId(),
+            detail("note", note, "preApproval", true));
+        log.info("Expense approval request queried by FM: orgId={} branchId={} docId={} by={}",
+            orgId, doc.getBranchId(), doc.getId(), me.getId());
+        return expenseDocumentService.get(id);
+    }
+
+    private void requirePendingApproval(AppUser me, ExpenseDocument doc) {
+        guard.requireCanReview(me, doc.getBranchId(), doc.getCreatedBy(), doc.getLastModifiedBy(), describe(doc));
+        if (doc.getWorkflowStatus() != ExpenseWorkflowStatus.DRAFT
+            || doc.getPreApprovalStatus() != PreApprovalStatus.PENDING) {
+            throw DamsException.conflict("Expense " + describe(doc) + " has no approval request waiting"
+                + " — the cashier hasn't sent it for review, or it was already answered");
+        }
+    }
+
+    private BigDecimal expenseTotal(Long orgId, Long docId) {
+        return expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(orgId, docId).stream()
+            .map(ExpenseLine::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
     @Transactional
     public ExpenseDocumentResponse overrideExpenseLine(Long id, Integer lineNo, BigDecimal newAmount, String reason) {
         Long orgId = TenantContext.requireOrgId();
@@ -816,7 +891,10 @@ public class ReviewService {
             throw DamsException.conflict("Only a verified or approved expense can be closed (document "
                 + label + " is " + s + ")");
         }
-        if (doc.isOverLimit() && s != ExpenseWorkflowStatus.APPROVED) {
+        // rev 53: an FM pre-approval that still covers the total counts as that approval —
+        // no second FM step. If the total has grown past it, the normal FM Approve applies.
+        if (doc.isOverLimit() && s != ExpenseWorkflowStatus.APPROVED
+            && !ExpenseDocumentService.preApprovalCovers(doc, expenseTotal(orgId, doc.getId()))) {
             throw DamsException.conflict("Expense " + label + " is over its category limit — it needs "
                 + "Finance Manager approval before it can be closed");
         }
@@ -941,7 +1019,7 @@ public class ReviewService {
             out.add(new ReviewQueueItem("receipt", d.getId(), d.getDocumentNo(),
                 d.getBranchId(), branchCode(orgId, d.getBranchId(), branchCodes),
                 party, category, amount, false, hasOverride, d.getSubmittedAt(),
-                d.getWorkflowStatus().name(), isClaim, isCashEligible));
+                d.getWorkflowStatus().name(), isClaim, isCashEligible, false, null));
         }
         return out;
     }
@@ -966,7 +1044,8 @@ public class ReviewService {
             out.add(new ReviewQueueItem("expense", d.getId(), d.getDocumentNo(),
                 d.getBranchId(), branchCode(orgId, d.getBranchId(), branchCodes),
                 party, category, amount, d.isOverLimit(), hasOverride, d.getSubmittedAt(),
-                d.getWorkflowStatus().name(), false, false));
+                d.getWorkflowStatus().name(), false, false,
+                ExpenseDocumentService.preApprovalCovers(d, amount), d.getApprovalRequestedAt()));
         }
         return out;
     }
@@ -1002,7 +1081,7 @@ public class ReviewService {
             out.add(new ReviewQueueItem("receipt", docId, ref, jc.getBranchId(),
                 code, party, category,
                 cc.getFinalAmount(), false, cc.isOverridden(), cc.getClosedAt(), "CLOSED",
-                jc.getClaimTypeId() != null, false));
+                jc.getClaimTypeId() != null, false, false, null));
         }
         return out;
     }

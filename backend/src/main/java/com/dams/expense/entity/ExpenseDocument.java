@@ -42,6 +42,25 @@ public class ExpenseDocument {
     @Column(name = "job_card_id")
     private Long jobCardId;
 
+    /**
+     * Manual reference fields, never used as keys — set directly on the document (not
+     * derived from job_card), so they're available even when there's no linked job card.
+     * When the doc also has a job card, its own value wins in the read model and falls
+     * back to the job card's for docs that only ever set it there.
+     */
+    @Column(name = "customer_name", length = 160)
+    private String customerName;
+
+    @Column(name = "vehicle_no", length = 20)
+    private String vehicleNo;
+
+    @Column(name = "invoice_no", length = 60)
+    private String invoiceNo;
+
+    /** Eicher's external job-card number (see JobCard.dbmId). Nullable, manual. */
+    @Column(name = "dbm_id", length = 40)
+    private String dbmId;
+
     @Column(name = "receiver_id", nullable = false)
     private Long receiverId;
 
@@ -65,6 +84,24 @@ public class ExpenseDocument {
      */
     @Column(name = "over_limit", nullable = false)
     private boolean overLimit = false;
+
+    /** FM pre-approval of an over-limit expense (rev 53, V31). Null = never requested. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "pre_approval_status", length = 12)
+    private PreApprovalStatus preApprovalStatus;
+
+    /** The document total the FM approved; a higher total needs approval again. */
+    @Column(name = "pre_approved_amount", precision = 14, scale = 2)
+    private java.math.BigDecimal preApprovedAmount;
+
+    @Column(name = "pre_approved_by")
+    private Long preApprovedBy;
+
+    @Column(name = "pre_approved_at")
+    private Instant preApprovedAt;
+
+    @Column(name = "approval_requested_at")
+    private Instant approvalRequestedAt;
 
     /**
      * Monotonic line-number counter (V22) — see ReceiveDocument.lineNoSeq.

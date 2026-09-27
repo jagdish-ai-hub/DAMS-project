@@ -29,6 +29,8 @@ public record MyEntryResponse(
     boolean today,
     boolean queried,
     Instant createdAt,
-    Instant submittedAt
+    Instant submittedAt,
+    String preApprovalStatus,   // expenses only (rev 53): null | PENDING | APPROVED | QUERIED
+    boolean preApprovalCovers   // expenses only: FM-approved and still within the approved total
 ) {
 }

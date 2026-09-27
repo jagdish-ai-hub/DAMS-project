@@ -28,6 +28,12 @@ public class CreateExpenseRequest {
 
     private Long jobCardId;
 
+    // --- manual reference fields, optional, never used as keys (see ExpenseDocument) ---
+    @Size(max = 160) private String customerName;
+    @Size(max = 20) private String vehicleNo;
+    @Size(max = 60) private String invoiceNo;
+    @Size(max = 40) private String dbmId;
+
     private Long receiverId;
     @Size(max = 160) private String receiverName;
     @Size(max = 32) private String receiverPhone;
