@@ -134,7 +134,7 @@ function HomeSearch(props: {
     // both boxes start level with the search box (row 2) -- the heading sits alone in row 1.
     // Narrow screens: heading, search, then the two boxes stacked underneath.
     <div
-      className="grid grid-cols-1 xl:grid-cols-[minmax(240px,340px)_minmax(0,660px)_minmax(240px,340px)] xl:justify-between xl:mx-[calc(50%-50vw+20px)] gap-x-6 items-start"
+      className="grid grid-cols-1 xl:grid-cols-[minmax(200px,260px)_minmax(600px,660px)_minmax(200px,260px)] xl:justify-between xl:mx-[calc(50%-50vw+20px)] gap-x-6 items-start"
       style={{ padding: '32px 0 24px' }}
     >
     <div className="order-1 xl:col-start-2 xl:row-start-1" style={{ textAlign: 'center', marginBottom: 22 }}>
