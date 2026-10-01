@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { myEntriesApi, type InboxItem, type CashierInbox } from '../api/myEntries'
-import { card, fmtDateTime, inr } from '../shell/ui'
+import { card, fmtDateShort, fmtDateTime, inr } from '../shell/ui'
 
 /**
  * The two message boxes on the Cashier home page (rev 57):
@@ -13,9 +13,10 @@ import { card, fmtDateTime, inr } from '../shell/ui'
  * mark as read. Clicking a message opens that document in its own screen.
  */
 
-const REFRESH_MS = 60_000
-
-/** One fetch shared by both boxes; refreshes every minute and whenever the tab regains focus. */
+/**
+ * One fetch shared by both boxes. No polling: it loads when the cashier opens Home (login lands
+ * here, and coming back from a document remounts the page), so the badges are current each visit.
+ */
 export function useInbox() {
   const [inbox, setInbox] = useState<CashierInbox | null>(null)
   const [failed, setFailed] = useState(false)
@@ -26,13 +27,7 @@ export function useInbox() {
       .catch(() => setFailed(true))
   }, [])
 
-  useEffect(() => {
-    load()
-    const t = setInterval(load, REFRESH_MS)
-    const onVisible = () => { if (document.visibilityState === 'visible') load() }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVisible) }
-  }, [load])
+  useEffect(() => { load() }, [load])
 
   return { inbox, failed }
 }
@@ -56,6 +51,17 @@ function pathFor(item: InboxItem): string {
   return `${base}?editDoc=${item.id}`
 }
 
+/** "5 min ago", "3 h ago", "2 d ago"; older than a week falls back to the date. The full time is the tooltip. */
+function ago(iso: string | null): string {
+  if (!iso) return ''
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000))
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins} min ago`
+  if (mins < 60 * 24) return `${Math.round(mins / 60)} h ago`
+  if (mins < 60 * 24 * 7) return `${Math.round(mins / (60 * 24))} d ago`
+  return fmtDateShort(iso)
+}
+
 function Box(props: {
   title: string
   hint: string
@@ -67,26 +73,34 @@ function Box(props: {
 }) {
   const navigate = useNavigate()
   return (
-    <section aria-label={props.title} data-testid={props.testId} style={{ ...card, padding: '14px 14px 8px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-        <h2 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--navy)', margin: 0 }}>{props.title}</h2>
-        {props.count > 0 && (
-          <span aria-label={`${props.count} need your attention`} style={{
-            background: 'var(--red)', color: '#fff', borderRadius: 999, fontSize: '0.7rem', fontWeight: 700,
-            minWidth: 20, height: 20, padding: '0 6px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          }}>{props.count}</span>
-        )}
+    <section aria-label={props.title} data-testid={props.testId} style={{ ...card, padding: '16px 10px 10px' }}>
+      <div style={{ padding: '0 6px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h2 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--navy)', margin: 0 }}>{props.title}</h2>
+          {props.count > 0 && (
+            <span aria-label={`${props.count} need your attention`} style={{
+              background: 'var(--red)', color: '#fff', borderRadius: 999, fontSize: '0.7rem', fontWeight: 700,
+              minWidth: 20, height: 20, padding: '0 6px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            }}>{props.count}</span>
+          )}
+        </div>
+        <div style={{ fontSize: '0.72rem', color: 'var(--muted)', margin: '3px 0 10px' }}>{props.hint}</div>
       </div>
-      <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginBottom: 8 }}>{props.hint}</div>
 
       {props.items == null ? (
-        <div style={{ padding: '14px 0', fontSize: '0.8rem', color: 'var(--faint)' }}>
+        <div style={{ padding: '18px 6px', fontSize: '0.8rem', color: 'var(--faint)' }}>
           {props.failed ? 'Could not load messages.' : 'Loading…'}
         </div>
       ) : props.items.length === 0 ? (
-        <div style={{ padding: '14px 0', fontSize: '0.8rem', color: 'var(--faint)' }}>{props.empty}</div>
+        <div style={{
+          margin: '0 6px 6px', padding: '22px 12px', textAlign: 'center', fontSize: '0.8rem',
+          color: 'var(--muted)', background: 'var(--bg)', borderRadius: 10,
+        }}>
+          <div style={{ fontSize: '1.1rem', marginBottom: 4, color: 'var(--faint)' }}>✓</div>
+          {props.empty}
+        </div>
       ) : (
-        <div style={{ maxHeight: 360, overflowY: 'auto' }}>
+        <div style={{ maxHeight: 'min(440px, calc(100vh - 380px))', minHeight: 120, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
           {props.items.map((it) => {
             const st = STATE_LABEL[it.state] ?? STATE_LABEL.QUERIED
             const from = it.fromName
@@ -98,33 +112,37 @@ function Box(props: {
                 type="button"
                 onClick={() => navigate(pathFor(it))}
                 title="Open this document"
-                style={{
-                  display: 'block', width: '100%', textAlign: 'left', background: 'transparent', cursor: 'pointer',
-                  border: 0, borderTop: '1px solid var(--line)', padding: '9px 4px 9px 8px',
-                  borderLeft: it.needsAction ? '3px solid var(--red)' : '3px solid transparent',
-                }}
+                className="w-full text-left rounded-lg transition-colors hover:bg-[var(--navy3)]"
+                style={{ display: 'block', background: 'transparent', cursor: 'pointer', border: 0, padding: '9px 8px' }}
               >
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {it.title}
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                    {it.needsAction && (
+                      <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: 999, background: 'var(--red)', flex: 'none' }} />
+                    )}
+                    <span style={{ fontWeight: 700, fontSize: '0.84rem', color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {it.title}
+                    </span>
                   </span>
-                  <span style={{ fontSize: '0.78rem', fontVariantNumeric: 'tabular-nums', color: 'var(--muted)' }}>{inr(it.total)}</span>
+                  <span style={{ fontSize: '0.78rem', fontVariantNumeric: 'tabular-nums', color: 'var(--muted)', flex: 'none' }}>{inr(it.total)}</span>
                 </div>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 3, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
                   <span style={{ background: st.bg, color: st.fg, borderRadius: 5, fontSize: '0.68rem', fontWeight: 700, padding: '1px 6px' }}>{st.text}</span>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--muted)', fontFamily: 'Consolas, monospace' }}>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--muted)', fontFamily: 'Consolas, monospace' }}>
                     {it.documentNo ?? `${it.kind === 'EXPENSE' ? 'Expense' : it.kind === 'CASH' ? 'Cash' : 'Receipt'} draft`}
                   </span>
+                  {it.at && (
+                    <span title={fmtDateTime(it.at)} style={{ fontSize: '0.68rem', color: 'var(--faint)', marginLeft: 'auto' }}>{ago(it.at)}</span>
+                  )}
                 </div>
                 {(from || it.note) && (
                   <div style={{
-                    fontSize: '0.75rem', color: 'var(--ink)', marginTop: 4, display: '-webkit-box',
-                    WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                    fontSize: '0.75rem', color: 'var(--ink)', marginTop: 6, padding: '6px 8px', background: 'var(--bg)',
+                    borderRadius: 6, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
                   }}>
                     {from && <strong>{from}: </strong>}{it.note}
                   </div>
                 )}
-                {it.at && <div style={{ fontSize: '0.68rem', color: 'var(--faint)', marginTop: 2 }}>{fmtDateTime(it.at)}</div>}
               </button>
             )
           })}
@@ -139,7 +157,7 @@ export function QueriesBox(props: { inbox: CashierInbox | null; failed: boolean 
     <Box
       testId="queries-box"
       title="Queries for me"
-      hint="Sent back by your Accountant or the Finance Manager — click to fix and resubmit"
+      hint="From your Accountant or Finance Manager — click to fix"
       count={props.inbox?.queriesToAct ?? 0}
       items={props.inbox?.queries ?? null}
       failed={props.failed}
@@ -153,7 +171,7 @@ export function ApprovalsBox(props: { inbox: CashierInbox | null; failed: boolea
     <Box
       testId="approvals-box"
       title="Approvals"
-      hint="Expenses you sent to the Finance Manager, and their replies"
+      hint="Expenses sent to the Finance Manager, and replies"
       count={props.inbox?.approvalsToAct ?? 0}
       items={props.inbox?.approvals ?? null}
       failed={props.failed}

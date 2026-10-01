@@ -155,7 +155,9 @@ One "cause" = one document, containing many sub-transaction lines:
   queried). Each box has a badge counting only items still needing the cashier;
   it is derived from the document's current state, so resubmitting or submitting
   removes the item -- no read tracking. `FM_QUERIED` is the Accountant's, not shown.
-  Clicking a message opens that document for edit / resubmit.
+  Clicking a message opens that document for edit / resubmit. The boxes load once
+  when the cashier opens Home (login lands there; returning from a document reloads
+  it) -- there is no background polling.
 - **Job cards may start from an Expense (rev 56)**: a job card is no longer
   created only from a Receive. A Cashier may create one from the Expense form,
   **without a customer** (`job_card.customer_id` nullable; the typed vehicle
