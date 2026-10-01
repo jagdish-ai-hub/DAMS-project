@@ -1,5 +1,6 @@
 package com.dams.cash.service;
 
+import com.dams.common.security.ActingDetails;
 import com.dams.audit.entity.EventType;
 import com.dams.audit.service.AuditService;
 import com.dams.audit.service.DocumentHistoryService;
@@ -92,7 +93,7 @@ public class CashDocumentService {
     public CashDocumentResponse create(CreateCashDocumentRequest request) {
         Long orgId = TenantContext.requireOrgId();
         AppUser me = guard.requireCashier(orgId);
-        Long branchId = me.getHomeBranchId();
+        Long branchId = ActingDetails.effectiveHomeBranch(me);
 
         cashDateLock.requireCashDateOpen(orgId, branchId, request.getTransactionDate());
         Long bankId = resolveBank(orgId, request.getBankId());

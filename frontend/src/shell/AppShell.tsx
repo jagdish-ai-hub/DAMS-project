@@ -3,6 +3,8 @@ import { Routes, Route, Navigate, NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import type { Role } from '../auth/AuthContext'
 import AccountMenu from './AccountMenu'
+import RoleSwitchButton from './RoleSwitchButton'
+import ActingRoleBanner from './ActingRoleBanner'
 import HelpDrawer from '../help/HelpDrawer'
 import { ROLE_TO_HELP } from '../help/manifest'
 import RoleLanding from './RoleLanding'
@@ -67,7 +69,9 @@ const DASHBOARD_LABEL: Record<Role, string> = {
 /**
  * Authenticated app frame: navy topbar (logo + role-conditional nav + account menu),
  * then the routed content. The view is driven entirely by the JWT's role — there is
- * no client-side role switch anywhere (see AGENT.md auth section).
+ * no client-side role choice anywhere (see AGENT.md auth section). A user with Owner-granted
+ * extra roles can switch, but the server issues a new token whose role is the acting role;
+ * this shell just follows it (plan.md rev 55).
  */
 export default function AppShell() {
   const { user } = useAuth()
@@ -215,6 +219,8 @@ export default function AppShell() {
                 ? Help
             </button>
 
+            <RoleSwitchButton />
+
             <AccountMenu />
           </div>
         </div>
@@ -242,6 +248,9 @@ export default function AppShell() {
           ))}
         </nav>
       </header>
+
+      {/* "You're working as …" strip while switched into another role (rev 55) */}
+      <ActingRoleBanner />
 
       {/* Mobile navigation slide-out drawer (< 640px only) */}
       {navOpen && (

@@ -52,6 +52,13 @@ public class AuditEvent {
     @Column(name = "actor_id")
     private Long actorId;
 
+    /**
+     * The role the actor was acting in, set ONLY while they had switched into a role other than
+     * their own (plan.md rev 55) — history then reads "Ajay · as Cashier". Null otherwise.
+     */
+    @Column(name = "actor_role", length = 50)
+    private String actorRole;
+
     @Column(name = "detail", columnDefinition = "text")
     private String detail;
 

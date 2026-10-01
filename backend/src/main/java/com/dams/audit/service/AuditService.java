@@ -4,6 +4,7 @@ import com.dams.audit.entity.ActorType;
 import com.dams.audit.entity.AuditEvent;
 import com.dams.audit.entity.EventType;
 import com.dams.audit.repository.AuditEventRepository;
+import com.dams.common.security.ActingDetails;
 import com.dams.config.TenantContext;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -77,6 +78,10 @@ public class AuditService {
         event.setEventType(eventType);
         event.setActorType(actorType);
         event.setActorId(actorId);
+        // Only a user action can be "acting as"; recorded just while switched (rev 55)
+        if (actorType == ActorType.USER && ActingDetails.isActing()) {
+            event.setActorRole(ActingDetails.actingRole().name());
+        }
         event.setDetail(toJson(detail));
         repo.save(event);
 

@@ -9,8 +9,7 @@ import java.util.List;
 /**
  * An expense document with the receiver and (optional) job-card facts a screen needs
  * joined in, the expense lines, the document total, and the flags that drive the form:
- * {@code overLimit} (any line over its limit) and {@code claimEligible} (the document sits
- * on a job card whose category is a claim category, so "Transfer to Claim" is offered).
+ * {@code overLimit} (any line over its limit).
  */
 public record ExpenseDocumentResponse(
     Long id,
@@ -29,7 +28,8 @@ public record ExpenseDocumentResponse(
     String receiverName,
     String receiverPhone,
 
-    Long customerId,                 // from the job card, or null
+    Long customerId,                 // the document's own link, else the job card's, or null
+    Long vehicleId,                  // likewise
     String customerName,             // the document's own value, else the job card's
     String vehicleNo,                // the document's own value, else the job card's
     String invoiceNo,
@@ -41,7 +41,6 @@ public record ExpenseDocumentResponse(
     Long businessStatusId,
     String businessStatusName,
     boolean businessStatusTriggersClaim,
-    boolean claimEligible,
 
     BigDecimal totalAmount,          // Σ this document's lines
 

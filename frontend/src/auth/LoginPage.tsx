@@ -42,7 +42,7 @@ export default function LoginPage() {
     setLoading(tag)
     try {
       const { data } = await authApi.login({ email: withEmail, password: withPassword })
-      login(data.accessToken, data.name)
+      login(data.accessToken, data.name, { canSwitchRole: data.canSwitchRole })
       navigate('/app', { replace: true })
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message

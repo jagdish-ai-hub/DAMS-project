@@ -15,6 +15,7 @@ public record DocumentHistoryEntry(
     String actor,        // user's name, or "System" for machine events
     String action,       // "Verified", "Queried", "Overrode a line amount", …
     String note,         // the query / reject / override text, or null
-    Instant at
+    Instant at,
+    String actorRole     // role the actor was switched into ("CASHIER"), or null when in their own role — rev 55
 ) {
 }

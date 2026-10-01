@@ -29,6 +29,9 @@ import java.util.stream.Collectors;
  * The toggle never changes which branch a cashier's own documents post under — only what
  * they can search and see. See AGENT.md / plan.md locked decisions.
  *
+ * While the caller has switched into another role (plan.md rev 55) the scope is that ACTING
+ * role at the one branch picked — the Owner acting as Accountant at OOR sees OOR only.
+ *
  * Reads the user and toggle fresh from the DB (not the JWT) so a change to an accountant's
  * branch access or the org toggle takes effect without waiting for the ~8h token to expire.
  */
@@ -57,10 +60,16 @@ public class BranchScope {
         AppUser user = userRepo.findByIdAndOrganization_Id(currentUserId(), orgId)
             .orElseThrow(() -> DamsException.forbidden("The signed-in user is not part of this organization"));
 
-        return switch (user.getRole()) {
+        // While switched (rev 55) the scope follows the ACTING role and the one branch picked;
+        // ActingRoleFilter has already re-validated the grant on this request.
+        boolean acting = ActingDetails.isActing();
+        Long actingBranch = ActingDetails.actingBranch();
+
+        return switch (ActingDetails.effectiveRole(user)) {
             case OWNER, FINANCE_MANAGER -> Optional.empty();
-            case ACCOUNTANT -> Optional.of(
-                branchAccessRepo.findByUserId(user.getId()).stream()
+            case ACCOUNTANT -> Optional.of(acting
+                ? (actingBranch == null ? Set.<Long>of() : Set.of(actingBranch))
+                : branchAccessRepo.findByUserId(user.getId()).stream()
                     .map(UserBranchAccess::getBranchId)
                     .collect(Collectors.toSet()));
             case CASHIER -> {
@@ -69,12 +78,24 @@ public class BranchScope {
                 if (org.isMultiBranchCashierAccess()) {
                     yield Optional.empty();
                 }
-                yield Optional.of(user.getHomeBranchId() == null
-                    ? Set.of()
-                    : Set.of(user.getHomeBranchId()));
+                Long home = ActingDetails.effectiveHomeBranch(user);
+                yield Optional.of(home == null ? Set.of() : Set.of(home));
             }
             case SUPER_ADMIN -> Optional.of(Set.of()); // no org context — should never reach here
         };
+    }
+
+    /**
+     * The branch a new record created by the caller belongs to: a cashier's (acting) home branch,
+     * else null (owner / FM / accountant create no branch-owned customers).
+     */
+    public Long creatingBranchIdOrNull() {
+        Long orgId = TenantContext.requireOrgId();
+        AppUser user = userRepo.findByIdAndOrganization_Id(currentUserId(), orgId).orElse(null);
+        if (user == null || ActingDetails.effectiveRole(user) != Role.CASHIER) {
+            return null;
+        }
+        return ActingDetails.effectiveHomeBranch(user);
     }
 
     /** True when {@code branchId} is within the caller's allowed set. */

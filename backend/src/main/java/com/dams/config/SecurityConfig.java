@@ -35,6 +35,7 @@ public class SecurityConfig {
 
     private final JwtConfig jwtFilter;
     private final TenantFilter tenantFilter;
+    private final ActingRoleFilter actingRoleFilter;
     private final ObjectMapper objectMapper;
 
     @Value("${dams.cors.allowed-origins:http://localhost:5173}")
@@ -42,9 +43,11 @@ public class SecurityConfig {
 
     public SecurityConfig(JwtConfig jwtFilter,
                           TenantFilter tenantFilter,
+                          ActingRoleFilter actingRoleFilter,
                           ObjectMapper objectMapper) {
         this.jwtFilter = jwtFilter;
         this.tenantFilter = tenantFilter;
+        this.actingRoleFilter = actingRoleFilter;
         this.objectMapper = objectMapper;
     }
 
@@ -77,7 +80,9 @@ public class SecurityConfig {
             )
             // JWT filter runs before the standard username/password filter
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
-            .addFilterAfter(tenantFilter, JwtConfig.class);
+            .addFilterAfter(tenantFilter, JwtConfig.class)
+            // Re-validates a switched role against the DB once TenantContext is set (rev 55)
+            .addFilterAfter(actingRoleFilter, TenantFilter.class);
 
         return http.build();
     }
@@ -101,6 +106,13 @@ public class SecurityConfig {
     @Bean
     public FilterRegistrationBean<TenantFilter> disableTenantFilterAutoRegistration(TenantFilter filter) {
         FilterRegistrationBean<TenantFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    @Bean
+    public FilterRegistrationBean<ActingRoleFilter> disableActingRoleFilterAutoRegistration(ActingRoleFilter filter) {
+        FilterRegistrationBean<ActingRoleFilter> registration = new FilterRegistrationBean<>(filter);
         registration.setEnabled(false);
         return registration;
     }

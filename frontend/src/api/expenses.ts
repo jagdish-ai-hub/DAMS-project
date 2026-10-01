@@ -54,6 +54,7 @@ export interface ExpenseDocument {
   receiverName: string | null
   receiverPhone: string | null
   customerId: number | null
+  vehicleId: number | null
   customerName: string | null
   vehicleNo: string | null
   invoiceNo: string | null
@@ -63,7 +64,6 @@ export interface ExpenseDocument {
   businessStatusId: number
   businessStatusName: string | null
   businessStatusTriggersClaim: boolean
-  claimEligible: boolean
   totalAmount: number
   createdBy: number
   createdByName: string | null
@@ -97,6 +97,13 @@ export interface ExpenseLineInput {
 
 export interface CreateExpenseRequest {
   jobCardId?: number
+  /** Link to an existing customer / vehicle, or type a new one (created on save). */
+  customerId?: number
+  newCustomerName?: string
+  vehicleId?: number
+  newVehicleNo?: string
+  /** Open a new job card with this expense; the customer is optional. */
+  newJobCard?: { categoryId: number; businessStatusId: number; claimTypeId?: number }
   customerName?: string
   vehicleNo?: string
   invoiceNo?: string
@@ -112,6 +119,11 @@ export interface CreateExpenseRequest {
 
 export interface ExpensePatchRequest {
   jobCardId?: number
+  clearJobCard?: boolean
+  customerId?: number
+  newCustomerName?: string
+  vehicleId?: number
+  newVehicleNo?: string
   customerName?: string
   vehicleNo?: string
   invoiceNo?: string

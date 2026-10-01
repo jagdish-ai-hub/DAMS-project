@@ -51,6 +51,13 @@ public class ExpenseDocument {
     @Column(name = "customer_name", length = 160)
     private String customerName;
 
+    /** Real links (rev 56) — set from a picked/created customer & vehicle; nullable. */
+    @Column(name = "customer_id")
+    private Long customerId;
+
+    @Column(name = "vehicle_id")
+    private Long vehicleId;
+
     @Column(name = "vehicle_no", length = 20)
     private String vehicleNo;
 

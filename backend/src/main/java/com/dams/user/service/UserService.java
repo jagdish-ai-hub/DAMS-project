@@ -7,13 +7,16 @@ import com.dams.config.TenantContext;
 import com.dams.email.EmailService;
 import com.dams.organization.entity.Organization;
 import com.dams.organization.repository.OrganizationRepository;
+import com.dams.user.dto.RoleGrantDto;
 import com.dams.user.dto.UserRequest;
 import com.dams.user.dto.UserResponse;
 import com.dams.user.entity.AppUser;
 import com.dams.user.entity.Role;
 import com.dams.user.entity.UserBranchAccess;
+import com.dams.user.entity.UserRoleGrant;
 import com.dams.user.repository.AppUserRepository;
 import com.dams.user.repository.UserBranchAccessRepository;
+import com.dams.user.repository.UserRoleGrantRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,9 +27,11 @@ import org.springframework.web.util.UriComponentsBuilder;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -34,7 +39,8 @@ import java.util.stream.Collectors;
  * Owner-managed team CRUD, org-scoped. Creating a user issues an invite (no password is
  * set here — the user sets their own via the accept-invite link, same as the Owner flow).
  * Branch binding follows the role: OWNER/FM are org-wide, ACCOUNTANT gets access rows,
- * CASHIER gets exactly one home branch. See AGENT.md / plan.md.
+ * CASHIER gets exactly one home branch. Extra switchable roles (rev 55) are stored as
+ * user_role_grant rows and replaced wholesale on every save. See AGENT.md / plan.md.
  */
 @Service
 public class UserService {
@@ -44,6 +50,7 @@ public class UserService {
 
     private final AppUserRepository userRepo;
     private final UserBranchAccessRepository branchAccessRepo;
+    private final UserRoleGrantRepository grantRepo;
     private final BranchRepository branchRepo;
     private final OrganizationRepository orgRepo;
     private final EmailService emailService;
@@ -51,12 +58,14 @@ public class UserService {
 
     public UserService(AppUserRepository userRepo,
                        UserBranchAccessRepository branchAccessRepo,
+                       UserRoleGrantRepository grantRepo,
                        BranchRepository branchRepo,
                        OrganizationRepository orgRepo,
                        EmailService emailService,
                        @Value("${dams.app.base-url:http://localhost:5173}") String appBaseUrl) {
         this.userRepo = userRepo;
         this.branchAccessRepo = branchAccessRepo;
+        this.grantRepo = grantRepo;
         this.branchRepo = branchRepo;
         this.orgRepo = orgRepo;
         this.emailService = emailService;
@@ -69,8 +78,13 @@ public class UserService {
         Map<Long, Branch> branchesById = branchRepo.findByOrgIdOrderByCodeAsc(orgId).stream()
             .collect(Collectors.toMap(Branch::getId, b -> b, (a, b) -> a, LinkedHashMap::new));
 
-        return userRepo.findByOrganization_IdOrderByNameAsc(orgId).stream()
-            .map(u -> toResponse(u, branchIdsOf(u), branchesById, null))
+        List<AppUser> users = userRepo.findByOrganization_IdOrderByNameAsc(orgId);
+        Map<Long, List<UserRoleGrant>> grantsByUser = users.isEmpty() ? Map.of()
+            : grantRepo.findByUserIdIn(users.stream().map(AppUser::getId).toList()).stream()
+                .collect(Collectors.groupingBy(UserRoleGrant::getUserId));
+
+        return users.stream()
+            .map(u -> toResponse(u, branchIdsOf(u), branchesById, grantsByUser.getOrDefault(u.getId(), List.of()), null))
             .toList();
     }
 
@@ -80,7 +94,7 @@ public class UserService {
         Long orgId = TenantContext.requireOrgId();
         Map<Long, Branch> branchesById = branchRepo.findByOrgIdOrderByCodeAsc(orgId).stream()
             .collect(Collectors.toMap(Branch::getId, b -> b));
-        return toResponse(user, branchIdsOf(user), branchesById, null);
+        return toResponse(user, branchIdsOf(user), branchesById, grantRepo.findByUserId(user.getId()), null);
     }
 
     @Transactional
@@ -96,6 +110,7 @@ public class UserService {
 
         List<Long> branchIds = resolveBranchIds(orgId, role, request);
         Long homeBranchId = role == Role.CASHIER ? branchIds.get(0) : null;
+        List<UserRoleGrant> grants = resolveRoleGrants(orgId, role, request);
 
         Organization org = orgRepo.getReferenceById(orgId);
         String token = UUID.randomUUID().toString();
@@ -114,6 +129,7 @@ public class UserService {
         if (role == Role.ACCOUNTANT) {
             replaceBranchAccess(user.getId(), branchIds);
         }
+        grants = saveRoleGrants(user.getId(), grants);
 
         String inviteLink = buildInviteLink(token);
         emailService.sendUserInvite(email, org.getName(), roleLabel(role), inviteLink);
@@ -121,7 +137,7 @@ public class UserService {
         log.info("User created: orgId={} userId={} role={} email='{}'", orgId, user.getId(), role, email);
 
         Map<Long, Branch> branchesById = loadOrgBranches(orgId);
-        return toResponse(user, branchIds, branchesById, inviteLink);
+        return toResponse(user, branchIds, branchesById, grants, inviteLink);
     }
 
     @Transactional
@@ -142,6 +158,7 @@ public class UserService {
         }
 
         List<Long> branchIds = resolveBranchIds(orgId, newRole, request);
+        List<UserRoleGrant> grants = resolveRoleGrants(orgId, newRole, request);
 
         user.setName(request.getName().trim());
         user.setRole(newRole);
@@ -156,11 +173,15 @@ public class UserService {
         if (newRole == Role.ACCOUNTANT) {
             replaceBranchAccess(user.getId(), branchIds);
         }
+        // The submitted list replaces the user's grants wholesale (rev 55)
+        grantRepo.deleteByUserId(user.getId());
+        grantRepo.flush();
+        grants = saveRoleGrants(user.getId(), grants);
 
         log.info("User updated: orgId={} userId={} role={} active={}", orgId, user.getId(), newRole, user.isActive());
 
         Map<Long, Branch> branchesById = loadOrgBranches(orgId);
-        return toResponse(user, branchIds, branchesById, null);
+        return toResponse(user, branchIds, branchesById, grants, null);
     }
 
     // --- helpers ---
@@ -197,6 +218,61 @@ public class UserService {
         List<Long> distinct = ids.stream().distinct().toList();
         distinct.forEach(bid -> requireBranchInOrg(orgId, bid));
         return distinct;
+    }
+
+    /**
+     * Validates the extra switchable roles (rev 55) and returns the rows to store. An OWNER gets
+     * none (the Owner can already act as any role); a grant equal to the user's own role is
+     * dropped; FINANCE_MANAGER is org-wide (one row, no branch); ACCOUNTANT / CASHIER need at
+     * least one branch of this org.
+     */
+    private List<UserRoleGrant> resolveRoleGrants(Long orgId, Role primary, UserRequest request) {
+        List<RoleGrantDto> requested = request.getRoleGrants();
+        if (requested == null || requested.isEmpty() || primary == Role.OWNER) {
+            return List.of();
+        }
+        Map<Role, Set<Long>> branchesByRole = new EnumMap<>(Role.class);
+        for (RoleGrantDto dto : requested) {
+            Role role = dto.role();
+            if (role == null || role == primary) {
+                continue;
+            }
+            if (role == Role.OWNER || role == Role.SUPER_ADMIN) {
+                throw DamsException.badRequest("A user cannot be given the " + roleLabel(role) + " role to switch into");
+            }
+            Set<Long> ids = branchesByRole.computeIfAbsent(role, r -> new java.util.LinkedHashSet<>());
+            if (role != Role.FINANCE_MANAGER) {
+                if (dto.branchIds() != null) {
+                    ids.addAll(dto.branchIds());
+                }
+                if (ids.isEmpty()) {
+                    throw DamsException.badRequest("Pick at least one branch for the extra " + roleLabel(role) + " role");
+                }
+                ids.forEach(bid -> requireBranchInOrg(orgId, bid));
+            }
+        }
+        List<UserRoleGrant> grants = new ArrayList<>();
+        branchesByRole.forEach((role, ids) -> {
+            if (role == Role.FINANCE_MANAGER) {
+                grants.add(newGrant(orgId, role, null));
+            } else {
+                ids.forEach(bid -> grants.add(newGrant(orgId, role, bid)));
+            }
+        });
+        return grants;
+    }
+
+    private UserRoleGrant newGrant(Long orgId, Role role, Long branchId) {
+        UserRoleGrant g = new UserRoleGrant();
+        g.setOrgId(orgId);
+        g.setRole(role);
+        g.setBranchId(branchId);
+        return g;
+    }
+
+    private List<UserRoleGrant> saveRoleGrants(Long userId, List<UserRoleGrant> grants) {
+        grants.forEach(g -> g.setUserId(userId));
+        return grants.isEmpty() ? grants : grantRepo.saveAll(grants);
     }
 
     private void requireBranchInOrg(Long orgId, Long branchId) {
@@ -241,7 +317,9 @@ public class UserService {
     }
 
     private UserResponse toResponse(AppUser user, List<Long> branchIds,
-                                    Map<Long, Branch> branchesById, String inviteLink) {
+                                    Map<Long, Branch> branchesById, List<UserRoleGrant> grants,
+                                    String inviteLink) {
+        List<RoleGrantDto> grantDtos = toGrantDtos(grants);
         return new UserResponse(
             user.getId(),
             user.getName(),
@@ -252,8 +330,35 @@ public class UserService {
             user.getHomeBranchId(),
             branchIds.isEmpty() ? null : new ArrayList<>(branchIds),
             branchAccessLabel(user.getRole(), branchIds, branchesById),
+            grantDtos.isEmpty() ? null : grantDtos,
+            grantDtos.isEmpty() ? null : extraRolesLabel(grantDtos, branchesById),
             user.getCreatedAt(),
             inviteLink);
+    }
+
+    /** One dto per granted role, its branches in stable order (FINANCE_MANAGER has none). */
+    private List<RoleGrantDto> toGrantDtos(List<UserRoleGrant> grants) {
+        Map<Role, List<Long>> byRole = new EnumMap<>(Role.class);
+        for (UserRoleGrant g : grants) {
+            List<Long> ids = byRole.computeIfAbsent(g.getRole(), r -> new ArrayList<>());
+            if (g.getBranchId() != null) {
+                ids.add(g.getBranchId());
+            }
+        }
+        List<RoleGrantDto> out = new ArrayList<>();
+        byRole.forEach((role, ids) -> out.add(new RoleGrantDto(role, ids.stream().sorted().toList())));
+        return out;
+    }
+
+    /** e.g. "Cashier (OOR), Finance Manager" - branch codes, not names, to stay short in the table. */
+    private String extraRolesLabel(List<RoleGrantDto> grants, Map<Long, Branch> branchesById) {
+        return grants.stream()
+            .map(g -> g.branchIds().isEmpty()
+                ? roleLabel(g.role())
+                : roleLabel(g.role()) + " (" + g.branchIds().stream()
+                    .map(id -> branchesById.containsKey(id) ? branchesById.get(id).getCode() : "#" + id)
+                    .collect(Collectors.joining(", ")) + ")")
+            .collect(Collectors.joining(", "));
     }
 
     private String branchAccessLabel(Role role, List<Long> branchIds, Map<Long, Branch> branchesById) {

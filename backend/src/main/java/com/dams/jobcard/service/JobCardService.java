@@ -1,5 +1,6 @@
 package com.dams.jobcard.service;
 
+import com.dams.common.security.ActingDetails;
 import com.dams.audit.entity.EventType;
 import com.dams.audit.service.AuditService;
 import com.dams.branch.entity.Branch;
@@ -9,6 +10,9 @@ import com.dams.common.security.BranchScope;
 import com.dams.config.TenantContext;
 import com.dams.customer.entity.Customer;
 import com.dams.customer.repository.CustomerRepository;
+import com.dams.customer.service.PartyResolver;
+import com.dams.jobcard.dto.AttachCustomerRequest;
+import com.dams.jobcard.dto.JobCardSearchHit;
 import com.dams.jobcard.dto.JobCardCreateRequest;
 import com.dams.jobcard.dto.JobCardPatchRequest;
 import com.dams.jobcard.dto.JobCardResponse;
@@ -34,9 +38,19 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.data.domain.Limit;
+
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Job-card (case) lifecycle for Stage 3: create (with inline customer/vehicle), read with
@@ -74,6 +88,7 @@ public class JobCardService {
     private final ClaimCloseRepository claimCloseRepo;
     private final ReceivePaymentGuard paymentGuard;
     private final ReceiveStatusAccessService statusAccess;
+    private final PartyResolver partyResolver;
 
     public JobCardService(JobCardRepository jobCardRepo,
                           CustomerRepository customerRepo,
@@ -88,7 +103,8 @@ public class JobCardService {
                           PendingAmountCalculator pendingAmountCalculator,
                           ClaimCloseRepository claimCloseRepo,
                           ReceivePaymentGuard paymentGuard,
-                          ReceiveStatusAccessService statusAccess) {
+                          ReceiveStatusAccessService statusAccess,
+                          PartyResolver partyResolver) {
         this.jobCardRepo = jobCardRepo;
         this.customerRepo = customerRepo;
         this.vehicleRepo = vehicleRepo;
@@ -103,6 +119,7 @@ public class JobCardService {
         this.claimCloseRepo = claimCloseRepo;
         this.paymentGuard = paymentGuard;
         this.statusAccess = statusAccess;
+        this.partyResolver = partyResolver;
     }
 
     @Transactional(readOnly = true)
@@ -114,9 +131,12 @@ public class JobCardService {
     public JobCardResponse create(JobCardCreateRequest request) {
         Long orgId = TenantContext.requireOrgId();
 
-        Customer customer = resolveCustomer(orgId, request);
-        Vehicle vehicle = resolveVehicle(orgId, customer, request);
         Long branchId = resolvePostingBranch(orgId, request.getBranchId());
+        // Customer is optional (rev 56): an Expense may open a job card before the customer is known.
+        PartyResolver.Party party = partyResolver.resolve(orgId, request.getCustomerId(), request.getCustomerName(),
+            request.getCustomerPhone(), request.getVehicleId(), request.getVehicleNo(), branchId);
+        Customer customer = party.customer();
+        Vehicle vehicle = party.vehicle();
 
         ReceiveCategory category = requireActiveCategory(orgId, request.getCategoryId());
         ReceiveBusinessStatus status = requireActiveStatus(orgId, request.getBusinessStatusId());
@@ -127,8 +147,9 @@ public class JobCardService {
         JobCard jc = new JobCard();
         jc.setOrgId(orgId);
         jc.setBranchId(branchId);
-        jc.setCustomerId(customer.getId());
+        jc.setCustomerId(customer != null ? customer.getId() : null);
         jc.setVehicleId(vehicle != null ? vehicle.getId() : null);
+        jc.setVehicleNoText(party.unlinkedVehicleNo());
         jc.setDbmId(blankToNull(request.getDbmId()));
         jc.setInvoiceNo(blankToNull(request.getInvoiceNo()));
         jc.setInvoiceAmount(request.getInvoiceAmount());
@@ -141,11 +162,14 @@ public class JobCardService {
         jc.setBusinessStatusId(status.getId());
         jc = jobCardRepo.save(jc);
 
+        Map<String, Object> createdDetail = orderedDetail("customerId", customer != null ? customer.getId() : null,
+            "branchId", branchId);
+        createdDetail.put("categoryId", category.getId());
         auditService.recordUserEvent(ENTITY, jc.getId(), jc.getBranchId(), EventType.CREATED, branchScope.currentUserId(),
-            Map.of("customerId", customer.getId(), "branchId", branchId, "categoryId", category.getId()));
+            createdDetail);
 
         log.info("JobCard created: orgId={} jobCardId={} branchId={} customerId={}",
-            orgId, jc.getId(), branchId, customer.getId());
+            orgId, jc.getId(), branchId, customer != null ? customer.getId() : null);
         return toResponse(jc);
     }
 
@@ -176,16 +200,16 @@ public class JobCardService {
             String normalised = Vehicle.normalise(request.getVehicleNo());
             if (normalised == null || normalised.isBlank()) {
                 jc.setVehicleId(null);
+                jc.setVehicleNoText(null);
+            } else if (jc.getCustomerId() == null) {
+                // No customer to own a Vehicle row yet -- keep the number as text (rev 56).
+                jc.setVehicleId(null);
+                jc.setVehicleNoText(normalised);
             } else {
-                Long customerIdForVehicle = jc.getCustomerId();
-                Vehicle v = vehicleRepo.findByOrgIdAndVehicleNo(orgId, normalised).orElseGet(() -> {
-                    Vehicle nv = new Vehicle();
-                    nv.setOrgId(orgId);
-                    nv.setCustomerId(customerIdForVehicle);
-                    nv.setVehicleNo(normalised);
-                    return vehicleRepo.save(nv);
-                });
-                jc.setVehicleId(v.getId());
+                PartyResolver.Party party = partyResolver.resolve(orgId, jc.getCustomerId(), null, null,
+                    null, normalised, jc.getBranchId());
+                jc.setVehicleId(party.vehicle().getId());
+                jc.setVehicleNoText(null);
             }
         }
         // Validate against the effective (post-patch) values.
@@ -248,44 +272,6 @@ public class JobCardService {
 
     // --- resolution helpers ---
 
-    private Customer resolveCustomer(Long orgId, JobCardCreateRequest request) {
-        if (request.getCustomerId() != null) {
-            return customerRepo.findByIdAndOrgId(request.getCustomerId(), orgId)
-                .orElseThrow(() -> DamsException.notFound("Customer", request.getCustomerId()));
-        }
-        if (request.getCustomerName() == null || request.getCustomerName().isBlank()) {
-            throw DamsException.badRequest("Provide customerId or customerName for the job card");
-        }
-        Customer c = new Customer();
-        c.setOrgId(orgId);
-        c.setName(request.getCustomerName().trim());
-        c.setPhone(blankToNull(request.getCustomerPhone()));
-        c = customerRepo.save(c);
-        log.info("Customer created inline for job card: orgId={} customerId={}", orgId, c.getId());
-        return c;
-    }
-
-    private Vehicle resolveVehicle(Long orgId, Customer customer, JobCardCreateRequest request) {
-        if (request.getVehicleId() != null) {
-            Vehicle v = vehicleRepo.findByIdAndOrgId(request.getVehicleId(), orgId)
-                .orElseThrow(() -> DamsException.notFound("Vehicle", request.getVehicleId()));
-            return v;
-        }
-        String normalised = Vehicle.normalise(request.getVehicleNo());
-        if (normalised == null || normalised.isBlank()) {
-            return null; // counter sale — no vehicle
-        }
-        return vehicleRepo.findByOrgIdAndVehicleNo(orgId, normalised).orElseGet(() -> {
-            Vehicle v = new Vehicle();
-            v.setOrgId(orgId);
-            v.setCustomerId(customer.getId());
-            v.setVehicleNo(normalised);
-            Vehicle saved = vehicleRepo.save(v);
-            log.info("Vehicle created inline for job card: orgId={} vehicleId={} no={}", orgId, saved.getId(), normalised);
-            return saved;
-        });
-    }
-
     /**
      * CASHIER: always their home branch (the request's branchId is ignored).
      * Everyone else: the requested branch, which must exist and be within their branch scope.
@@ -294,11 +280,11 @@ public class JobCardService {
         AppUser me = userRepo.findByIdAndOrganization_Id(branchScope.currentUserId(), orgId)
             .orElseThrow(() -> DamsException.forbidden("The signed-in user is not part of this organization"));
 
-        if (me.getRole() == Role.CASHIER) {
-            if (me.getHomeBranchId() == null) {
+        if (ActingDetails.effectiveRole(me) == Role.CASHIER) {
+            if (ActingDetails.effectiveHomeBranch(me) == null) {
                 throw DamsException.badRequest("Your account has no home branch — ask an Owner to set one");
             }
-            return me.getHomeBranchId();
+            return ActingDetails.effectiveHomeBranch(me);
         }
 
         if (requestedBranchId == null) {
@@ -376,7 +362,8 @@ public class JobCardService {
     private JobCardResponse toResponse(JobCard jc) {
         Long orgId = jc.getOrgId();
         Branch branch = branchRepo.findByIdAndOrgId(jc.getBranchId(), orgId).orElse(null);
-        Customer customer = customerRepo.findByIdAndOrgId(jc.getCustomerId(), orgId).orElse(null);
+        Customer customer = jc.getCustomerId() == null ? null
+            : customerRepo.findByIdAndOrgId(jc.getCustomerId(), orgId).orElse(null);
         Vehicle vehicle = jc.getVehicleId() == null ? null
             : vehicleRepo.findByIdAndOrgId(jc.getVehicleId(), orgId).orElse(null);
         ReceiveCategory category = categoryRepo.findByIdAndOrgId(jc.getCategoryId(), orgId).orElse(null);
@@ -402,7 +389,7 @@ public class JobCardService {
             customer != null ? customer.getName() : null,
             customer != null ? customer.getPhone() : null,
             jc.getVehicleId(),
-            vehicle != null ? vehicle.getVehicleNo() : null,
+            vehicle != null ? vehicle.getVehicleNo() : jc.getVehicleNoText(),
             jc.getDbmId(),
             jc.getInvoiceNo(),
             jc.getInvoiceAmount(),
@@ -424,6 +411,107 @@ public class JobCardService {
             claimClose != null ? claimClose.getClosedAt() : null,
             paymentGuard.canRecordPayment(orgId, jc, pending, claimClosed),
             jc.getCreatedAt());
+    }
+
+    // --- attach customer / search (rev 56) ---
+
+    /**
+     * Attach the customer to a job card that was opened without one (from an Expense). Set once:
+     * a Cashier of the job card's branch, only while the customer is empty. A typed-only vehicle
+     * number becomes a real Vehicle under that customer. Correcting an attached customer is not
+     * built yet (it needs a defined vehicle re-assign rule) -- it is refused, not silently allowed.
+     */
+    @Transactional
+    public JobCardResponse attachCustomer(Long id, AttachCustomerRequest request) {
+        Long orgId = TenantContext.requireOrgId();
+        JobCard jc = loadVisible(id);
+        attachCustomerInternal(orgId, jc, request.getCustomerId(), request.getCustomerName(), request.getCustomerPhone());
+        return toResponse(jc);
+    }
+
+    /** Shared by the endpoint and the Receipt flow (a receipt that links a customerless job card). */
+    @Transactional
+    public void attachCustomerInternal(Long orgId, JobCard jc, Long customerId, String customerName, String customerPhone) {
+        AppUser me = userRepo.findByIdAndOrganization_Id(branchScope.currentUserId(), orgId)
+            .orElseThrow(() -> DamsException.forbidden("The signed-in user is not part of this organization"));
+        String ref = JobCardResponse.reference(
+            branchRepo.findByIdAndOrgId(jc.getBranchId(), orgId).map(Branch::getCode).orElse("?"), jc.getId());
+        if (jc.getCustomerId() != null) {
+            throw DamsException.conflict("Job card " + ref + " already has a customer - it cannot be changed here");
+        }
+        if (ActingDetails.effectiveRole(me) != Role.CASHIER
+            || !jc.getBranchId().equals(ActingDetails.effectiveHomeBranch(me))) {
+            throw DamsException.forbidden("Only a cashier of " + ref + "'s branch can attach its customer");
+        }
+        if (customerId == null && (customerName == null || customerName.isBlank())) {
+            throw DamsException.badRequest("Provide customerId or customerName");
+        }
+
+        PartyResolver.Party party = partyResolver.resolve(orgId, customerId, customerName, customerPhone,
+            null, null, jc.getBranchId());
+        Customer customer = party.customer();
+        jc.setCustomerId(customer.getId());
+        if (jc.getVehicleNoText() != null) {
+            Vehicle v = partyResolver.vehicleForCustomer(orgId, customer, jc.getVehicleNoText());
+            jc.setVehicleId(v.getId());
+            jc.setVehicleNoText(null);
+        }
+        jobCardRepo.save(jc);
+        auditService.recordUserEvent(ENTITY, jc.getId(), jc.getBranchId(), EventType.JOB_CARD_CUSTOMER_ATTACHED,
+            me.getId(), orderedDetail("customerId", customer.getId(), "vehicleId", jc.getVehicleId()));
+        log.info("JobCard customer attached: orgId={} jobCardId={} customerId={}", orgId, jc.getId(), customer.getId());
+    }
+
+    private static final Pattern REFERENCE = Pattern.compile("^[A-Za-z0-9]+-JC-(\\d+)$");
+    private static final int SEARCH_LIMIT = 20;
+
+    /**
+     * Branch-scoped job-card search for the pickers. Matches the customer's name/phone, the
+     * vehicle number (linked or typed-only), DBM id, invoice no, the internal id and the
+     * {@code {branchCode}-JC-{id}} reference. An empty {@code q} lists the newest job cards.
+     */
+    @Transactional(readOnly = true)
+    public List<JobCardSearchHit> search(String q, Long customerId, Long vehicleId) {
+        Long orgId = TenantContext.requireOrgId();
+        Optional<Set<Long>> allowed = branchScope.allowedBranchIds();
+        if (allowed.isPresent() && allowed.get().isEmpty()) {
+            return List.of();
+        }
+        String text = q == null ? "" : q.trim();
+        Long idQ = null;
+        Matcher m = REFERENCE.matcher(text);
+        if (m.matches()) {
+            idQ = Long.valueOf(m.group(1));
+        } else if (text.matches("\\d{1,18}")) {
+            idQ = Long.valueOf(text);
+        }
+        String vehicleFrag = Vehicle.normalise(text);
+        // A "#" never occurs in a normalised vehicle number, so this pattern matches nothing when q has no letters/digits.
+        String vLike = (vehicleFrag == null || vehicleFrag.isBlank()) ? "#" : "%" + vehicleFrag + "%";
+        List<JobCard> hits = jobCardRepo.searchForPicker(orgId, allowed.isEmpty(),
+            allowed.orElse(Set.of(-1L)), customerId, vehicleId, text.isEmpty(),
+            "%" + text.toLowerCase() + "%", vLike, idQ, Limit.of(SEARCH_LIMIT));
+
+        Map<Long, Customer> customers = customerRepo.findByOrgIdAndIdInOrderByNameAsc(orgId,
+            hits.stream().map(JobCard::getCustomerId).filter(Objects::nonNull).distinct().toList())
+            .stream().collect(Collectors.toMap(Customer::getId, c -> c));
+        Map<Long, Vehicle> vehicles = vehicleRepo.findByOrgIdAndIdIn(orgId,
+            hits.stream().map(JobCard::getVehicleId).filter(Objects::nonNull).distinct().toList())
+            .stream().collect(Collectors.toMap(Vehicle::getId, v -> v));
+        Map<Long, Branch> branches = new HashMap<>();
+        for (Branch b : branchRepo.findByOrgIdOrderByCodeAsc(orgId)) {
+            branches.put(b.getId(), b);
+        }
+        return hits.stream().map(j -> {
+            Customer c = j.getCustomerId() == null ? null : customers.get(j.getCustomerId());
+            Vehicle v = j.getVehicleId() == null ? null : vehicles.get(j.getVehicleId());
+            Branch b = branches.get(j.getBranchId());
+            String code = b != null ? b.getCode() : "?";
+            return new JobCardSearchHit(j.getId(), JobCardResponse.reference(code, j.getId()), j.getBranchId(), code,
+                j.getCustomerId(), c != null ? c.getName() : null,
+                j.getVehicleId(), v != null ? v.getVehicleNo() : j.getVehicleNoText(),
+                j.getDbmId(), j.getInvoiceNo(), j.getCategoryId(), j.getCreatedAt());
+        }).toList();
     }
 
     private static Map<String, Object> orderedDetail(String k1, Object v1, String k2, Object v2) {

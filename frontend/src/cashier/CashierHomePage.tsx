@@ -5,6 +5,7 @@ import { customersApi, type CustomerHistory, type CustomerExpenseEntry } from '.
 import { card, ErrorBanner, Skeleton, SkeletonRows, inr, initials, fmtDateShort } from '../shell/ui'
 import AddPaymentModal from './AddPaymentModal'
 import { useExitGhost } from '../shell/motion'
+import { ApprovalsBox, QueriesBox, useInbox } from './InboxBoxes'
 
 /**
  * Cashier home (intial ui prototypes/cashier-home.html): universal search, results, a
@@ -94,6 +95,7 @@ function HomeSearch(props: {
   onOpenCustomer: (id: number) => void
 }) {
   const navigate = useNavigate()
+  const { inbox, failed: inboxFailed } = useInbox()
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<SearchHit[] | null>(null)
   const [loading, setLoading] = useState(false)
@@ -127,7 +129,11 @@ function HomeSearch(props: {
   }, [q])
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto', padding: '32px 0 24px' }}>
+    // Wide screens: queries on the left, search in the middle, approvals on the right (rev 57).
+    // Narrow screens: the search comes first and the two boxes stack underneath it.
+    <div className="grid grid-cols-1 xl:grid-cols-[minmax(200px,1fr)_minmax(0,660px)_minmax(200px,1fr)] gap-6 items-start" style={{ padding: '32px 0 24px' }}>
+    <div className="order-2 xl:order-1"><QueriesBox inbox={inbox} failed={inboxFailed} /></div>
+    <div className="order-1 xl:order-2" style={{ maxWidth: 720, width: '100%', margin: '0 auto' }}>
       <div style={{ textAlign: 'center', marginBottom: 6 }}>
         <h1 style={{ fontSize: '1.5rem', color: 'var(--navy)', marginBottom: 6 }}>Find a customer</h1>
         <div style={{ fontSize: '0.9rem', color: 'var(--muted)' }}>
@@ -188,6 +194,8 @@ function HomeSearch(props: {
           <RecentStrip recent={props.recent} onOpenCustomer={props.onOpenCustomer} />
         </>
       )}
+    </div>
+    <div className="order-3"><ApprovalsBox inbox={inbox} failed={inboxFailed} /></div>
     </div>
   )
 }

@@ -1,5 +1,6 @@
 package com.dams.review.service;
 
+import com.dams.common.security.ActingDetails;
 import com.dams.common.exception.DamsException;
 import com.dams.common.security.BranchScope;
 import com.dams.config.TenantContext;
@@ -37,7 +38,7 @@ public class ReviewGuard {
     /** Assert the caller is an Accountant. Returns them. */
     public AppUser requireAccountant() {
         AppUser me = me();
-        if (me.getRole() != Role.ACCOUNTANT) {
+        if (ActingDetails.effectiveRole(me) != Role.ACCOUNTANT) {
             throw DamsException.forbidden("Only an accountant can review submitted entries");
         }
         return me;
@@ -46,7 +47,7 @@ public class ReviewGuard {
     /** Assert the caller is a Finance Manager. Returns them. */
     public AppUser requireFinanceManager() {
         AppUser me = me();
-        if (me.getRole() != Role.FINANCE_MANAGER) {
+        if (ActingDetails.effectiveRole(me) != Role.FINANCE_MANAGER) {
             throw DamsException.forbidden("Only a Finance Manager can approve or close claims");
         }
         return me;

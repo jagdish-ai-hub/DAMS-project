@@ -1,6 +1,7 @@
 package com.dams.config;
 
 import com.dams.auth.util.JwtUtil;
+import com.dams.common.security.ActingDetails;
 import com.dams.user.entity.Role;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -65,6 +66,9 @@ public class JwtConfig extends OncePerRequestFilter {
                     null,
                     List.of(new SimpleGrantedAuthority(role.name()))
                 );
+                // The authority above is the ACTING role; details carry the user's own role and
+                // the branch a switched session is scoped to (plan.md rev 55).
+                auth.setDetails(new ActingDetails(jwtUtil.getPrimaryRole(claims), jwtUtil.getActingBranchId(claims)));
                 SecurityContextHolder.getContext().setAuthentication(auth);
 
             } catch (JwtException | IllegalArgumentException ignored) {

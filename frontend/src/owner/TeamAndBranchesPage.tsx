@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { branchesApi, type Branch, type BranchRequest } from '../api/branches'
-import { usersApi, type TeamUser, type UserRequest } from '../api/users'
+import { usersApi, type RoleGrant, type TeamUser, type UserRequest } from '../api/users'
 import type { Role } from '../auth/AuthContext'
 import {
   Badge, ErrorBanner, Field, Modal, TextInput,
@@ -13,6 +13,9 @@ const ROLE_OPTS: { value: Role; label: string; branchMode: 'none' | 'single' | '
   { value: 'ACCOUNTANT', label: 'Accountant', branchMode: 'multi' },
   { value: 'CASHIER', label: 'Cashier', branchMode: 'single' },
 ]
+
+/** Roles that can be granted as an extra "switch into" role — never Owner. */
+const SWITCH_ROLES = ROLE_OPTS.filter((r) => r.value !== 'OWNER')
 
 function apiError(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback
@@ -107,7 +110,14 @@ export default function TeamAndBranchesPage() {
                     <div style={{ fontWeight: 600 }}>{u.name}</div>
                     <div style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>{u.email}</div>
                   </td>
-                  <td style={td}>{ROLE_OPTS.find((r) => r.value === u.role)?.label ?? u.role}</td>
+                  <td style={td}>
+                    {ROLE_OPTS.find((r) => r.value === u.role)?.label ?? u.role}
+                    {u.extraRolesLabel && (
+                      <div style={{ fontSize: '0.74rem', color: 'var(--muted)', marginTop: 2 }}>
+                        + can switch to {u.extraRolesLabel}
+                      </div>
+                    )}
+                  </td>
                   <td style={td}>{u.branchAccessLabel}</td>
                   <td style={td}>
                     {!u.active ? <Badge>Inactive</Badge>
@@ -214,6 +224,12 @@ function UserModal(props: { editing: TeamUser | null; branches: Branch[]; onClos
   )
   const [branchIds, setBranchIds] = useState<number[]>(props.editing?.branchIds ?? [])
   const [active, setActive] = useState(props.editing?.active ?? true)
+  // Extra roles the user may switch into (plan.md rev 55). A key present = that role is ticked;
+  // its value is the branches it's granted at (unused for the org-wide Finance Manager).
+  const [grants, setGrants] = useState<Partial<Record<Role, number[]>>>(
+    () => Object.fromEntries((props.editing?.roleGrants ?? []).map((g) => [g.role, g.branchIds])),
+  )
+  const [allowSwitch, setAllowSwitch] = useState((props.editing?.roleGrants?.length ?? 0) > 0)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [inviteLink, setInviteLink] = useState('')
@@ -223,12 +239,26 @@ function UserModal(props: { editing: TeamUser | null; branches: Branch[]; onClos
   async function submit(e: FormEvent) {
     e.preventDefault()
     setError('')
+    // An Owner already switches freely; anyone else sends exactly the ticked extra roles
+    // (an empty list clears them — the server replaces the whole set on every save).
+    const roleGrants: RoleGrant[] = role === 'OWNER' || !allowSwitch
+      ? []
+      : SWITCH_ROLES.filter((r) => r.value !== role && r.value in grants).map((r) => ({
+          role: r.value,
+          branchIds: r.value === 'FINANCE_MANAGER' ? [] : grants[r.value] ?? [],
+        }))
+    const missing = roleGrants.find((g) => g.role !== 'FINANCE_MANAGER' && g.branchIds.length === 0)
+    if (missing) {
+      setError(`Pick at least one branch for the extra ${ROLE_OPTS.find((r) => r.value === missing.role)?.label} role.`)
+      return
+    }
     setSaving(true)
     try {
       const body: UserRequest = {
         name,
         email,
         role,
+        roleGrants,
         ...(branchMode === 'single' ? { homeBranchId } : {}),
         ...(branchMode === 'multi' ? { branchIds } : {}),
         ...(props.editing ? { active } : {}),
@@ -315,6 +345,67 @@ function UserModal(props: { editing: TeamUser | null; branches: Branch[]; onClos
                   {b.name} ({b.code})
                 </label>
               ))}
+            </div>
+          </Field>
+        )}
+
+        {/* Extra roles — the Switch role button (plan.md rev 55) */}
+        {role === 'OWNER' ? (
+          <div style={{ fontSize: '0.8rem', color: 'var(--muted)', background: 'var(--navy3)', borderRadius: 8, padding: '9px 11px' }}>
+            Owners can always switch into any role at any branch — nothing to set up.
+          </div>
+        ) : (
+          <Field label="Extra roles" hint="Lets this person switch into another role using the Switch role button. Entries are still saved under their own name.">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', fontWeight: 600 }}>
+                <input type="checkbox" checked={allowSwitch} onChange={(e) => setAllowSwitch(e.target.checked)} />
+                Allow role switching
+              </label>
+              {allowSwitch && SWITCH_ROLES.filter((r) => r.value !== role).map((r) => {
+                const ticked = r.value in grants
+                return (
+                  <div key={r.value} style={{ border: '1px solid var(--line)', borderRadius: 8, padding: '9px 11px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', fontWeight: 600 }}>
+                      <input
+                        type="checkbox"
+                        checked={ticked}
+                        onChange={(e) =>
+                          setGrants((prev) => {
+                            const next = { ...prev }
+                            if (e.target.checked) next[r.value] = []
+                            else delete next[r.value]
+                            return next
+                          })}
+                      />
+                      {r.label}
+                    </label>
+                    {ticked && r.value === 'FINANCE_MANAGER' && (
+                      <div style={{ fontSize: '0.76rem', color: 'var(--muted)', marginTop: 6 }}>
+                        Works across all branches — no selection needed.
+                      </div>
+                    )}
+                    {ticked && r.value !== 'FINANCE_MANAGER' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 8, paddingLeft: 4 }}>
+                        <div style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>At which branches?</div>
+                        {activeBranches.map((b) => (
+                          <label key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.83rem' }}>
+                            <input
+                              type="checkbox"
+                              checked={(grants[r.value] ?? []).includes(b.id)}
+                              onChange={(e) =>
+                                setGrants((prev) => {
+                                  const cur = prev[r.value] ?? []
+                                  return { ...prev, [r.value]: e.target.checked ? [...cur, b.id] : cur.filter((x) => x !== b.id) }
+                                })}
+                            />
+                            {b.name} ({b.code})
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </Field>
         )}

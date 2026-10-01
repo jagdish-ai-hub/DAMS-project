@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { mastersApi, type MasterRow } from '../api/masters'
 import { customersApi } from '../api/customers'
-import { jobCardsApi } from '../api/jobCards'
+import { jobCardsApi, type JobCardSearchHit } from '../api/jobCards'
 import { receiptsApi, type CreateReceiptRequest, type DocumentHistoryEntry, type ReceiveDocument } from '../api/receipts'
 import { card, ErrorBanner, inr, primaryBtn, ghostBtn, inputStyle, Spinner, istToday } from '../shell/ui'
 import { BusinessStatusSelect } from '../shared/BusinessStatusSelect'
+import { CustomerCombobox, JobCardSearch, VehicleCombobox } from '../shared/PartyPickers'
 import AttachmentsPanel, { type LineTarget } from './AttachmentsPanel'
 import { Printer, QrCode } from 'lucide-react'
 import PrintReceiptModal from './PrintReceiptModal'
@@ -62,6 +63,10 @@ export default function NewReceiptPage() {
   const [customerId, setCustomerId] = useState<number | null>(prefillCustomerId)
   const [customerName, setCustomerName] = useState('')
   const [vehicleNo, setVehicleNo] = useState('')
+  const [vehicleId, setVehicleId] = useState<number | null>(null)
+  const [vehicleTouched, setVehicleTouched] = useState(false)
+  // An existing job card this receipt is recorded against (rev 56) — e.g. one opened from an Expense.
+  const [jcPick, setJcPick] = useState<JobCardSearchHit | null>(null)
   const [dbmId, setDbmId] = useState('')
   const [invoiceNo, setInvoiceNo] = useState('')
   const [invoiceAmount, setInvoiceAmount] = useState('')
@@ -184,6 +189,36 @@ export default function NewReceiptPage() {
 
   const modeById = (id: number | '') => modes.find((m) => m.id === id)
 
+  /** With an existing job card linked, its own category / status / invoice / claim fields are the truth. */
+  const jcLinked = jcPick != null
+
+  async function pickJobCard(hit: JobCardSearchHit | null) {
+    setJcPick(hit)
+    if (!hit) return
+    setError('')
+    try {
+      const { data: j } = await jobCardsApi.get(hit.id)
+      setCustomerId(j.customerId)
+      setCustomerName(j.customerName ?? '')
+      setVehicleId(j.vehicleId)
+      setVehicleNo(j.vehicleNo ?? '')
+      setDbmId(j.dbmId ?? '')
+      setInvoiceNo(j.invoiceNo ?? '')
+      setInvoiceAmount(j.invoiceAmount != null ? String(j.invoiceAmount) : '')
+      setCategoryId(j.categoryId)
+      setClaimTypeId(j.claimTypeId ?? '')
+      setBusinessStatusId(j.businessStatusId)
+      setB2b(j.b2b)
+      setGstNo(j.gstNo ?? '')
+      if (j.customerId == null) {
+        setNotice(`${j.reference} has no customer yet — pick or type the customer below to link it.`)
+      }
+    } catch (e) {
+      setJcPick(null)
+      setError(apiError(e, 'Could not load that job card.'))
+    }
+  }
+
   function setLine(i: number, patch: Partial<LineRow>) {
     setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)))
   }
@@ -238,9 +273,13 @@ export default function NewReceiptPage() {
 
   function buildBody(submit: boolean): CreateReceiptRequest {
     return {
+      // Linking an existing job card: the customer is only sent when that card has none yet
+      // (the server then attaches it, once).
+      jobCardId: jcPick?.id,
       customerId: customerId ?? undefined,
       customerName: customerId ? undefined : customerName.trim(),
-      vehicleNo: vehicleNo.trim() || undefined,
+      vehicleId: vehicleId ?? undefined,
+      vehicleNo: vehicleId == null ? vehicleNo.trim() || undefined : undefined,
       dbmId: dbmId.trim() || undefined,
       invoiceNo: invoiceNo.trim() || undefined,
       invoiceAmount: invoiceAmount ? Number(invoiceAmount) : undefined,
@@ -557,37 +596,57 @@ export default function NewReceiptPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-y-0 gap-x-8">
             {/* left column */}
             <div>
+              {!inEditMode && (
+                <Row label="Link Job Card">
+                  <div>
+                    <JobCardSearch selected={jcPick} customerId={customerId} onPick={pickJobCard} />
+                    {!jcPick && (
+                      <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: 4 }}>
+                        Optional — search an existing job card (e.g. one opened from an expense), or leave empty to open a new one.
+                      </div>
+                    )}
+                  </div>
+                </Row>
+              )}
               <Row label="Customer Name" req>
-                {customerId && inEditMode ? (
-                  <input readOnly value={customerName} style={{ ...inputStyle, background: 'var(--bg)' }} />
-                ) : (
-                  <input
-                    value={customerName}
-                    onChange={(e) => { setCustomerName(e.target.value); setCustomerId(null) }}
-                    placeholder="Type a customer name"
-                    style={inputStyle}
-                  />
-                )}
+                <CustomerCombobox
+                  name={customerName}
+                  customerId={customerId}
+                  locked={(customerId != null && inEditMode) || jcPick?.customerId != null}
+                  onChange={(name, id) => {
+                    setCustomerName(name)
+                    if (id !== customerId) { setVehicleId(null); if (id != null) setVehicleNo('') }
+                    setCustomerId(id)
+                  }}
+                />
               </Row>
               <Row label="Vehicle #">
-                <input value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value)} placeholder="OD05CA4177" style={inputStyle} />
+                <VehicleCombobox
+                  vehicleNo={vehicleNo}
+                  vehicleId={vehicleId}
+                  customerId={customerId}
+                  locked={jcPick?.vehicleId != null}
+                  suppressHint={inEditMode && !vehicleTouched}
+                  onChange={(no, id) => { setVehicleNo(no); setVehicleId(id); setVehicleTouched(true) }}
+                  onOwnerFound={(v) => { setCustomerId(v.customerId); setCustomerName(v.customerName ?? '') }}
+                />
               </Row>
               <Row label="Job Card / DBM">
-                <input value={dbmId} onChange={(e) => setDbmId(e.target.value)} placeholder="4009941587" style={inputStyle} />
+                <input value={dbmId} disabled={jcLinked} onChange={(e) => setDbmId(e.target.value)} placeholder="4009941587" style={inputStyle} />
               </Row>
               <Row label="Invoice #">
-                <input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="7731122600388" style={inputStyle} />
+                <input value={invoiceNo} disabled={jcLinked} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="7731122600388" style={inputStyle} />
               </Row>
               <Row label="Transaction Type">
-                <select value={categoryId} onChange={(e) => setCategoryId(Number(e.target.value))} style={inputStyle}>
+                <select value={categoryId} disabled={jcLinked} onChange={(e) => setCategoryId(Number(e.target.value))} style={inputStyle}>
                   {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </Row>
               <Row label="Invoice Amount">
-                <input type="number" value={invoiceAmount} onChange={(e) => setInvoiceAmount(e.target.value)} placeholder="Total amount" style={inputStyle} />
+                <input type="number" value={invoiceAmount} disabled={jcLinked} onChange={(e) => setInvoiceAmount(e.target.value)} placeholder="Total amount" style={inputStyle} />
               </Row>
               <Row label="Claim Type">
-                <select value={claimTypeId} onChange={(e) => setClaimTypeId(e.target.value === '' ? '' : Number(e.target.value))} style={inputStyle}>
+                <select value={claimTypeId} disabled={jcLinked} onChange={(e) => setClaimTypeId(e.target.value === '' ? '' : Number(e.target.value))} style={inputStyle}>
                   <option value="">— Not a claim —</option>
                   {claimTypes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
@@ -606,6 +665,7 @@ export default function NewReceiptPage() {
                   statuses={statuses}
                   value={businessStatusId}
                   onChange={setBusinessStatusId}
+                  disabled={jcLinked}
                 />
               </Row>
               <Row label="Customer Type">
@@ -616,6 +676,7 @@ export default function NewReceiptPage() {
                       <button
                         key={t}
                         type="button"
+                        disabled={jcLinked}
                         onClick={() => setB2b(t === 'B2B')}
                         style={{
                           border: 'none', padding: '6px 16px', fontSize: '0.8rem', fontWeight: 600,
@@ -630,7 +691,7 @@ export default function NewReceiptPage() {
               </Row>
               {b2b && (
                 <Row label="GST#" req>
-                  <input value={gstNo} onChange={(e) => setGstNo(e.target.value)} placeholder="21ABCDE1234F1Z5" style={inputStyle} />
+                  <input value={gstNo} disabled={jcLinked} onChange={(e) => setGstNo(e.target.value)} placeholder="21ABCDE1234F1Z5" style={inputStyle} />
                 </Row>
               )}
               <Row label="DAMS-Receive-ID">

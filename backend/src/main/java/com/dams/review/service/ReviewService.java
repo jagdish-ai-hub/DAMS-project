@@ -1009,7 +1009,7 @@ public class ReviewService {
         List<ReviewQueueItem> out = new ArrayList<>(docs.size());
         for (ReceiveDocument d : docs) {
             JobCard jc = jobCards.get(d.getJobCardId());
-            String party = jc == null ? "—" : customerNames.getOrDefault(jc.getCustomerId(), "—");
+            String party = jc == null ? "—" : (jc.getCustomerId() == null ? "—" : customerNames.getOrDefault(jc.getCustomerId(), "—"));
             String category = jc == null ? "—" : categoryNames.getOrDefault(jc.getCategoryId(), "—");
             List<SettlementLine> lines = linesByDoc.getOrDefault(d.getId(), List.of());
             BigDecimal lineSum = lines.stream().map(SettlementLine::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -1076,7 +1076,7 @@ public class ReviewService {
                 continue;
             }
             ReceiveDocument doc = latestDocByJc.get(jc.getId());
-            String party = customerNames.getOrDefault(jc.getCustomerId(), "—");
+            String party = (jc.getCustomerId() == null ? "—" : customerNames.getOrDefault(jc.getCustomerId(), "—"));
             String category = categoryNames.getOrDefault(jc.getCategoryId(), "—");
             String code = branchCodes.getOrDefault(jc.getBranchId(), "?");
             String ref = doc != null && doc.getDocumentNo() != null ? doc.getDocumentNo() : code + "-JC-" + jc.getId();

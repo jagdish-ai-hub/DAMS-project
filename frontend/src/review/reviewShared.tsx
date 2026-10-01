@@ -5,6 +5,7 @@ import type { CashDocument } from '../api/cash'
 import type { MasterRow } from '../api/masters'
 import { BusinessStatusSelect } from '../shared/BusinessStatusSelect'
 import { card, Badge, ghostBtn, primaryBtn, inputStyle, inr, fmtDate, fmtDateTime } from '../shell/ui'
+import { actorLabel } from '../auth/roleLabels'
 
 /** Shared pieces for the Accountant review queue and the Finance Manager queue. */
 
@@ -265,7 +266,7 @@ export function RecordCard(props: {
         <div style={{ borderLeft: '2px solid var(--line)', marginLeft: 4, paddingLeft: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
           {doc.history.map((h, i) => (
             <div key={i} style={{ fontSize: '0.8rem' }}>
-              <strong>{h.actor}</strong> — {h.action}{h.note ? `: ${h.note}` : ''}
+              <strong>{actorLabel(h.actor, h.actorRole)}</strong> — {h.action}{h.note ? `: ${h.note}` : ''}
               <div style={{ fontSize: '0.68rem', color: 'var(--faint)' }}>{fmtDateTime(h.at)}</div>
             </div>
           ))}
@@ -314,7 +315,7 @@ export function CashRecordCard({ doc }: { doc: CashDocument }) {
         <div style={{ borderLeft: '2px solid var(--line)', marginLeft: 4, paddingLeft: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
           {doc.history.map((h, i) => (
             <div key={i} style={{ fontSize: '0.8rem' }}>
-              <strong>{h.actor}</strong> — {h.action}{h.note ? `: ${h.note}` : ''}
+              <strong>{actorLabel(h.actor, h.actorRole)}</strong> — {h.action}{h.note ? `: ${h.note}` : ''}
               <div style={{ fontSize: '0.68rem', color: 'var(--faint)' }}>{fmtDateTime(h.at)}</div>
             </div>
           ))}

@@ -34,7 +34,7 @@ bugs in this project were declared fixed two or three times while still fully
 broken in the user's browser (see plan.md revs 39, 40, 41). Before using the
 word "fixed", verify where the user actually looks:
 
-- **Frontend/CSS** — grep the built bundle, not the source:
+- **Frontend/CSS** — For REquests which requires fronend changes -grep the built bundle, not the source:
   `npm run build && grep -o 'Toggle navigation.\{0,200\}' dist/assets/*.js`,
   and check the emitted CSS rule/media query. An inline `style` prop beats
   every stylesheet class, so a correct-looking `className` can be a dead

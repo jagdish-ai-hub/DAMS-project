@@ -115,15 +115,39 @@ public class CustomerService {
     @Transactional(readOnly = true)
     public List<CustomerResponse> search(String q) {
         Long orgId = TenantContext.requireOrgId();
-        List<Customer> customers = (q == null || q.isBlank())
-            ? customerRepo.findByOrgIdOrderByNameAsc(orgId).stream().limit(PICKER_LIMIT).toList()
-            : customerRepo.search(orgId, q.trim(), Limit.of(PICKER_LIMIT));
+        boolean blank = q == null || q.isBlank();
+        // Branch-scoped like universal search (rev 56): owner/FM see everyone; a cashier (home
+        // branch, or org-wide with the toggle) and an accountant see customers of their branches.
+        Optional<Set<Long>> allowed = branchScope.allowedBranchIds();
+        if (allowed.isPresent() && allowed.get().isEmpty()) {
+            return List.of();
+        }
+        List<Customer> customers;
+        if (allowed.isPresent()) {
+            customers = customerRepo.searchInBranches(orgId, blank ? "" : q.trim(), blank, allowed.get(),
+                Limit.of(PICKER_LIMIT));
+        } else {
+            customers = blank
+                ? customerRepo.findByOrgIdOrderByNameAsc(orgId).stream().limit(PICKER_LIMIT).toList()
+                : customerRepo.search(orgId, q.trim(), Limit.of(PICKER_LIMIT));
+        }
 
         Map<Long, List<CustomerResponse.VehicleRef>> vehiclesByCustomer = vehiclesFor(orgId,
             customers.stream().map(Customer::getId).toList());
 
         return customers.stream()
             .map(c -> CustomerResponse.of(c, vehiclesByCustomer.getOrDefault(c.getId(), List.of())))
+            .toList();
+    }
+
+    /** One customer's vehicles, filtered as the user types (rev 56) -- drives the vehicle dropdown. */
+    @Transactional(readOnly = true)
+    public List<CustomerResponse.VehicleRef> vehicles(Long customerId, String q) {
+        Customer c = load(customerId);
+        String frag = Vehicle.normalise(q);
+        return vehicleRepo.findByOrgIdAndCustomerIdOrderByVehicleNoAsc(c.getOrgId(), c.getId()).stream()
+            .filter(v -> frag == null || frag.isBlank() || v.getVehicleNo().contains(frag))
+            .map(v -> new CustomerResponse.VehicleRef(v.getId(), v.getVehicleNo()))
             .toList();
     }
 
@@ -141,6 +165,7 @@ public class CustomerService {
         c.setOrgId(orgId);
         c.setName(request.getName().trim());
         c.setPhone(blankToNull(request.getPhone()));
+        c.setCreatedBranchId(branchScope.creatingBranchIdOrNull());
         c = customerRepo.save(c);
         log.info("Customer created: orgId={} customerId={}", orgId, c.getId());
         return CustomerResponse.of(c, List.of());

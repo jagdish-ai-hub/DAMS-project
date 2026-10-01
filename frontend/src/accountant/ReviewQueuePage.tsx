@@ -1054,6 +1054,10 @@ function RecordDetail(props: {
     }
   }
 
+  // While the Query / Reject box is open every forward action is disabled, so a mis-click
+  // cannot verify / close the document instead of sending it back (user report).
+  const queryOpen = box != null
+
   function submitBox() {
     const text = boxText.trim()
     if (!text) { setError('Type the question for the cashier'); return }
@@ -1126,7 +1130,8 @@ function RecordDetail(props: {
           )}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
             {canAddPayment && (
-              <button type="button" onClick={() => setAddPayment(true)} disabled={busy}
+              <button type="button" onClick={() => setAddPayment(true)} disabled={busy || queryOpen}
+                title={queryOpen ? 'Send or cancel the Query first' : undefined}
                 style={{ ...ghostBtn, minHeight: 36 }}>Add Payment</button>
             )}
             {canReview && (
@@ -1134,18 +1139,20 @@ function RecordDetail(props: {
                 <button type="button" onClick={() => { setBox(box === 'query' ? null : 'query'); setBoxText(''); setError('') }}
                   style={{ ...ghostBtn, color: 'var(--amber)', minHeight: 36 }}>Query</button>
                 <button type="button" onClick={() => run(() => reviewApi.verify(type, doc.id), `${docNo} verified — moved to Finance Manager`)}
-                  disabled={busy} style={{ ...primaryBtn(busy), minHeight: 36 }}>Verify</button>
+                  disabled={busy || queryOpen} title={queryOpen ? 'Send or cancel the Query first' : undefined}
+                  style={{ ...primaryBtn(busy || queryOpen), minHeight: 36 }}>Verify</button>
               </>
             )}
             {canResendToFm && (
               <button type="button" onClick={() => run(() => reviewApi.resubmitToFm(type, doc.id), `${docNo} resent to the Finance Manager`)}
-                disabled={busy} style={{ ...primaryBtn(busy), minHeight: 36 }}>Resend to Finance</button>
+                disabled={busy || queryOpen} title={queryOpen ? 'Send or cancel the Query first' : undefined}
+                style={{ ...primaryBtn(busy || queryOpen), minHeight: 36 }}>Resend to Finance</button>
             )}
             {canClose && (
               <button type="button" onClick={() => run(() => reviewApi.closeExpense(doc.id), `${docNo} closed`)}
-                disabled={busy || closeBlocked}
-                style={{ ...primaryBtn(busy || closeBlocked), minHeight: 36 }}
-                title={closeBlocked ? (overLimit ? 'Over-limit expense' : 'This status') + ' — needs Finance Manager approval first' : undefined}>
+                disabled={busy || closeBlocked || queryOpen}
+                style={{ ...primaryBtn(busy || closeBlocked || queryOpen), minHeight: 36 }}
+                title={queryOpen ? 'Send or cancel the Query first' : closeBlocked ? (overLimit ? 'Over-limit expense' : 'This status') + ' — needs Finance Manager approval first' : undefined}>
                 Close expense
               </button>
             )}

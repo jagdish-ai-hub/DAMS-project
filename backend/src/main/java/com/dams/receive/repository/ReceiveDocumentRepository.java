@@ -29,6 +29,9 @@ public interface ReceiveDocumentRepository extends JpaRepository<ReceiveDocument
     /** My Entries — the caller's own documents, newest first. */
     List<ReceiveDocument> findByOrgIdAndCreatedByOrderByCreatedAtDesc(Long orgId, Long createdBy, Limit limit);
 
+    /** Cashier inbox (rev 57) — the caller's documents currently in one of these states. */
+    List<ReceiveDocument> findByOrgIdAndCreatedByAndWorkflowStatusIn(Long orgId, Long createdBy, Collection<WorkflowStatus> statuses);
+
     /** Accountant review queue — documents in one workflow state within the caller's branches, oldest first. */
     List<ReceiveDocument> findByOrgIdAndWorkflowStatusAndBranchIdInOrderBySubmittedAtAscIdAsc(
         Long orgId, WorkflowStatus workflowStatus, Collection<Long> branchIds);

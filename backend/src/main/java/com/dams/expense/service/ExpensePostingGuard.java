@@ -1,5 +1,6 @@
 package com.dams.expense.service;
 
+import com.dams.common.security.ActingDetails;
 import com.dams.branch.entity.Branch;
 import com.dams.branch.repository.BranchRepository;
 import com.dams.common.exception.DamsException;
@@ -42,17 +43,17 @@ public class ExpensePostingGuard {
         AppUser me = userRepo.findByIdAndOrganization_Id(branchScope.currentUserId(), orgId)
             .orElseThrow(() -> DamsException.forbidden("The signed-in user is not part of this organization"));
 
-        if (me.getRole() != Role.CASHIER) {
+        if (ActingDetails.effectiveRole(me) != Role.CASHIER) {
             throw DamsException.forbidden("Only a cashier can create or change expense documents");
         }
-        if (me.getHomeBranchId() == null) {
+        if (ActingDetails.effectiveHomeBranch(me) == null) {
             throw DamsException.badRequest("Your account has no home branch — ask an Owner to set one");
         }
-        if (jobCard != null && !jobCard.getBranchId().equals(me.getHomeBranchId())) {
+        if (jobCard != null && !jobCard.getBranchId().equals(ActingDetails.effectiveHomeBranch(me))) {
             throw DamsException.conflict(
                 "Job card " + reference(orgId, jobCard) + " belongs to " + branchCode(orgId, jobCard.getBranchId())
                     + ". You can only record expenses for job cards in your home branch ("
-                    + branchCode(orgId, me.getHomeBranchId())
+                    + branchCode(orgId, ActingDetails.effectiveHomeBranch(me))
                     + "). Cross-branch expense routing is not defined yet.");
         }
         return me;

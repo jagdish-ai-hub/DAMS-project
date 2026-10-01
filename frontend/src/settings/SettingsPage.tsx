@@ -4,19 +4,11 @@ import { orgSettingsApi, type OrgSettings } from '../api/orgSettings'
 import { appearanceApi } from '../api/appearance'
 import { FONTS, applyFont, cacheFont, fontDef, type FontKey } from '../lib/fonts'
 import { useAuth } from '../auth/useAuth'
-import type { Role } from '../auth/AuthContext'
+import { ROLE_LABEL } from '../auth/roleLabels'
 import { Badge, card, ErrorBanner, Field, ghostBtn, primaryBtn, Spinner, TextInput, initials } from '../shell/ui'
 
 function apiError(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback
-}
-
-const ROLE_LABEL: Record<Role, string> = {
-  SUPER_ADMIN: 'Super Admin',
-  OWNER: 'Owner',
-  FINANCE_MANAGER: 'Finance Manager',
-  ACCOUNTANT: 'Accountant',
-  CASHIER: 'Cashier',
 }
 
 export default function SettingsPage() {

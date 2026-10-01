@@ -42,8 +42,13 @@ public class JobCard {
     @Column(name = "branch_id", nullable = false)
     private Long branchId;
 
-    @Column(name = "customer_id", nullable = false)
+    /** Nullable (rev 56) — a job card started from an Expense has no customer until a Receipt attaches one. */
+    @Column(name = "customer_id")
     private Long customerId;
+
+    /** Typed vehicle number kept as text while there is no customer to own a Vehicle row (rev 56). */
+    @Column(name = "vehicle_no_text", length = 20)
+    private String vehicleNoText;
 
     /** Nullable — counter sales have no vehicle. */
     @Column(name = "vehicle_id")

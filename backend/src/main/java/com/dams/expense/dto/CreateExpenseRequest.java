@@ -28,6 +28,32 @@ public class CreateExpenseRequest {
 
     private Long jobCardId;
 
+    /**
+     * Real links (rev 56). Pick an existing record by id, or type a new one: {@code newCustomerName}
+     * / {@code newVehicleNo} create it on save (vehicle deduped on the normalised number, a number
+     * owned by another customer is rejected). If {@code jobCardId} is also given the job card's own
+     * customer / vehicle win and a conflicting pick is rejected.
+     */
+    private Long customerId;
+    @Size(max = 160) private String newCustomerName;
+    private Long vehicleId;
+    @Size(max = 20) private String newVehicleNo;
+
+    /** Open a new job card with this expense (rev 56); the customer is optional. Ignored when jobCardId is set. */
+    @Valid
+    private NewJobCard newJobCard;
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    public static class NewJobCard {
+        @NotNull(message = "newJobCard.categoryId is required")
+        private Long categoryId;
+        @NotNull(message = "newJobCard.businessStatusId is required")
+        private Long businessStatusId;
+        private Long claimTypeId;
+    }
+
     // --- manual reference fields, optional, never used as keys (see ExpenseDocument) ---
     @Size(max = 160) private String customerName;
     @Size(max = 20) private String vehicleNo;

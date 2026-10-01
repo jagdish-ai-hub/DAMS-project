@@ -46,6 +46,14 @@ public class CustomerController {
         return customerService.get(id);
     }
 
+    @GetMapping("/{id}/vehicles")
+    @Operation(summary = "A customer's vehicles, filtered by ?q= (vehicle-number fragment)")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER')")
+    public List<CustomerResponse.VehicleRef> vehicles(@PathVariable Long id,
+                                                      @RequestParam(name = "q", required = false) String q) {
+        return customerService.vehicles(id, q);
+    }
+
     @GetMapping("/{id}/history")
     @Operation(summary = "Customer history card — totals, job cards, payment timeline")
     @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER')")

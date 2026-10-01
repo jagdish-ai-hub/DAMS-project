@@ -273,7 +273,7 @@ public class DashboardService {
             String branchCode = branchCodes.getOrDefault(d.getBranchId(), "?");
             out.add(new MoneyMovementItem("receipt", d.getId(), d.getDocumentNo(), d.getWorkflowStatus().name(),
                 l.getTransactionDate(), l.getCreatedAt(), branchCode,
-                customerNames.getOrDefault(jc.getCustomerId(), "—"),
+                jc.getCustomerId() == null ? "—" : customerNames.getOrDefault(jc.getCustomerId(), "—"),
                 branchCode + "-JC-" + jc.getId(),
                 modeNames.getOrDefault(l.getSettlementModeId(), "—"),
                 l.getAmount()));
@@ -381,7 +381,7 @@ public class DashboardService {
             if (pending.signum() <= 0) {
                 continue;
             }
-            Customer c = customersById.get(jc.getCustomerId());
+            Customer c = jc.getCustomerId() == null ? null : customersById.get(jc.getCustomerId());
             Vehicle v = jc.getVehicleId() == null ? null : vehiclesById.get(jc.getVehicleId());
             String code = branchCodes.getOrDefault(jc.getBranchId(), "?");
             out.add(new OutstandingItem(
@@ -409,7 +409,7 @@ public class DashboardService {
             BigDecimal invoice = jc.getInvoiceAmount() != null ? jc.getInvoiceAmount() : BigDecimal.ZERO;
             BigDecimal received = receivedByJc.getOrDefault(jc.getId(), BigDecimal.ZERO);
             BigDecimal owed = invoice.subtract(received).max(BigDecimal.ZERO);
-            Customer c = customersById.get(jc.getCustomerId());
+            Customer c = jc.getCustomerId() == null ? null : customersById.get(jc.getCustomerId());
             String code = branchCodes.getOrDefault(d.getBranchId(), "?");
             out.add(new OutstandingItem("claim",
                 c != null ? c.getName() : "Warranty / AMC claim",

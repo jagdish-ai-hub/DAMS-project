@@ -206,6 +206,17 @@ public class ReceiveDocumentService {
                 .orElseThrow(() -> DamsException.notFound("Job card", request.getJobCardId()))
             : createJobCardInline(orgId, request);
 
+        // A job card opened from an Expense has no customer yet: this receipt attaches it (rev 56).
+        if (request.hasJobCardId() && jobCard.getCustomerId() == null) {
+            String typedVehicle = com.dams.vehicle.entity.Vehicle.normalise(request.getVehicleNo());
+            if (jobCard.getVehicleId() == null && jobCard.getVehicleNoText() == null
+                && typedVehicle != null && !typedVehicle.isBlank()) {
+                jobCard.setVehicleNoText(typedVehicle); // becomes a real Vehicle when the customer is attached
+            }
+            jobCardService.attachCustomerInternal(orgId, jobCard, request.getCustomerId(),
+                request.getCustomerName(), request.getCustomerPhone());
+        }
+
         AppUser me = paymentGuard.requireCanPost(orgId, jobCard);
 
         if (claimCloseRepo.existsByOrgIdAndJobCardId(orgId, jobCard.getId())) {
@@ -415,6 +426,10 @@ public class ReceiveDocumentService {
         if (r.getCategoryId() == null || r.getBusinessStatusId() == null) {
             throw DamsException.badRequest(
                 "categoryId and businessStatusId are required when creating a job card inline");
+        }
+        if (r.getCustomerId() == null && (r.getCustomerName() == null || r.getCustomerName().isBlank())) {
+            // A receipt always has a customer; only an Expense may open a job card without one.
+            throw DamsException.badRequest("Customer name is required");
         }
         JobCardCreateRequest jc = new JobCardCreateRequest();
         jc.setCustomerId(r.getCustomerId());

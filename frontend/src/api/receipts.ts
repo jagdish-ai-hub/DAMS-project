@@ -15,6 +15,8 @@ export interface DocumentHistoryEntry {
   action: string
   note: string | null
   at: string
+  /** Role the actor was switched into when they did this, or null when in their own role. */
+  actorRole?: string | null
 }
 
 export interface SettlementLine {

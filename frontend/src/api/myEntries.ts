@@ -24,7 +24,34 @@ export interface MyEntry {
   preApprovalCovers: boolean
 }
 
+/** One message in a Cashier home box (rev 57). */
+export interface InboxItem {
+  id: number
+  kind: MyEntryKind
+  documentNo: string | null
+  title: string
+  total: number
+  /** QUERIED | REJECTED | PRE_PENDING | PRE_APPROVED | PRE_QUERIED */
+  state: 'QUERIED' | 'REJECTED' | 'PRE_PENDING' | 'PRE_APPROVED' | 'PRE_QUERIED'
+  /** Still waiting on the cashier — counted in the badge. */
+  needsAction: boolean
+  fromName: string | null
+  fromRole: string | null
+  note: string | null
+  at: string | null
+}
+
+export interface CashierInbox {
+  queries: InboxItem[]
+  approvals: InboxItem[]
+  queriesToAct: number
+  approvalsToAct: number
+}
+
 export const myEntriesApi = {
+  inbox() {
+    return api.get<CashierInbox>('/api/v1/my-entries/inbox')
+  },
   list() {
     return api.get<MyEntry[]>('/api/v1/my-entries')
   },

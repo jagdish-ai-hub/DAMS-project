@@ -82,7 +82,8 @@ class JobCardServiceTest {
     void setUp() {
         service = new JobCardService(jobCardRepo, customerRepo, vehicleRepo, branchRepo,
             categoryRepo, statusRepo, claimTypeRepo, userRepo, branchScope, auditService,
-            pendingAmountCalculator, claimCloseRepo, paymentGuard, statusAccess);
+            pendingAmountCalculator, claimCloseRepo, paymentGuard, statusAccess,
+            new com.dams.customer.service.PartyResolver(customerRepo, vehicleRepo, branchScope));
         TenantContext.setOrgId(ORG);
         lenient().when(branchScope.currentUserId()).thenReturn(CASHIER_ID);
         // Reads and patches now honour branch access — default the fixtures to visible.
@@ -147,14 +148,56 @@ class JobCardServiceTest {
     }
 
     @Test
-    void create_withNoCustomerIdAndNoName_throwsBadRequest() {
+    void create_withNoCustomer_isAllowed_andKeepsTheTypedVehicleAsText() {
+        // rev 56: an Expense may open a job card before any customer is known.
+        when(userRepo.findByIdAndOrganization_Id(CASHIER_ID, ORG))
+            .thenReturn(Optional.of(cashierWithHomeBranch()));
         JobCardCreateRequest req = new JobCardCreateRequest();
+        req.setVehicleNo("od 05 ca 4177");
         req.setCategoryId(3L);
         req.setBusinessStatusId(4L);
 
-        assertThatThrownBy(() -> service.create(req))
+        service.create(req);
+
+        ArgumentCaptor<JobCard> captor = ArgumentCaptor.forClass(JobCard.class);
+        verify(jobCardRepo).save(captor.capture());
+        assertThat(captor.getValue().getCustomerId()).isNull();
+        assertThat(captor.getValue().getVehicleId()).isNull();
+        assertThat(captor.getValue().getVehicleNoText()).isEqualTo("OD05CA4177");
+    }
+
+    @Test
+    void attachCustomer_setsOnce_andRefusesASecondAttach() {
+        when(userRepo.findByIdAndOrganization_Id(CASHIER_ID, ORG))
+            .thenReturn(Optional.of(cashierWithHomeBranch()));
+        JobCard jc = new JobCard();
+        ReflectionTestUtils.setField(jc, "id", 61L);
+        jc.setOrgId(ORG);
+        jc.setBranchId(HOME_BRANCH);
+        jc.setVehicleNoText("OD05CA4177");
+        jc.setCategoryId(3L);
+        jc.setBusinessStatusId(4L);
+        when(jobCardRepo.findByIdAndOrgId(61L, ORG)).thenReturn(Optional.of(jc));
+        when(vehicleRepo.findByOrgIdAndVehicleNo(ORG, "OD05CA4177")).thenReturn(Optional.empty());
+        when(vehicleRepo.save(any(com.dams.vehicle.entity.Vehicle.class))).thenAnswer(inv -> {
+            com.dams.vehicle.entity.Vehicle v = inv.getArgument(0);
+            ReflectionTestUtils.setField(v, "id", 500L);
+            return v;
+        });
+
+        com.dams.jobcard.dto.AttachCustomerRequest req = new com.dams.jobcard.dto.AttachCustomerRequest();
+        req.setCustomerId(42L);
+        service.attachCustomer(61L, req);
+
+        assertThat(jc.getCustomerId()).isEqualTo(42L);
+        assertThat(jc.getVehicleId()).isEqualTo(500L);
+        assertThat(jc.getVehicleNoText()).isNull();
+        verify(auditService).recordUserEvent(eq("JobCard"), eq(61L), any(), eq(EventType.JOB_CARD_CUSTOMER_ATTACHED),
+            eq(CASHIER_ID), any());
+
+        assertThatThrownBy(() -> service.attachCustomer(61L, req))
             .isInstanceOf(DamsException.class)
-            .hasMessageContaining("customerId or customerName");
+            .hasMessageContaining("already has a customer");
     }
 
     @Test

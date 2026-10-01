@@ -12,6 +12,8 @@ export interface OverrideAuditEntry {
   amountBefore: number | null
   amountAfter: number | null
   reason: string | null
+  /** Role the actor was switched into, or null (always null for claim closes). */
+  actorRole?: string | null
 }
 
 export interface OverrideAuditFilter {

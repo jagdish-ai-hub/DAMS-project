@@ -112,7 +112,8 @@ public class OverrideAuditService {
                 str(d.get("lineId")),
                 num(d.get("amountBefore")),
                 num(d.get("amountAfter")),
-                str(d.get("reason"))));
+                str(d.get("reason")),
+                e.getActorRole()));
         }
         return out;
     }
@@ -138,7 +139,8 @@ public class OverrideAuditService {
                 null,
                 num(d.get("amountBefore")),
                 num(d.get("amountAfter")),
-                str(d.get("reason"))));
+                str(d.get("reason")),
+                e.getActorRole()));
         }
         return out;
     }
@@ -172,7 +174,8 @@ public class OverrideAuditService {
                 null,
                 received,
                 cc.getFinalAmount(),
-                cc.getOverrideReason()));
+                cc.getOverrideReason(),
+                null));
         }
         return out;
     }

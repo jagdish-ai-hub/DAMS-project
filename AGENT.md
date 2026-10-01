@@ -24,8 +24,9 @@ accountants, plus the owner's live window into branch operations.
   Can see all organizations for platform management; never sees another
   org's transactional data by default.
 - **OWNER** — runs one organization. Sees all branches within their org.
-  Adds branches, adds users, assigns roles and branch access. Read-only on
-  transactions; never edits them.
+  Adds branches, adds users, assigns roles, extra roles and branch access.
+  Read-only on transactions while acting as Owner; never edits them (may
+  switch into another role — see "Acting roles").
 - **FINANCE_MANAGER** — all branches within their org. Final approval on
   every entry, **except** the carve-out below. Closes Warranty/AMC/CG
   claims, with override authority that is final and locked once used.
@@ -55,6 +56,35 @@ accountants, plus the owner's live window into branch operations.
   adds payments against existing job cards, does daily cash closing.
 
 A user never verifies or approves an entry they created or last modified.
+
+### Acting roles (role switching — plan.md rev 55)
+
+One person can hold more than one job. Each user has a **primary role**
+(above) plus optional **extra roles** the Owner grants in Team & Branches:
+
+- Extra roles are `FINANCE_MANAGER` (org-wide, no branches), `ACCOUNTANT` or
+  `CASHIER` (each granted for specific branches). An Owner or Super Admin
+  cannot be granted extra roles; a grant can't repeat the primary role.
+- A **Switch role** button beside Help lets the user pick a branch, then a
+  role available at that branch. The server issues a new JWT whose `role`
+  is the **acting role**; `primaryRole` and `actingBranchId` ride along. The
+  client never chooses its own role.
+- **Owner** always has the button and may act as any role at any branch.
+  "Read-only on transactions" applies while acting as Owner; while acting as
+  Finance Manager / Accountant / Cashier the Owner has that role's powers.
+- An acting session is scoped to **the one branch picked**. Acting as
+  Cashier at OOR posts to OOR; acting as Accountant at OOR sees OOR only.
+  To work another branch, switch again. **Exception:** Finance Manager is
+  an org-wide role, so a session acting as Finance Manager still sees every
+  branch (the picked branch is only shown in the banner).
+- **Attribution never changes.** `created_by` / `last_modified_by` remain the
+  real user's id, so Ajay's entries show "Ajay". Audit events additionally
+  store `actor_role` while acting ("Ajay · as Cashier"), and each switch is
+  itself audited (`ROLE_SWITCHED`).
+- **Maker-checker is per person, not per role.** Ajay's cashier entry can
+  never be verified or approved by Ajay acting as Accountant.
+- A revoked grant takes effect on the next request (the acting role is
+  re-checked against the DB); the user is sent back to login.
 
 ## Multi-tenancy
 
@@ -107,7 +137,33 @@ One "cause" = one document, containing many sub-transaction lines:
   vehicle/customer to all their Receive and Expense documents over time —
   never the DBM ID and never the vehicle number directly.
 - **Vehicle number**: normalized (uppercase, no spaces), natural key for
-  the Vehicle master table.
+  the Vehicle master table. A vehicle belongs to exactly one customer; a
+  customer may have many vehicles.
+- **Linking (rev 56)**: on the Receipt, Expense and Job-Card-create screens
+  the customer, vehicle and job card are **picked from a branch-scoped
+  search, not retyped** (same `BranchScope` rule as universal search:
+  cashier = home branch, or org-wide when the multi-branch toggle is ON;
+  accountant = assigned branches; owner/FM = all). Typing a customer or
+  vehicle that does not exist creates it on save (vehicle deduped on the
+  normalised number; a number already registered to a *different* customer is
+  rejected, never silently reused). An expense/receipt may carry `customer_id`
+  + `vehicle_id` even without a job card; if a job card is also given, its
+  customer/vehicle must match.
+- **Cashier home message boxes (rev 57)**: left box = documents the Accountant
+  or Finance Manager queried or rejected (Rejected shown 7 days, not counted);
+  right box = the cashier's FM pre-approval requests (waiting / approved /
+  queried). Each box has a badge counting only items still needing the cashier;
+  it is derived from the document's current state, so resubmitting or submitting
+  removes the item -- no read tracking. `FM_QUERIED` is the Accountant's, not shown.
+  Clicking a message opens that document for edit / resubmit.
+- **Job cards may start from an Expense (rev 56)**: a job card is no longer
+  created only from a Receive. A Cashier may create one from the Expense form,
+  **without a customer** (`job_card.customer_id` nullable; the typed vehicle
+  number is kept as text until a customer exists). A later Receipt **attaches
+  the customer once** (set-once, then locked). Correcting a wrongly attached
+  customer is **not built yet** -- it needs a defined rule for re-assigning the
+  vehicle -- so a second attach is refused (flagged for a later stage). A receipt cannot post against a job card that
+  still has no customer.
 
 ### Entities (in dependency order)
 `Organization → Branch → User`, `Organization → Customer → Vehicle`,
@@ -133,7 +189,11 @@ has `org_id = null`.
    receipt is not a dead end, it's just the strictest starting point.
 2. **Expenses are closed explicitly by the Accountant.** Status flow: Open
    → In Progress → Awaiting Receipt → Received Receipt → Closed (or
-   Transfer to Claim).
+   Transfer to Claim). **Any expense may be transferred to a claim — it need
+   not be tagged to a job card, and its job card need not be a Warranty / AMC /
+   CGW claim** (e.g. promotional activities the OEM reimburses have no job
+   card). Only a REJECTED / CLOSED document, or one awaiting FM approval,
+   cannot be transferred.
    **Over-limit expenses need Finance Manager pre-approval before submit
    (rev 53).** When any line is above its sub-category limit, the Cashier
    cannot Submit — they **Send for Review** instead. The draft (no number
@@ -368,9 +428,11 @@ hardcoded logged-in persona with no login screen at all. **These are demo
 conveniences only** — built that way so one file could demo both sides of
 a workflow without needing two separate logins. They are not a feature to
 replicate. In the real system:
-- There is no role-switch toggle anywhere. A logged-in Accountant sees
-  only the Accountant view; a Finance Manager only theirs. One person
-  wanting both views needs two separate accounts.
+- There is no **client-side** role toggle. The demo toggle in
+  `review-close.html` is not built. The only way to change roles is the
+  server-issued **Switch role** flow (see "Acting roles"): the user must
+  hold an Owner-granted extra role, and a new JWT is issued. A screen
+  always renders from the JWT's acting role, never a client-side choice.
 - Nobody lands on any screen without authenticating first. A standard
   login screen (email + password, no mockup needed for this — build it
   straightforwardly) is the only unauthenticated route. Every other screen
@@ -466,9 +528,10 @@ auth, like an S3 presigned URL), `/swagger-ui.html`, `/swagger-ui/**`,
 | Org settings | `organization/controller/OrgSettingsController` | `GET /organization`, `PATCH /organization` |
 | Masters | `masters/controller/MastersController` | `GET /masters/{type}`, `GET /masters/{type}/mine` (rows the caller's role may pick — role-filtered for `receive-statuses`), `GET /masters/{type}/{id}`, `POST /masters/{type}` (Owner), `PATCH /masters/{type}/{id}` (Owner) |
 | Receivers | `receiver/controller/ReceiverController` | `GET /receivers`, `GET /receivers/{id}`, `POST /receivers`, `PATCH /receivers/{id}` |
-| Customers | `customer/controller/CustomerController` | `GET /customers`, `GET /customers/{id}`, `GET /customers/{id}/history`, `POST /customers`, `PATCH /customers/{id}` |
+| Customers | `customer/controller/CustomerController` | `GET /customers` (`?q=`, branch-scoped), `GET /customers/{id}`, `GET /customers/{id}/vehicles` (`?q=`), `GET /customers/{id}/history`, `POST /customers`, `PATCH /customers/{id}` |
 | Vehicles | `vehicle/controller/VehicleController` | `GET /vehicles`, `POST /vehicles` (lookup + deduped create; number normalised) |
-| Job cards | `jobcard/controller/JobCardController` | `POST /job-cards` (existing or inline customer/vehicle create), `GET /job-cards/{id}` (derived `{branchCode}-JC-{id}` ref), `PATCH /job-cards/{id}` (invoiceNo, invoiceAmount/clear, vehicleNo, dbmId, b2b, gstNo, categoryId, businessStatusId), `POST /job-cards/{id}/close-claim` (FM) |
+| Cashier inbox | `myentries/controller/MyEntriesController` | `GET /my-entries/inbox` (CASHIER; queries/rejections received + FM pre-approval replies, with unattended counts) |
+| Job cards | `jobcard/controller/JobCardController` | `GET /job-cards` (`?q=&customerId=&vehicleId=`, branch-scoped search on customer/vehicle/DBM/invoice/ref), `POST /job-cards` (existing or inline customer/vehicle create; customer optional), `POST /job-cards/{id}/attach-customer` (set once), `GET /job-cards/{id}` (derived `{branchCode}-JC-{id}` ref), `PATCH /job-cards/{id}` (invoiceNo, invoiceAmount/clear, vehicleNo, dbmId, b2b, gstNo, categoryId, businessStatusId), `POST /job-cards/{id}/close-claim` (FM) |
 | Receipts | `receive/controller/ReceiveDocumentController` | `POST /receipts`, `GET /receipts/{id}`, `POST /receipts/{id}/submit`, `POST /receipts/{id}/resubmit`, `POST /receipts/{id}/lines`, `PATCH /receipts/{id}/lines/{lineNo}`, `DELETE /receipts/{id}/lines/{lineNo}`, `POST|GET /receipts/{id}/attachments`, `POST|GET /receipts/{id}/lines/{lineNo}/attachments` |
 | Expenses | `expense/controller/ExpenseDocumentController` | `POST /expenses`, `GET /expenses/{id}`, `PATCH /expenses/{id}`, `POST /expenses/{id}/submit`, `POST /expenses/{id}/resubmit`, `POST /expenses/{id}/transfer-to-claim`, `POST /expenses/{id}/request-approval`, `POST /expenses/{id}/lines`, `PATCH /expenses/{id}/lines/{lineNo}`, `DELETE /expenses/{id}/lines/{lineNo}`, `POST|GET /expenses/{id}/attachments`, `POST|GET /expenses/{id}/lines/{lineNo}/attachments` |
 | Cash docs | `cash/controller/CashDocumentController` | `POST /cash-documents`, `GET /cash-documents`, `GET /cash-documents/{id}`, `PATCH /cash-documents/{id}`, `POST /cash-documents/{id}/submit`, `POST /cash-documents/{id}/resubmit`, `DELETE /cash-documents/{id}` |

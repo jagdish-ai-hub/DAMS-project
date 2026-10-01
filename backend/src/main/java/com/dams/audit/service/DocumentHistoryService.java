@@ -58,7 +58,8 @@ public class DocumentHistoryService {
                 actorName(e, nameCache),
                 action(e),
                 note(e),
-                e.getCreatedAt()));
+                e.getCreatedAt(),
+                e.getActorRole()));
         }
         return out;
     }
@@ -98,6 +99,9 @@ public class DocumentHistoryService {
                 + (d.get("amount") != null ? " (₹" + d.get("amount") + ")" : "");
             case PRE_APPROVED -> "Approved by Finance Manager"
                 + (d.get("amount") != null ? " for ₹" + d.get("amount") : "") + " — ready to submit";
+            // User-level event, never on a document — listed only so the switch stays exhaustive
+            case ROLE_SWITCHED -> "Switched role";
+            case JOB_CARD_CUSTOMER_ATTACHED -> "Customer linked to job card";
         };
     }
 

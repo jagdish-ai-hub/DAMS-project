@@ -8,7 +8,11 @@ import com.dams.auth.util.JwtUtil;
 import com.dams.common.exception.DamsException;
 import com.dams.config.JwtConfig;
 import com.dams.config.SecurityConfig;
+import com.dams.config.ActingRoleFilter;
 import com.dams.config.TenantFilter;
+import com.dams.branch.repository.BranchRepository;
+import com.dams.user.repository.AppUserRepository;
+import com.dams.user.repository.UserRoleGrantRepository;
 import com.dams.user.entity.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -31,8 +35,13 @@ import com.dams.auth.controller.AuthController;
  * Test names describe the behaviour being proven — see AGENT.md coding standards.
  */
 @WebMvcTest(AuthController.class)
-@Import({SecurityConfig.class, JwtConfig.class, TenantFilter.class})
+@Import({SecurityConfig.class, JwtConfig.class, TenantFilter.class, ActingRoleFilter.class})
 class AuthControllerTest {
+
+    // ActingRoleFilter (rev 55) is part of the security chain; its collaborators are mocked here.
+    @MockBean private AppUserRepository actingUserRepo;
+    @MockBean private UserRoleGrantRepository actingGrantRepo;
+    @MockBean private BranchRepository actingBranchRepo;
 
     @Autowired
     private MockMvc mockMvc;

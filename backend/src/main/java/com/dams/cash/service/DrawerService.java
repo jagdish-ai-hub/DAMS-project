@@ -161,7 +161,7 @@ public class DrawerService {
                 JobCard jc = (JobCard) r[2];
                 receiptLines.add(new MoneyMovementItem("receipt", d.getId(), d.getDocumentNo(), d.getWorkflowStatus().name(),
                     l.getTransactionDate(), l.getCreatedAt(), branchCode,
-                    customerNames.getOrDefault(jc.getCustomerId(), "—"),
+                    jc.getCustomerId() == null ? "—" : customerNames.getOrDefault(jc.getCustomerId(), "—"),
                     branchCode + "-JC-" + jc.getId(),
                     modeNames.getOrDefault(l.getSettlementModeId(), "—"),
                     l.getAmount()));

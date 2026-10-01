@@ -22,5 +22,9 @@ public enum EventType {
     /** Cashier sent an over-limit expense draft to the FM for pre-approval (rev 53). */
     APPROVAL_REQUESTED,
     /** FM pre-approved an over-limit expense draft (rev 53). */
-    PRE_APPROVED
+    PRE_APPROVED,
+    /** A user switched into another role (or back to their own) — rev 55. */
+    ROLE_SWITCHED,
+    /** A customer was attached to a customerless job card (or changed by Owner/FM) — rev 56. */
+    JOB_CARD_CUSTOMER_ATTACHED
 }

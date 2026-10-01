@@ -42,6 +42,13 @@ public class UserRequest {
 
     private List<Long> branchIds;
 
+    /**
+     * Extra roles the user may switch into (rev 55). The whole list replaces the user's grants.
+     * Ignored for an OWNER (who can already act as any role); a grant equal to the user's own
+     * role is dropped.
+     */
+    private List<RoleGrantDto> roleGrants;
+
     /** Update only — ignored on create (new users start active). */
     private Boolean active;
 }

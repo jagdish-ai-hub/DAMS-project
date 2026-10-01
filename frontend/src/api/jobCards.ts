@@ -6,7 +6,8 @@ export interface JobCard {
   branchId: number
   branchCode: string | null
   branchName: string | null
-  customerId: number
+  /** null for a job card opened from an Expense that has no customer yet. */
+  customerId: number | null
   customerName: string | null
   customerPhone: string | null
   vehicleId: number | null
@@ -32,6 +33,28 @@ export interface JobCard {
   claimClosedAt: string | null
   canRecordPayment: boolean
   createdAt: string
+}
+
+/** One row of the branch-scoped job-card picker. */
+export interface JobCardSearchHit {
+  id: number
+  reference: string
+  branchId: number
+  branchCode: string
+  customerId: number | null
+  customerName: string | null
+  vehicleId: number | null
+  vehicleNo: string | null
+  dbmId: string | null
+  invoiceNo: string | null
+  categoryId: number
+  createdAt: string
+}
+
+export interface AttachCustomerRequest {
+  customerId?: number
+  customerName?: string
+  customerPhone?: string
 }
 
 export interface CloseClaimRequest {
@@ -72,6 +95,12 @@ export interface JobCardPatchRequest {
 }
 
 export const jobCardsApi = {
+  search(params: { q?: string; customerId?: number; vehicleId?: number }) {
+    return api.get<JobCardSearchHit[]>('/api/v1/job-cards', { params })
+  },
+  attachCustomer(id: number, data: AttachCustomerRequest) {
+    return api.post<JobCard>(`/api/v1/job-cards/${id}/attach-customer`, data)
+  },
   get(id: number) {
     return api.get<JobCard>(`/api/v1/job-cards/${id}`)
   },

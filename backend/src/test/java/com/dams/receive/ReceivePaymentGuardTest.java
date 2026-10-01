@@ -107,6 +107,7 @@ class ReceivePaymentGuardTest {
         ReflectionTestUtils.setField(jc, "id", 60L);
         jc.setOrgId(ORG);
         jc.setBranchId(branchId);
+        jc.setCustomerId(42L);
         return jc;
     }
 

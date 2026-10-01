@@ -473,6 +473,7 @@ function FmDetail(props: {
   // (non-claim) path only — a claim's approval now happens inside Close Claim itself.
   const canQuery = wf === 'VERIFIED' && !isMaker
   const canApprove = canQuery && !isClaim
+  // Approve / Close claim are disabled while the Query box is open (see ReviewQueuePage).
   // rev 53 — an over-limit expense draft the cashier sent for pre-approval.
   const expense = type === 'expense' ? (doc as ExpenseDocument) : null
   const isApprovalRequest = !!expense && wf === 'DRAFT' && expense.preApprovalStatus === 'PENDING'
@@ -593,15 +594,18 @@ function FmDetail(props: {
             )}
             {isApprovalRequest && (
               <button type="button" onClick={() => run(() => reviewApi.preApproveExpense(doc.id), `Request #${doc.id} approved — the cashier can submit it now`)}
-                disabled={busy} style={{ ...primaryBtn(busy), minHeight: 36 }}>Approve</button>
+                disabled={busy || box != null} title={box != null ? 'Send or cancel the Query first' : undefined}
+                style={{ ...primaryBtn(busy || box != null), minHeight: 36 }}>Approve</button>
             )}
             {canApprove && (
               <button type="button" onClick={() => run(() => reviewApi.approve(type, doc.id), `${docNo} approved`)}
-                disabled={busy} style={{ ...primaryBtn(busy), minHeight: 36 }}>Approve</button>
+                disabled={busy || box != null} title={box != null ? 'Send or cancel the Query first' : undefined}
+                style={{ ...primaryBtn(busy || box != null), minHeight: 36 }}>Approve</button>
             )}
             {isOpenClaim && (
-              <button type="button" onClick={() => setClaimModal(true)} disabled={busy}
-                style={{ ...primaryBtn(busy), background: 'var(--purple, #6B3FA0)', minHeight: 36 }}>
+              <button type="button" onClick={() => setClaimModal(true)} disabled={busy || box != null}
+                title={box != null ? 'Send or cancel the Query first' : undefined}
+                style={{ ...primaryBtn(busy || box != null), background: 'var(--purple, #6B3FA0)', minHeight: 36 }}>
                 Close claim
               </button>
             )}

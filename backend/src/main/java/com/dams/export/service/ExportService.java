@@ -136,7 +136,7 @@ public class ExportService {
             SettlementLine line = (SettlementLine) row[0];
             ReceiveDocument doc = (ReceiveDocument) row[1];
             JobCard jc = (JobCard) row[2];
-            Customer cust = customers.get(jc.getCustomerId());
+            Customer cust = jc.getCustomerId() == null ? null : customers.get(jc.getCustomerId());
             String bCode = branchCodes.getOrDefault(doc.getBranchId(), "?");
             String jcRef = bCode + "-JC-" + jc.getId();
 

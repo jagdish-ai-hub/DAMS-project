@@ -19,7 +19,9 @@ import java.util.List;
  * Claims carried:
  *   sub          — userId (string)
  *   orgId        — Long, null for SUPER_ADMIN
- *   role         — Role enum name
+ *   role         — the ACTING role (Role enum name); equals primaryRole unless switched (rev 55)
+ *   primaryRole  — the user's own role
+ *   actingBranchId — Long, the one branch a switched session is scoped to (null otherwise)
  *   branchIds    — List<Long>, the ACCOUNTANT's assigned branches (empty for other roles)
  *   homeBranchId — Long, the CASHIER's single posting branch (null for other roles)
  *
@@ -32,6 +34,8 @@ public class JwtUtil {
 
     private static final String CLAIM_ORG_ID         = "orgId";
     private static final String CLAIM_ROLE           = "role";
+    private static final String CLAIM_PRIMARY_ROLE   = "primaryRole";
+    private static final String CLAIM_ACTING_BRANCH_ID = "actingBranchId";
     private static final String CLAIM_BRANCH_IDS     = "branchIds";
     private static final String CLAIM_HOME_BRANCH_ID = "homeBranchId";
 
@@ -45,7 +49,18 @@ public class JwtUtil {
         this.accessTtlMs = accessTtlHours * 60 * 60 * 1000;
     }
 
+    /** Token for a user in their own (primary) role. */
     public String generateAccessToken(Long userId, Long orgId, Role role, List<Long> branchIds, Long homeBranchId) {
+        return generateAccessToken(userId, orgId, role, role, null, branchIds, homeBranchId);
+    }
+
+    /**
+     * @param role           the ACTING role — this is what authorises every request
+     * @param primaryRole    the user's own role; differs from {@code role} while switched
+     * @param actingBranchId the one branch a switched session is scoped to (null when not switched)
+     */
+    public String generateAccessToken(Long userId, Long orgId, Role role, Role primaryRole,
+                                      Long actingBranchId, List<Long> branchIds, Long homeBranchId) {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + accessTtlMs);
 
@@ -53,6 +68,8 @@ public class JwtUtil {
             .subject(String.valueOf(userId))
             .claim(CLAIM_ORG_ID, orgId)
             .claim(CLAIM_ROLE, role.name())
+            .claim(CLAIM_PRIMARY_ROLE, primaryRole.name())
+            .claim(CLAIM_ACTING_BRANCH_ID, actingBranchId)
             .claim(CLAIM_BRANCH_IDS, branchIds)
             .claim(CLAIM_HOME_BRANCH_ID, homeBranchId)
             .issuedAt(now)
@@ -86,6 +103,16 @@ public class JwtUtil {
 
     public Role getRole(Claims claims) {
         return Role.valueOf(claims.get(CLAIM_ROLE, String.class));
+    }
+
+    /** The user's own role; tokens issued before role switching have no claim, so it equals {@code role}. */
+    public Role getPrimaryRole(Claims claims) {
+        String raw = claims.get(CLAIM_PRIMARY_ROLE, String.class);
+        return raw == null ? getRole(claims) : Role.valueOf(raw);
+    }
+
+    public Long getActingBranchId(Claims claims) {
+        return toLong(claims.get(CLAIM_ACTING_BRANCH_ID));
     }
 
     public List<Long> getBranchIds(Claims claims) {

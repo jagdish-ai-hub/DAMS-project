@@ -1,5 +1,6 @@
 package com.dams.expense.service;
 
+import com.dams.common.security.ActingDetails;
 import com.dams.attachment.entity.ParentType;
 import com.dams.attachment.repository.AttachmentRepository;
 import com.dams.audit.entity.EventType;
@@ -15,6 +16,9 @@ import com.dams.common.security.BranchScope;
 import com.dams.config.TenantContext;
 import com.dams.customer.entity.Customer;
 import com.dams.customer.repository.CustomerRepository;
+import com.dams.customer.service.PartyResolver;
+import com.dams.jobcard.dto.JobCardCreateRequest;
+import com.dams.jobcard.service.JobCardService;
 import com.dams.expense.dto.CreateExpenseRequest;
 import com.dams.expense.dto.ExpenseDocumentResponse;
 import com.dams.expense.dto.ExpenseLineInput;
@@ -106,6 +110,8 @@ public class ExpenseDocumentService {
     private final AuditService auditService;
     private final DocumentHistoryService documentHistoryService;
     private final BranchScope branchScope;
+    private final PartyResolver partyResolver;
+    private final JobCardService jobCardService;
 
     public ExpenseDocumentService(ExpenseDocumentRepository expenseDocumentRepo,
                                   ExpenseLineRepository expenseLineRepo,
@@ -126,7 +132,9 @@ public class ExpenseDocumentService {
                                   CashDateLock cashDateLock,
                                   AuditService auditService,
                                   DocumentHistoryService documentHistoryService,
-                                  BranchScope branchScope) {
+                                  BranchScope branchScope,
+                                  PartyResolver partyResolver,
+                                  JobCardService jobCardService) {
         this.expenseDocumentRepo = expenseDocumentRepo;
         this.expenseLineRepo = expenseLineRepo;
         this.receiverRepo = receiverRepo;
@@ -147,6 +155,8 @@ public class ExpenseDocumentService {
         this.auditService = auditService;
         this.documentHistoryService = documentHistoryService;
         this.branchScope = branchScope;
+        this.partyResolver = partyResolver;
+        this.jobCardService = jobCardService;
     }
 
     @Transactional(readOnly = true)
@@ -179,20 +189,26 @@ public class ExpenseDocumentService {
                 .orElseThrow(() -> DamsException.notFound("Job card", request.getJobCardId()));
 
         AppUser me = postingGuard.requireCanPost(orgId, jobCard);
+        Long postingBranchId = ActingDetails.effectiveHomeBranch(me);
+
+        // Customer / vehicle links (rev 56) -- and, when asked, a brand-new job card for this expense.
+        Linked linked = linkParty(orgId, postingBranchId, jobCard, request.getCustomerId(),
+            request.getNewCustomerName(), request.getVehicleId(), request.getNewVehicleNo());
+        if (jobCard == null && request.getNewJobCard() != null) {
+            jobCard = createJobCardFor(orgId, request, linked);
+        }
         Receiver receiver = resolveReceiver(orgId, request);
         ExpenseCategory category = requireActiveCategory(orgId, request.getExpenseCategoryId());
         ExpenseBusinessStatus status = requireActiveStatus(orgId, request.getBusinessStatusId());
 
-        if (status.isTriggersClaim()) {
-            requireClaimEligible(orgId, jobCard);
-        }
-
         ExpenseDocument doc = new ExpenseDocument();
         doc.setOrgId(orgId);
-        doc.setBranchId(me.getHomeBranchId());   // never from the request
+        doc.setBranchId(ActingDetails.effectiveHomeBranch(me));   // never from the request
         doc.setJobCardId(jobCard != null ? jobCard.getId() : null);
-        doc.setCustomerName(blankToNull(request.getCustomerName()));
-        doc.setVehicleNo(blankToNull(request.getVehicleNo()));
+        doc.setCustomerId(linked.customerId());
+        doc.setVehicleId(linked.vehicleId());
+        doc.setCustomerName(linked.customerName() != null ? linked.customerName() : blankToNull(request.getCustomerName()));
+        doc.setVehicleNo(linked.vehicleNo() != null ? linked.vehicleNo() : blankToNull(request.getVehicleNo()));
         doc.setInvoiceNo(blankToNull(request.getInvoiceNo()));
         doc.setDbmId(blankToNull(request.getDbmId()));
         doc.setReceiverId(receiver.getId());
@@ -204,8 +220,10 @@ public class ExpenseDocumentService {
         doc = expenseDocumentRepo.save(doc);
 
         List<ExpenseLine> added = appendLines(orgId, doc, request.getLines(), me.getId(), category.getId());
-        auditService.recordUserEvent(ENTITY, doc.getId(), doc.getBranchId(), EventType.CREATED, me.getId(),
-            orderedDetail("receiverId", receiver.getId(), "jobCardId", doc.getJobCardId()));
+        Map<String, Object> createdDetail = orderedDetail("receiverId", receiver.getId(), "jobCardId", doc.getJobCardId());
+        createdDetail.put("customerId", doc.getCustomerId());
+        createdDetail.put("vehicleId", doc.getVehicleId());
+        auditService.recordUserEvent(ENTITY, doc.getId(), doc.getBranchId(), EventType.CREATED, me.getId(), createdDetail);
         for (ExpenseLine l : added) {
             auditService.recordUserEvent(ENTITY, doc.getId(), doc.getBranchId(), EventType.LINE_ADDED, me.getId(),
                 orderedDetail("lineNo", l.getLineNo(), "amount", l.getAmount()));
@@ -378,6 +396,28 @@ public class ExpenseDocumentService {
                 .orElseThrow(() -> DamsException.notFound("Job card", request.getJobCardId()));
             postingGuard.requireCanPost(orgId, next); // must be in the cashier's home branch
             doc.setJobCardId(next.getId());
+            // The linked customer / vehicle follow the new job card (rev 56).
+            if (next.getCustomerId() != null) {
+                doc.setCustomerId(next.getCustomerId());
+                doc.setVehicleId(next.getVehicleId());
+            }
+        } else if (Boolean.TRUE.equals(request.getClearJobCard())) {
+            doc.setJobCardId(null);
+        }
+        boolean partyTouched = request.getCustomerId() != null || request.getVehicleId() != null
+            || (request.getNewCustomerName() != null && !request.getNewCustomerName().isBlank())
+            || (request.getNewVehicleNo() != null && !request.getNewVehicleNo().isBlank());
+        if (partyTouched) {
+            Linked linked = linkParty(orgId, doc.getBranchId(), jobCardOrNull(orgId, doc), request.getCustomerId(),
+                request.getNewCustomerName(), request.getVehicleId(), request.getNewVehicleNo());
+            doc.setCustomerId(linked.customerId());
+            doc.setVehicleId(linked.vehicleId());
+            if (linked.customerName() != null) {
+                doc.setCustomerName(linked.customerName());
+            }
+            if (linked.vehicleNo() != null) {
+                doc.setVehicleNo(linked.vehicleNo());
+            }
         }
         if (request.getCustomerName() != null) {
             doc.setCustomerName(blankToNull(request.getCustomerName()));
@@ -403,9 +443,6 @@ public class ExpenseDocumentService {
         }
         if (request.getBusinessStatusId() != null) {
             ExpenseBusinessStatus next = requireActiveStatus(orgId, request.getBusinessStatusId());
-            if (next.isTriggersClaim()) {
-                requireClaimEligible(orgId, jobCardOrNull(orgId, doc));
-            }
             doc.setBusinessStatusId(next.getId());
         }
         doc.setLastModifiedBy(me.getId());
@@ -462,10 +499,10 @@ public class ExpenseDocumentService {
     }
 
     /**
-     * Move the expense onto a warranty / AMC / goodwill claim: flips the business status to
-     * the org's {@code triggers_claim} status. Only valid when the expense sits on a job
-     * card whose category is a claim category, and while the document is not already
-     * terminal (REJECTED / CLOSED).
+     * Move the expense onto a claim: flips the business status to the org's
+     * {@code triggers_claim} status. Any expense qualifies — no job card or claim type is
+     * required (promotional-activity claims have none). Refused only while the document
+     * is terminal (REJECTED / CLOSED) or awaiting FM approval.
      */
     @Transactional
     public ExpenseDocumentResponse transferToClaim(Long documentId) {
@@ -479,7 +516,6 @@ public class ExpenseDocumentService {
                 + " — it can no longer be transferred to a claim");
         }
         requireNotAwaitingApproval(doc);
-        requireClaimEligible(orgId, jobCardOrNull(orgId, doc));
 
         List<ExpenseBusinessStatus> claimStatuses = statusRepo.findByOrgIdAndTriggersClaimTrue(orgId);
         if (claimStatuses.isEmpty()) {
@@ -699,15 +735,60 @@ public class ExpenseDocumentService {
         }
     }
 
-    private void requireClaimEligible(Long orgId, JobCard jobCard) {
-        if (jobCard == null) {
-            throw DamsException.badRequest(
-                "\"Transfer to Claim\" needs the expense to be tagged to a job card");
+    /** What an expense's customer / vehicle resolved to. Names are the display snapshot for the V30 text columns. */
+    private record Linked(Long customerId, String customerName, Long vehicleId, String vehicleNo) {}
+
+    /**
+     * One rule for create and patch (rev 56): a job card that already has a customer decides the
+     * customer (a conflicting pick is rejected); otherwise the picked / typed customer and vehicle
+     * are resolved by {@link PartyResolver} (existing wins, typed creates, another customer's vehicle
+     * number is a 409).
+     */
+    private Linked linkParty(Long orgId, Long branchId, JobCard jc, Long customerId, String newCustomerName,
+                             Long vehicleId, String newVehicleNo) {
+        if (jc != null && jc.getCustomerId() != null) {
+            if (customerId != null && !customerId.equals(jc.getCustomerId())) {
+                throw DamsException.badRequest("The selected customer does not match the job card's customer");
+            }
+            if (newCustomerName != null && !newCustomerName.isBlank()) {
+                throw DamsException.badRequest("This job card already has a customer - pick it instead of typing a new one");
+            }
+            if (vehicleId != null && jc.getVehicleId() != null && !vehicleId.equals(jc.getVehicleId())) {
+                throw DamsException.badRequest("The selected vehicle does not match the job card's vehicle");
+            }
+            Customer c = customerRepo.findByIdAndOrgId(jc.getCustomerId(), orgId).orElse(null);
+            Vehicle v = jc.getVehicleId() == null ? null
+                : vehicleRepo.findByIdAndOrgId(jc.getVehicleId(), orgId).orElse(null);
+            if (v == null) {
+                v = partyResolver.resolve(orgId, jc.getCustomerId(), null, null, vehicleId, newVehicleNo, branchId).vehicle();
+            }
+            return new Linked(jc.getCustomerId(), c != null ? c.getName() : null,
+                v != null ? v.getId() : null, v != null ? v.getVehicleNo() : null);
         }
-        if (jobCard.getClaimTypeId() == null) {
-            throw DamsException.badRequest("Job card " + referenceOf(orgId, jobCard)
-                + " is not a claim job card — its expenses cannot be transferred to a claim");
+        PartyResolver.Party p = partyResolver.resolve(orgId, customerId, newCustomerName, null, vehicleId, newVehicleNo, branchId);
+        return new Linked(
+            p.customer() != null ? p.customer().getId() : null,
+            p.customer() != null ? p.customer().getName() : null,
+            p.vehicle() != null ? p.vehicle().getId() : null,
+            p.vehicle() != null ? p.vehicle().getVehicleNo() : p.unlinkedVehicleNo());
+    }
+
+    /** Open the job card an expense asked for (customer optional). The job-card service enforces branch and status-role rules. */
+    private JobCard createJobCardFor(Long orgId, CreateExpenseRequest request, Linked linked) {
+        CreateExpenseRequest.NewJobCard spec = request.getNewJobCard();
+        JobCardCreateRequest jc = new JobCardCreateRequest();
+        jc.setCustomerId(linked.customerId());
+        jc.setVehicleId(linked.vehicleId());
+        if (linked.vehicleId() == null) {
+            jc.setVehicleNo(linked.vehicleNo()); // typed-only number, kept as text until a customer exists
         }
+        jc.setDbmId(request.getDbmId());
+        jc.setInvoiceNo(request.getInvoiceNo());
+        jc.setCategoryId(spec.getCategoryId());
+        jc.setClaimTypeId(spec.getClaimTypeId());
+        jc.setBusinessStatusId(spec.getBusinessStatusId());
+        Long id = jobCardService.create(jc).id();
+        return jobCardRepo.findByIdAndOrgId(id, orgId).orElseThrow();
     }
 
     private JobCard jobCardOrNull(Long orgId, ExpenseDocument doc) {
@@ -750,18 +831,20 @@ public class ExpenseDocumentService {
 
         JobCard jc = doc.getJobCardId() == null ? null
             : jobCardRepo.findByIdAndOrgId(doc.getJobCardId(), orgId).orElse(null);
-        Customer customer = jc == null ? null
-            : customerRepo.findByIdAndOrgId(jc.getCustomerId(), orgId).orElse(null);
-        Vehicle vehicle = (jc == null || jc.getVehicleId() == null) ? null
-            : vehicleRepo.findByIdAndOrgId(jc.getVehicleId(), orgId).orElse(null);
-        boolean claimEligible = jc != null && jc.getClaimTypeId() != null;
+        // The document's own link (rev 56) wins; older documents fall back to the job card's.
+        Long customerLinkId = doc.getCustomerId() != null ? doc.getCustomerId() : (jc != null ? jc.getCustomerId() : null);
+        Long vehicleLinkId = doc.getVehicleId() != null ? doc.getVehicleId() : (jc != null ? jc.getVehicleId() : null);
+        Customer customer = customerLinkId == null ? null
+            : customerRepo.findByIdAndOrgId(customerLinkId, orgId).orElse(null);
+        Vehicle vehicle = vehicleLinkId == null ? null
+            : vehicleRepo.findByIdAndOrgId(vehicleLinkId, orgId).orElse(null);
 
         // The document's own manual reference wins; fall back to the linked job card's
         // for a doc that only ever set it there (or was created before these existed).
         String customerName = doc.getCustomerName() != null ? doc.getCustomerName()
             : (customer != null ? customer.getName() : null);
         String vehicleNo = doc.getVehicleNo() != null ? doc.getVehicleNo()
-            : (vehicle != null ? vehicle.getVehicleNo() : null);
+            : (vehicle != null ? vehicle.getVehicleNo() : (jc != null ? jc.getVehicleNoText() : null));
         String invoiceNo = doc.getInvoiceNo() != null ? doc.getInvoiceNo()
             : (jc != null ? jc.getInvoiceNo() : null);
         String dbmId = doc.getDbmId() != null ? doc.getDbmId()
@@ -786,7 +869,8 @@ public class ExpenseDocumentService {
             doc.getReceiverId(),
             receiver != null ? receiver.getName() : null,
             receiver != null ? receiver.getPhone() : null,
-            jc != null ? jc.getCustomerId() : null,
+            customerLinkId,
+            vehicleLinkId,
             customerName,
             vehicleNo,
             invoiceNo,
@@ -796,7 +880,6 @@ public class ExpenseDocumentService {
             doc.getBusinessStatusId(),
             status != null ? status.getName() : null,
             status != null && status.isTriggersClaim(),
-            claimEligible,
             total,
             doc.getCreatedBy(),
             createdByName,
@@ -850,11 +933,6 @@ public class ExpenseDocumentService {
                 (int) attachmentRepo.countByOrgIdAndParentTypeAndParentId(orgId, ParentType.EXPENSE_LINE, l.getId()),
                 l.getCreatedAt());
         }).toList();
-    }
-
-    private String referenceOf(Long orgId, JobCard jc) {
-        String code = branchRepo.findByIdAndOrgId(jc.getBranchId(), orgId).map(Branch::getCode).orElse("?");
-        return JobCardResponse.reference(code, jc.getId());
     }
 
     private static String describe(ExpenseDocument doc) {

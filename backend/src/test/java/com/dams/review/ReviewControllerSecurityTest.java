@@ -3,7 +3,11 @@ package com.dams.review;
 import com.dams.auth.util.JwtUtil;
 import com.dams.config.JwtConfig;
 import com.dams.config.SecurityConfig;
+import com.dams.config.ActingRoleFilter;
 import com.dams.config.TenantFilter;
+import com.dams.branch.repository.BranchRepository;
+import com.dams.user.repository.AppUserRepository;
+import com.dams.user.repository.UserRoleGrantRepository;
 import com.dams.expense.dto.ExpenseDocumentResponse;
 import com.dams.export.controller.ExportController;
 import com.dams.export.service.ExportService;
@@ -40,8 +44,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * but the wrong role must never even reach it. One proof per gate family.
  */
 @WebMvcTest({ReviewController.class, JobCardController.class, ExportController.class})
-@Import({SecurityConfig.class, JwtConfig.class, TenantFilter.class})
+@Import({SecurityConfig.class, JwtConfig.class, TenantFilter.class, ActingRoleFilter.class})
 class ReviewControllerSecurityTest {
+
+    // ActingRoleFilter (rev 55) is part of the security chain; its collaborators are mocked here.
+    @MockBean private AppUserRepository actingUserRepo;
+    @MockBean private UserRoleGrantRepository actingGrantRepo;
+    @MockBean private BranchRepository actingBranchRepo;
 
     @Autowired
     private MockMvc mockMvc;

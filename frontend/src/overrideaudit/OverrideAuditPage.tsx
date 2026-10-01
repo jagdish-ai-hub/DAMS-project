@@ -4,6 +4,7 @@ import { branchesApi, type Branch } from '../api/branches'
 import { usersApi, type TeamUser } from '../api/users'
 import { useAuth } from '../auth/useAuth'
 import { card, ErrorBanner, inputStyle, ghostBtn, Skeleton, inr, fmtDate, fmtDateTime, istToday } from '../shell/ui'
+import { actorLabel } from '../auth/roleLabels'
 import HelpButton from '../help/HelpButton'
 
 /**
@@ -147,7 +148,7 @@ export default function OverrideAuditPage() {
                   {r.lineId ?? r.documentNo ?? '—'}
                 </td>
                 <td style={cell}>{r.branchCode ?? '—'}</td>
-                <td style={cell}>{r.actorName}</td>
+                <td style={cell}>{actorLabel(r.actorName, r.actorRole)}</td>
                 <td style={{ ...cell, fontVariantNumeric: 'tabular-nums', color: 'var(--faint)', textDecoration: 'line-through' }}>{inr(r.amountBefore)}</td>
                 <td style={{ ...cell, fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: 'var(--amber)' }}>{inr(r.amountAfter)}</td>
                 <td style={{ ...cell, fontSize: '0.8rem' }}>{r.reason ?? '—'}</td>

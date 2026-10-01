@@ -24,6 +24,15 @@ public class ExpensePatchRequest {
 
     private Long jobCardId;
 
+    /** Untag the expense from its job card (rev 56 -- the new picker offers "none"). */
+    private Boolean clearJobCard;
+
+    // Real links, same meaning as on CreateExpenseRequest (rev 56).
+    private Long customerId;
+    @Size(max = 160) private String newCustomerName;
+    private Long vehicleId;
+    @Size(max = 20) private String newVehicleNo;
+
     @Size(max = 160) private String customerName;
     @Size(max = 20) private String vehicleNo;
     @Size(max = 60) private String invoiceNo;

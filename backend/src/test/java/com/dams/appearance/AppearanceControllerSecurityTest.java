@@ -7,7 +7,11 @@ import com.dams.common.exception.DamsException;
 import com.dams.common.security.BranchScope;
 import com.dams.config.JwtConfig;
 import com.dams.config.SecurityConfig;
+import com.dams.config.ActingRoleFilter;
 import com.dams.config.TenantFilter;
+import com.dams.branch.repository.BranchRepository;
+import com.dams.user.repository.AppUserRepository;
+import com.dams.user.repository.UserRoleGrantRepository;
 import com.dams.user.entity.Role;
 import io.jsonwebtoken.Claims;
 import org.junit.jupiter.api.Test;
@@ -29,8 +33,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /** The font read is public (login screen); the write is Super Admin only and allowlisted. */
 @WebMvcTest(AppearanceController.class)
-@Import({SecurityConfig.class, JwtConfig.class, TenantFilter.class})
+@Import({SecurityConfig.class, JwtConfig.class, TenantFilter.class, ActingRoleFilter.class})
 class AppearanceControllerSecurityTest {
+
+    // ActingRoleFilter (rev 55) is part of the security chain; its collaborators are mocked here.
+    @MockBean private AppUserRepository actingUserRepo;
+    @MockBean private UserRoleGrantRepository actingGrantRepo;
+    @MockBean private BranchRepository actingBranchRepo;
 
     @Autowired
     private MockMvc mockMvc;

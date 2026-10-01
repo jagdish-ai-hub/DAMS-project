@@ -80,6 +80,10 @@ export const customersApi = {
   get(id: number) {
     return api.get<Customer>(`/api/v1/customers/${id}`)
   },
+  /** A customer's vehicles, filtered by a vehicle-number fragment as the user types. */
+  vehicles(id: number, q: string) {
+    return api.get<VehicleRef[]>(`/api/v1/customers/${id}/vehicles`, { params: q ? { q } : undefined })
+  },
   history(id: number) {
     return api.get<CustomerHistory>(`/api/v1/customers/${id}/history`)
   },

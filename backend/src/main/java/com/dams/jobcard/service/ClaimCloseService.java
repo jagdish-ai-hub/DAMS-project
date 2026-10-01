@@ -1,5 +1,6 @@
 package com.dams.jobcard.service;
 
+import com.dams.common.security.ActingDetails;
 import com.dams.attachment.service.AttachmentService;
 import com.dams.audit.entity.EventType;
 import com.dams.audit.service.AuditService;
@@ -173,7 +174,7 @@ public class ClaimCloseService {
     private AppUser requireFinanceManager(Long orgId) {
         AppUser me = userRepo.findByIdAndOrganization_Id(branchScope.currentUserId(), orgId)
             .orElseThrow(() -> DamsException.forbidden("The signed-in user is not part of this organization"));
-        if (me.getRole() != Role.FINANCE_MANAGER) {
+        if (ActingDetails.effectiveRole(me) != Role.FINANCE_MANAGER) {
             throw DamsException.forbidden("Only a Finance Manager can close a claim");
         }
         return me;

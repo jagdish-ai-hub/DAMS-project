@@ -7,6 +7,50 @@
 
 ## Revision log
 
+- **rev 57 (2026-09-29)** — **Cashier home message boxes.** AGENT.md updated first. `GET /my-entries/inbox`
+  (`CashierInboxService`, no migration): left = QUERIED + recent REJECTED receipts/expenses/cash docs with who/what/when
+  from the audit trail; right = FM pre-approval lifecycle of draft expenses. Badges count `needsAction` items only, derived from
+  current document state. Frontend `InboxBoxes.tsx` in the side gutters of `CashierHomePage` (≥1280px; stacked below).
+  Decisions: Rejected included (7 days, uncounted); unread-style badges yes. Also: rev 56 correction path for an attached
+  customer deferred (second attach refused); Query box open now disables Verify/Approve/Close on both review screens.
+
+- **rev 56 (2026-09-29)** — **Link Expense ↔ Job Card ↔ Customer ↔ Vehicle.** AGENT.md "Linking (rev 56)" and
+  "Job cards may start from an Expense" added first. Full plan in `plans/expense-jobcard-customer-vehicle-link.md`.
+  - `V34__expense_customer_vehicle_link.sql` — `job_card.customer_id` nullable + `vehicle_no_text`;
+    `expense_document.customer_id/vehicle_id`; `customer.created_branch_id`; `audit_event` CHECK +=
+    `JOB_CARD_CUSTOMER_ATTACHED`.
+  - `GET /job-cards?q=` (branch-scoped), `GET /customers/{id}/vehicles`, branch-scoped `GET /customers?q=`,
+    `POST /job-cards/{id}/attach-customer` (set once). Expense create may carry `newJobCard`.
+  - Shared `CustomerCombobox` / `VehicleCombobox` / `JobCardSearch` on Expense, Receipt, job-card create.
+
+- **rev 55 (2026-09-29)** — **Multi-role users + Switch role.** AGENT.md "Acting roles"
+  added first (it previously said "no role-switch toggle anywhere"). Decisions (confirmed):
+  Owner ticks extra roles per user (each with branches); Owner can act as any role at any
+  branch; an acting session is scoped to the one branch picked; attribution stays the real
+  user's id, with `actor_role` on audit events ("Ajay · as Cashier").
+  - `V33__user_role_grant_and_actor_role.sql` — `user_role_grant(org_id, user_id, role,
+    branch_id)` (FM row has null branch), `audit_event.actor_role`, `audit_event` CHECK +=
+    `ROLE_SWITCHED`.
+  - JWT `role` claim = **acting role**; new claims `primaryRole`, `actingBranchId`. So
+    `@PreAuthorize`, `BranchScope.currentRole()` and every frontend `user.role` gate follow
+    the switch. `ActingRoleFilter` re-checks the grant on each request (revoked → 401).
+  - Guards switch from `me.getRole()`/`me.getHomeBranchId()` to
+    `branchScope.currentRole()`/`branchScope.cashierBranchId(me)`.
+  - Endpoints: `GET /auth/switch-options`, `POST /auth/switch-role`; `UserRequest/Response`
+    gain `roleGrants`.
+  - Frontend: Switch role button beside Help, `RoleSwitchModal` (branch → role),
+    `ActingRoleBanner`, Team & Branches extra-role picker. History / Override Audit show
+    "Ajay · as Cashier" from `actorRole` (claim-close overrides carry none — they don't go
+    through `audit_event`).
+  - Decision made while building: a session acting as **Finance Manager stays org-wide**
+    (FM is an org-wide role); the picked branch is display-only there. AGENT.md updated.
+  Verified: `mvn test` 301 green (261 existing + 40 new: `AuthServiceSwitchTest`,
+  `ActingRoleScopeTest`, `ActingRoleFilterTest`, `UserServiceTest` +7; 4 Docker-only skips);
+  frontend `tsc`, `eslint`, `vitest` (9) clean; production build has the button, banner text
+  and both endpoints in `dist/assets/*.js`, and the button carries no responsive-hide class.
+  **Not yet checked on the live Neon DB or in a browser** — V33 applies through CI/CD, and the
+  Neon MCP connection was down this session.
+
 - **rev 54 (2026-09-27)** — **"Requires Finance Approval" expense status.** A business
   status can now send an expense through the rev 53 FM pre-approval flow even when every
   line is within its limit. AGENT.md closing rule #2 extended first. Decision (confirmed):
@@ -1437,6 +1481,9 @@
 **UserBranchAccess** *(join table — ACCOUNTANT only)*
 `user_id` BIGINT, `branch_id` BIGINT — PK `(user_id, branch_id)`
 
+**UserRoleGrant** *(rev 55 — extra roles a user may switch into)*
+`id` BIGINT PK, `org_id`, `user_id` → `app_user`, `role` ∈ {FINANCE_MANAGER, ACCOUNTANT, CASHIER}, `branch_id` nullable → `branch` (null only for FINANCE_MANAGER) — UNIQUE `(user_id, role, branch_id)`. Never for OWNER/SUPER_ADMIN or the user's primary role.
+
 **PlatformSetting** *(rev 50 — platform-wide key/value, Super Admin-owned)*
 `key` VARCHAR PK, `value` VARCHAR NOT NULL, `updated_at`, `updated_by` BIGINT nullable → `app_user`. Only key today: `ui.font` ∈ {`plex`, `inter`} (default `plex`).
 
@@ -1585,6 +1632,8 @@ Flyway callback / profile guard and instead runs a masters-only seed.
 | V29 | `platform_setting` (key/value, no `org_id`); seeds `ui.font = plex` *(rev 50)* | polish ✅ |
 | V31 | `expense_document` pre-approval columns (`pre_approval_status` CHECK, `pre_approved_amount/_by/_at`, `approval_requested_at`) + pending partial index; `audit_event` CHECK += `APPROVAL_REQUESTED`, `PRE_APPROVED` *(rev 53)* | expense pre-approval ✅ |
 | V32 | `expense_business_status.requires_fm_approval` + a "Requires Finance Approval" status per org *(rev 54)* | expense pre-approval ✅ |
+| V33 | `user_role_grant`; `audit_event.actor_role`; `audit_event` CHECK += `ROLE_SWITCHED` *(rev 55)* | role switching |
+| V34 | `job_card.customer_id` nullable + `vehicle_no_text`; `expense_document.customer_id/vehicle_id`; `customer.created_branch_id`; `audit_event` CHECK += `JOB_CARD_CUSTOMER_ATTACHED` *(rev 56)* | expense/customer/vehicle linking |
 
 ---
 
@@ -1633,7 +1682,10 @@ PATCH never deletes — `active = false` only.
 
 ### Customer / Vehicle / Job Card
 ```
-GET    /api/v1/customers                     # ?q= search
+GET    /api/v1/customers                     # ?q= search (branch-scoped, rev 56)
+GET    /api/v1/customers/{id}/vehicles       # ?q= (rev 56)
+GET    /api/v1/job-cards                     # ?q=&customerId=&vehicleId= branch-scoped search (rev 56)
+POST   /api/v1/job-cards/{id}/attach-customer # set once (rev 56)
 POST   /api/v1/customers
 GET    /api/v1/customers/{id}
 GET    /api/v1/customers/{id}/history
@@ -1790,7 +1842,7 @@ Each stage adds its own indexes for the query paths it introduces (search, my-en
 - New Expense always creates a fresh document — no one-open-doc invariant (nothing aggregates toward a figure the way Pending Amount does).
 - `over_limit` — stored, recomputed on every line change (`amount > expense_sub_category.limit_amount`); flags for FM approval, never blocks. Per-line `overLimit` in the response.
 - Lines addable until CLOSED (Stage 7) or REJECTED. `ExpenseWorkflowStatus` adds `CLOSED`.
-- Transfer to Claim — endpoint **and** the plain status path require the expense to sit on a claim-category job card (`receive_category.is_claim`), else 400. Sets the `triggers_claim` status; `TRANSFERRED_TO_CLAIM` audit event.
+- Transfer to Claim — **any** expense may be transferred (no job card / claim-type requirement — promotional-activity claims have no job card; AGENT.md updated). Blocked only when the document is REJECTED / CLOSED or awaiting FM approval. Endpoint and the plain status path behave the same. Sets the `triggers_claim` status; `TRANSFERRED_TO_CLAIM` audit event. (Earlier revs required a claim-type job card — `requireClaimEligible` and the `claimEligible` response flag were removed.)
 - Doc numbers — `{branchCode}-{MONKEY}-E-{seq:03d}` (`OOR-AUG26-E-001`), on submit, gap-free (`DocumentNumberService`, `DocType.E`); line ids `{doc}-L{n}`.
 - Cross-branch write block — `ExpensePostingGuard` (mirrors `ReceivePaymentGuard`): `role == CASHIER`, home-branch only; a `jobCardId` must be in that branch. 409 names both branches.
 - `GET /api/v1/my-entries` now merges receipts + expenses (`kind`), newest-first, `overLimit` flag. `SearchService` matches receive + expense `document_no` (branch-scoped → customer).

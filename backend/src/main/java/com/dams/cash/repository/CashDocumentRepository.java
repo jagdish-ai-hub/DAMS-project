@@ -24,6 +24,10 @@ public interface CashDocumentRepository extends JpaRepository<CashDocument, Long
     /** My Entries — the caller's own cash documents, newest first. */
     List<CashDocument> findByOrgIdAndCreatedByOrderByCreatedAtDesc(Long orgId, Long createdBy, Limit limit);
 
+    /** Cashier inbox (rev 57) — the caller's documents currently in one of these states. */
+    List<CashDocument> findByOrgIdAndCreatedByAndWorkflowStatusIn(Long orgId, Long createdBy,
+        java.util.Collection<com.dams.cash.entity.CashWorkflowStatus> statuses);
+
     /** Accountant review queue — cash movements in one workflow state within the caller's branches, oldest first. */
     List<CashDocument> findByOrgIdAndWorkflowStatusAndBranchIdInOrderBySubmittedAtAscIdAsc(
         Long orgId, CashWorkflowStatus workflowStatus, Collection<Long> branchIds);

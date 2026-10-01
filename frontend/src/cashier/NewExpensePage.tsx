@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { mastersApi, type MasterRow } from '../api/masters'
 import { customersApi } from '../api/customers'
+import { jobCardsApi, type JobCard, type JobCardSearchHit } from '../api/jobCards'
+import { BusinessStatusSelect } from '../shared/BusinessStatusSelect'
+import { CustomerCombobox, JobCardSearch, VehicleCombobox } from '../shared/PartyPickers'
 import {
   expensesApi,
   type CreateExpenseRequest,
@@ -61,7 +64,12 @@ function apiError(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback
 }
 
-type JobCardOpt = { id: number; reference: string; categoryName: string | null }
+/** Adapt a full job card to the picker row shape. */
+const hitFromJobCard = (j: JobCard): JobCardSearchHit => ({
+  id: j.id, reference: j.reference, branchId: j.branchId, branchCode: j.branchCode ?? '',
+  customerId: j.customerId, customerName: j.customerName, vehicleId: j.vehicleId, vehicleNo: j.vehicleNo,
+  dbmId: j.dbmId, invoiceNo: j.invoiceNo, categoryId: j.categoryId, createdAt: j.createdAt,
+})
 
 export default function NewExpensePage() {
   const navigate = useNavigate()
@@ -75,15 +83,22 @@ export default function NewExpensePage() {
   const [modes, setModes] = useState<MasterRow[]>([])
   const [banks, setBanks] = useState<MasterRow[]>([])
   const [statuses, setStatuses] = useState<MasterRow[]>([])
-  const [jobCardOpts, setJobCardOpts] = useState<JobCardOpt[]>([])
 
   // header
   const [receiverName, setReceiverName] = useState('')
   const [customerName, setCustomerName] = useState('')
+  const [customerId, setCustomerId] = useState<number | null>(null)
   const [vehicleNo, setVehicleNo] = useState('')
+  const [vehicleId, setVehicleId] = useState<number | null>(null)
+  // The chosen job card (link) or a brand-new one to open with this expense (rev 56).
+  const [jcPick, setJcPick] = useState<JobCardSearchHit | null>(null)
+  const [newJc, setNewJc] = useState(false)
+  const [jcCategories, setJcCategories] = useState<MasterRow[]>([])
+  const [jcStatuses, setJcStatuses] = useState<MasterRow[]>([])
+  const [jcCategoryId, setJcCategoryId] = useState<number | ''>('')
+  const [jcStatusId, setJcStatusId] = useState<number | ''>('')
   const [dbmId, setDbmId] = useState('')
   const [invoiceNo, setInvoiceNo] = useState('')
-  const [jobCardId, setJobCardId] = useState<number | ''>(prefillJobCardId ?? '')
   const [expenseCategoryId, setExpenseCategoryId] = useState<number | ''>('')
   const [businessStatusId, setBusinessStatusId] = useState<number | ''>('')
 
@@ -148,20 +163,58 @@ export default function NewExpensePage() {
     setLines((prev) => prev.map((l) => (l.expenseModeId === '' ? { ...l, expenseModeId: firstMode } : l)))
   }, [modes])
 
-  // customer context → offer that customer's job cards
+  // customer context (?customerId=) → start with that customer; the job-card search narrows to them
   useEffect(() => {
-    if (!prefillCustomerId) return
-    customersApi.history(prefillCustomerId)
+    if (!prefillCustomerId || editDocId) return
+    customersApi.get(prefillCustomerId)
       .then(({ data }) => {
-        setJobCardOpts(data.jobCards.map((j) => ({ id: j.id, reference: j.reference, categoryName: j.categoryName })))
-        if (!editDocId) {
-          setCustomerName(data.customerName)
-          setVehicleNo(data.vehicles[0]?.vehicleNo ?? '')
-          setNotice(`New expense in ${data.customerName}'s context — pick the job card it belongs to, or leave it as branch overhead.`)
-        }
+        setCustomerId(data.id)
+        setCustomerName(data.name)
+        setNotice(`New expense in ${data.name}'s context — pick the job card it belongs to, or leave it as branch overhead.`)
       })
       .catch(() => {})
   }, [prefillCustomerId, editDocId])
+
+  // ?jobCardId= pre-selects one job card
+  useEffect(() => {
+    if (!prefillJobCardId || editDocId) return
+    jobCardsApi.get(prefillJobCardId)
+      .then(({ data }) => pickJobCard(hitFromJobCard(data)))
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillJobCardId, editDocId])
+
+  // masters for the "new job card" mini-form, loaded the first time it is opened
+  useEffect(() => {
+    if (!newJc || jcCategories.length) return
+    Promise.all([mastersApi.list('receive-categories'), mastersApi.listSelectable('receive-statuses')])
+      .then(([c, st]) => {
+        const cats = c.data.filter((x) => x.active)
+        setJcCategories(cats)
+        setJcStatuses(st.data.filter((x) => x.active))
+        setJcCategoryId((prev) => (prev === '' ? cats[0]?.id ?? '' : prev))
+        setJcStatusId((prev) => (prev === '' ? st.data.find((x) => x.active)?.id ?? '' : prev))
+      })
+      .catch((e) => setError(apiError(e, 'Could not load the job-card options.')))
+  }, [newJc, jcCategories.length])
+
+  /** Choosing a job card fills (and locks) the customer / vehicle / DBM it already knows. */
+  function pickJobCard(hit: JobCardSearchHit | null) {
+    setJcPick(hit)
+    setNewJc(false)
+    if (!hit) return
+    if (hit.customerId != null) {
+      setCustomerId(hit.customerId)
+      setCustomerName(hit.customerName ?? '')
+    }
+    if (hit.vehicleId != null) {
+      setVehicleId(hit.vehicleId)
+      setVehicleNo(hit.vehicleNo ?? '')
+    } else if (hit.vehicleNo && !vehicleNo.trim()) {
+      setVehicleNo(hit.vehicleNo)
+    }
+    if (hit.dbmId) setDbmId(hit.dbmId)
+  }
 
   // edit / fix-and-resubmit load
   useEffect(() => {
@@ -172,16 +225,16 @@ export default function NewExpensePage() {
         setLoadedDoc(data)
         setReceiverName(data.receiverName ?? '')
         setCustomerName(data.customerName ?? '')
+        setCustomerId(data.customerId)
         setVehicleNo(data.vehicleNo ?? '')
+        setVehicleId(data.vehicleId)
         setDbmId(data.dbmId ?? '')
         setInvoiceNo(data.invoiceNo ?? '')
-        setJobCardId(data.jobCardId ?? '')
         setExpenseCategoryId(data.expenseCategoryId)
         setBusinessStatusId(data.businessStatusId)
-        if (data.jobCardId && data.jobCardReference) {
-          setJobCardOpts((prev) => (prev.some((o) => o.id === data.jobCardId)
-            ? prev
-            : [...prev, { id: data.jobCardId!, reference: data.jobCardReference!, categoryName: null }]))
+        if (data.jobCardId) {
+          // The real job card decides what is locked (a customerless one leaves the customer editable).
+          jobCardsApi.get(data.jobCardId).then((r) => setJcPick(hitFromJobCard(r.data))).catch(() => {})
         }
         setLines(
           data.lines.length
@@ -262,6 +315,7 @@ export default function NewExpensePage() {
   function validate(requireLine: boolean): string | null {
     if (!receiverName.trim()) return 'Receiver Name is required'
     if (expenseCategoryId === '' || businessStatusId === '') return 'Category and status are required'
+    if (newJc && !jcPick && (jcCategoryId === '' || jcStatusId === '')) return 'Pick the new job card\'s category and status'
     if (requireLine && buildLines().length === 0) return 'Add at least one expense row with an amount'
     for (const l of lines) {
       if (l.amount !== '' && !(Number(l.amount) > 0)) return 'Line amount must be greater than 0'
@@ -278,7 +332,15 @@ export default function NewExpensePage() {
 
   function buildBody(submit: boolean): CreateExpenseRequest {
     return {
-      jobCardId: jobCardId === '' ? undefined : Number(jobCardId),
+      jobCardId: jcPick?.id,
+      // Picked → link by id; typed and unmatched → the server creates it on save.
+      customerId: customerId ?? undefined,
+      newCustomerName: customerId == null && customerName.trim() ? customerName.trim() : undefined,
+      vehicleId: vehicleId ?? undefined,
+      newVehicleNo: vehicleId == null && vehicleNo.trim() ? vehicleNo.trim() : undefined,
+      newJobCard: newJc && !jcPick && jcCategoryId !== '' && jcStatusId !== ''
+        ? { categoryId: Number(jcCategoryId), businessStatusId: Number(jcStatusId) }
+        : undefined,
       customerName: customerName.trim() || undefined,
       vehicleNo: vehicleNo.trim() || undefined,
       dbmId: dbmId.trim() || undefined,
@@ -438,7 +500,12 @@ export default function NewExpensePage() {
   async function patchHeader() {
     if (!loadedDoc) return
     await expensesApi.patch(loadedDoc.id, {
-      jobCardId: jobCardId === '' ? undefined : Number(jobCardId),
+      jobCardId: jcPick && jcPick.id !== loadedDoc.jobCardId ? jcPick.id : undefined,
+      clearJobCard: !jcPick && loadedDoc.jobCardId != null ? true : undefined,
+      customerId: customerId ?? undefined,
+      newCustomerName: customerId == null && customerName.trim() ? customerName.trim() : undefined,
+      vehicleId: vehicleId ?? undefined,
+      newVehicleNo: vehicleId == null && vehicleNo.trim() ? vehicleNo.trim() : undefined,
       customerName: customerName.trim(),
       vehicleNo: vehicleNo.trim(),
       dbmId: dbmId.trim(),
@@ -623,7 +690,6 @@ export default function NewExpensePage() {
     !awaitingApproval &&
     inEditMode &&
     loadedDoc != null &&
-    loadedDoc.claimEligible &&
     !loadedDoc.businessStatusTriggersClaim &&
     loadedDoc.workflowStatus !== 'REJECTED' &&
     loadedDoc.workflowStatus !== 'CLOSED'
@@ -720,31 +786,67 @@ export default function NewExpensePage() {
                   style={inputStyle}
                 />
               </Row>
+              <Row label="Job Card (Ooriba ID)">
+                <div>
+                  <JobCardSearch
+                    selected={jcPick}
+                    customerId={customerId}
+                    vehicleId={vehicleId}
+                    onPick={pickJobCard}
+                    onNew={editDocId ? undefined : () => setNewJc(true)}
+                  />
+                  {newJc && !jcPick && (
+                    <div style={{ marginTop: 8, padding: 10, border: '1.5px dashed var(--line)', borderRadius: 8 }}>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, marginBottom: 6 }}>
+                        New job card — opened with this expense
+                        <button type="button" onClick={() => setNewJc(false)}
+                          style={{ float: 'right', border: 0, background: 'transparent', cursor: 'pointer', color: 'var(--muted)' }}>Cancel</button>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <select value={jcCategoryId} onChange={(e) => setJcCategoryId(Number(e.target.value))} style={inputStyle}>
+                          {jcCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                        <BusinessStatusSelect statuses={jcStatuses} value={jcStatusId} onChange={setJcStatusId} />
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: 6 }}>
+                        The customer is optional — a Receipt can link it later.
+                      </div>
+                    </div>
+                  )}
+                  {!jcPick && !newJc && (
+                    <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: 4 }}>
+                      Leave empty for a branch-overhead expense.
+                    </div>
+                  )}
+                </div>
+              </Row>
               <Row label="Customer Name">
-                <input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Type a customer name" style={inputStyle} />
+                <CustomerCombobox
+                  name={customerName}
+                  customerId={customerId}
+                  locked={jcPick?.customerId != null}
+                  onChange={(name, id) => {
+                    setCustomerName(name)
+                    if (id !== customerId) { setVehicleId(null); if (id != null) setVehicleNo('') }
+                    setCustomerId(id)
+                  }}
+                />
               </Row>
               <Row label="Vehicle #">
-                <input value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value)} placeholder="OD05CA4177" style={inputStyle} />
+                <VehicleCombobox
+                  vehicleNo={vehicleNo}
+                  vehicleId={vehicleId}
+                  customerId={customerId}
+                  locked={jcPick?.vehicleId != null}
+                  onChange={(no, id) => { setVehicleNo(no); setVehicleId(id) }}
+                  onOwnerFound={(v) => { setCustomerId(v.customerId); setCustomerName(v.customerName ?? '') }}
+                />
               </Row>
               <Row label="Job Card / DBM">
                 <input value={dbmId} onChange={(e) => setDbmId(e.target.value)} placeholder="4009941587" style={inputStyle} />
               </Row>
               <Row label="Invoice #">
                 <input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="7731122600388" style={inputStyle} />
-              </Row>
-              <Row label="Ooriba ID">
-                <select
-                  value={jobCardId}
-                  onChange={(e) => setJobCardId(e.target.value === '' ? '' : Number(e.target.value))}
-                  style={inputStyle}
-                >
-                  <option value="">— none (branch overhead) —</option>
-                  {jobCardOpts.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.reference}{o.categoryName ? ` · ${o.categoryName}` : ''}
-                    </option>
-                  ))}
-                </select>
               </Row>
               <Row label="Expenses Category">
                 <select value={expenseCategoryId} onChange={(e) => setExpenseCategoryId(Number(e.target.value))} style={inputStyle}>

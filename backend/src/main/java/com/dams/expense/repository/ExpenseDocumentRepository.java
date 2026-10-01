@@ -18,6 +18,14 @@ public interface ExpenseDocumentRepository extends JpaRepository<ExpenseDocument
     /** My Entries — the caller's own documents, newest first. */
     List<ExpenseDocument> findByOrgIdAndCreatedByOrderByCreatedAtDesc(Long orgId, Long createdBy, Limit limit);
 
+    /** Cashier inbox (rev 57) — the caller's documents currently in one of these states. */
+    List<ExpenseDocument> findByOrgIdAndCreatedByAndWorkflowStatusIn(Long orgId, Long createdBy,
+        Collection<com.dams.expense.entity.ExpenseWorkflowStatus> statuses);
+
+    /** Cashier inbox (rev 57) — the caller's drafts that have an FM pre-approval request in flight or answered. */
+    List<ExpenseDocument> findByOrgIdAndCreatedByAndWorkflowStatusAndPreApprovalStatusIsNotNull(Long orgId, Long createdBy,
+        com.dams.expense.entity.ExpenseWorkflowStatus status);
+
     /** Universal search — a document number match resolves to its job card / customer. */
     List<ExpenseDocument> findByOrgIdAndDocumentNoIgnoreCase(Long orgId, String documentNo);
 

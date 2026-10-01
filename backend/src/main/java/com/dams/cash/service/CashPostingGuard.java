@@ -1,5 +1,6 @@
 package com.dams.cash.service;
 
+import com.dams.common.security.ActingDetails;
 import com.dams.branch.entity.Branch;
 import com.dams.branch.repository.BranchRepository;
 import com.dams.common.exception.DamsException;
@@ -35,10 +36,10 @@ public class CashPostingGuard {
     /** Assert the caller may create or change cash movements / close the day. Returns them. */
     public AppUser requireCashier(Long orgId) {
         AppUser me = me(orgId);
-        if (me.getRole() != Role.CASHIER) {
+        if (ActingDetails.effectiveRole(me) != Role.CASHIER) {
             throw DamsException.forbidden("Only a cashier can record cash movements or close the day");
         }
-        if (me.getHomeBranchId() == null) {
+        if (ActingDetails.effectiveHomeBranch(me) == null) {
             throw DamsException.badRequest("Your account has no home branch — ask an Owner to set one");
         }
         return me;
@@ -47,7 +48,7 @@ public class CashPostingGuard {
     /** Assert the caller is an Accountant who may set the opening for {@code branchId}. Returns them. */
     public AppUser requireAccountantForBranch(Long orgId, Long branchId) {
         AppUser me = me(orgId);
-        if (me.getRole() != Role.ACCOUNTANT) {
+        if (ActingDetails.effectiveRole(me) != Role.ACCOUNTANT) {
             throw DamsException.forbidden("Only an accountant can set a branch's opening cash balance");
         }
         Branch branch = branchRepo.findByIdAndOrgId(branchId, orgId)
@@ -64,11 +65,11 @@ public class CashPostingGuard {
      */
     public Long resolveViewBranch(Long orgId, Long requestedBranchId) {
         AppUser me = me(orgId);
-        if (me.getRole() == Role.CASHIER) {
-            if (me.getHomeBranchId() == null) {
+        if (ActingDetails.effectiveRole(me) == Role.CASHIER) {
+            if (ActingDetails.effectiveHomeBranch(me) == null) {
                 throw DamsException.badRequest("Your account has no home branch — ask an Owner to set one");
             }
-            return me.getHomeBranchId();
+            return ActingDetails.effectiveHomeBranch(me);
         }
         if (requestedBranchId == null) {
             throw DamsException.badRequest("branchId is required");

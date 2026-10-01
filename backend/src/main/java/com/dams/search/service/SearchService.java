@@ -113,6 +113,9 @@ public class SearchService {
             if (!branchAllowed(allowedBranches, j.getBranchId())) {
                 continue;
             }
+            if (j.getCustomerId() == null) {
+                continue; // opened from an Expense, no customer yet -- the job-card picker finds these
+            }
             boolean invoiceHit = j.getInvoiceNo() != null && j.getInvoiceNo().toLowerCase().contains(lowerQ);
             matchByCustomer.putIfAbsent(j.getCustomerId(), invoiceHit ? "Invoice" : "Job Card");
         }
@@ -124,6 +127,7 @@ public class SearchService {
                 continue;
             }
             jobCardRepo.findByIdAndOrgId(d.getJobCardId(), orgId)
+                .filter(j -> j.getCustomerId() != null)
                 .ifPresent(j -> matchByCustomer.putIfAbsent(j.getCustomerId(), "Receipt"));
         }
         for (ExpenseDocument d : expenseDocumentRepo.findByOrgIdAndDocumentNoContainingIgnoreCase(orgId, q)) {
@@ -131,6 +135,7 @@ public class SearchService {
                 continue;
             }
             jobCardRepo.findByIdAndOrgId(d.getJobCardId(), orgId)
+                .filter(j -> j.getCustomerId() != null)
                 .ifPresent(j -> matchByCustomer.putIfAbsent(j.getCustomerId(), "Expense"));
         }
 

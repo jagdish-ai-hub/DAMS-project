@@ -131,7 +131,7 @@ public class AiOpsService {
                 .collect(Collectors.joining(", "));
             String branchCode = codes.getOrDefault(jc.getBranchId(), "");
             insights.add(new ClaimInsight(primaryNo, branchCode,
-                customers.getOrDefault(jc.getCustomerId(), "Customer"),
+                jc.getCustomerId() == null ? "Customer" : customers.getOrDefault(jc.getCustomerId(), "Customer"),
                 amount, ageDays, bucket, draftFollowUp(branchCode, jc, amount, ageDays, docNos)));
         }
         insights.sort((left, right) -> Integer.compare(right.ageDays(), left.ageDays()));

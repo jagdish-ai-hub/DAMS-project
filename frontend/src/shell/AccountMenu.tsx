@@ -1,16 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
-import type { Role } from '../auth/AuthContext'
+import { ROLE_LABEL } from '../auth/roleLabels'
 import { useExitGhost } from './motion'
-
-const ROLE_LABEL: Record<Role, string> = {
-  SUPER_ADMIN: 'Super Admin',
-  OWNER: 'Owner',
-  FINANCE_MANAGER: 'Finance Manager',
-  ACCOUNTANT: 'Accountant',
-  CASHIER: 'Cashier',
-}
 
 /**
  * Topbar account menu — name, role, branch context, and Logout.
@@ -139,7 +131,9 @@ export default function AccountMenu() {
           <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--line)' }}>
             <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{user.name}</div>
             <div style={{ fontSize: '0.76rem', color: 'var(--muted)', marginTop: 2 }}>
-              {ROLE_LABEL[user.role]} · {branchContext}
+              {user.isActing
+                ? `${ROLE_LABEL[user.primaryRole]} · acting as ${ROLE_LABEL[user.role]}${user.actingBranchLabel ? ` (${user.actingBranchLabel})` : ''}`
+                : `${ROLE_LABEL[user.role]} · ${branchContext}`}
             </div>
             {user.orgId != null && (
               <div style={{ fontSize: '0.72rem', color: 'var(--faint)', marginTop: 2 }}>

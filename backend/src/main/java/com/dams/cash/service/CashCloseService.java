@@ -1,5 +1,6 @@
 package com.dams.cash.service;
 
+import com.dams.common.security.ActingDetails;
 import com.dams.audit.entity.EventType;
 import com.dams.audit.service.AuditService;
 import com.dams.branch.entity.Branch;
@@ -141,7 +142,7 @@ public class CashCloseService {
     public CashDayCloseResponse closeDay(CloseDayRequest request) {
         Long orgId = TenantContext.requireOrgId();
         AppUser me = guard.requireCashier(orgId);
-        Long branchId = me.getHomeBranchId();
+        Long branchId = ActingDetails.effectiveHomeBranch(me);
         LocalDate closeDate = request.getCloseDate();
 
         if (closeDate.isAfter(OrgTime.today())) {

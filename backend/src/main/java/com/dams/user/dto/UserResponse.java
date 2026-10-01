@@ -22,6 +22,8 @@ public record UserResponse(
     Long homeBranchId,
     List<Long> branchIds,
     String branchAccessLabel,
+    List<RoleGrantDto> roleGrants,   // extra switchable roles (rev 55); null when none
+    String extraRolesLabel,          // e.g. "Cashier (OOR), Finance Manager"; null when none
     Instant createdAt,
     String inviteLink   // only populated on create
 ) {

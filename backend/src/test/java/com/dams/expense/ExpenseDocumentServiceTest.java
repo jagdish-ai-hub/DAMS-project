@@ -107,6 +107,8 @@ class ExpenseDocumentServiceTest {
     @Mock private AuditService auditService;
     @Mock private com.dams.audit.service.DocumentHistoryService documentHistoryService;
     @Mock private com.dams.common.security.BranchScope branchScope;
+    @Mock private com.dams.customer.service.PartyResolver partyResolver;
+    @Mock private com.dams.jobcard.service.JobCardService jobCardService;
 
     private ExpenseDocumentService service;
 
@@ -115,9 +117,12 @@ class ExpenseDocumentServiceTest {
         service = new ExpenseDocumentService(expenseDocumentRepo, expenseLineRepo, receiverRepo, jobCardRepo,
             customerRepo, vehicleRepo, branchRepo, expenseCategoryRepo, subCategoryRepo, expenseModeRepo,
             statusRepo, bankRepo, userRepo, attachmentRepo, documentNumberService,
-            postingGuard, cashDateLock, auditService, documentHistoryService, branchScope);
+            postingGuard, cashDateLock, auditService, documentHistoryService, branchScope,
+            partyResolver, jobCardService);
         TenantContext.setOrgId(ORG);
         lenient().when(branchScope.canSeeBranch(anyLong())).thenReturn(true);
+        lenient().when(partyResolver.resolve(any(), any(), any(), any(), any(), any(), any()))
+            .thenReturn(new com.dams.customer.service.PartyResolver.Party(null, null, null));
 
         lenient().when(postingGuard.requireCanPost(eq(ORG), any())).thenReturn(cashier());
         lenient().when(receiverRepo.findByIdAndOrgId(RECEIVER_ID, ORG)).thenReturn(Optional.of(receiver()));
@@ -299,14 +304,32 @@ class ExpenseDocumentServiceTest {
     }
 
     @Test
-    void transferToClaim_isRejected_whenTheJobCardIsNotAClaimCategory() {
+    void transferToClaim_isAllowed_whenTheJobCardIsNotAClaimJobCard() {
         ExpenseDocument doc = submittedDoc(JC_PLAIN);
         when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(doc));
+        when(statusRepo.findByOrgIdAndTriggersClaimTrue(ORG))
+            .thenReturn(List.of(status(CLAIM_STATUS_ID, true)));
 
-        assertThatThrownBy(() -> service.transferToClaim(DOC_ID))
-            .isInstanceOf(DamsException.class)
-            .hasMessageContaining("not a claim job card");
-        verify(auditService, never()).recordUserEvent(any(), any(), any(), eq(EventType.TRANSFERRED_TO_CLAIM), any(), any());
+        service.transferToClaim(DOC_ID);
+
+        assertThat(doc.getBusinessStatusId()).isEqualTo(CLAIM_STATUS_ID);
+        verify(auditService).recordUserEvent(eq("ExpenseDocument"), eq(DOC_ID), any(),
+            eq(EventType.TRANSFERRED_TO_CLAIM), eq(CASHIER_ID), any());
+    }
+
+    @Test
+    void transferToClaim_isAllowed_whenTheExpenseHasNoJobCard() {
+        ExpenseDocument doc = submittedDoc(JC_PLAIN);
+        doc.setJobCardId(null);   // e.g. a promotional activity — branch overhead the OEM reimburses
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(doc));
+        when(statusRepo.findByOrgIdAndTriggersClaimTrue(ORG))
+            .thenReturn(List.of(status(CLAIM_STATUS_ID, true)));
+
+        service.transferToClaim(DOC_ID);
+
+        assertThat(doc.getBusinessStatusId()).isEqualTo(CLAIM_STATUS_ID);
+        verify(auditService).recordUserEvent(eq("ExpenseDocument"), eq(DOC_ID), any(),
+            eq(EventType.TRANSFERRED_TO_CLAIM), eq(CASHIER_ID), any());
     }
 
     @Test

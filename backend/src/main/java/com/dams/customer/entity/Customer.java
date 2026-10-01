@@ -35,6 +35,10 @@ public class Customer {
     @Column(length = 32)
     private String phone;
 
+    /** Branch whose user created the customer (rev 56) — lets branch-scoped search find one with no job card yet. */
+    @Column(name = "created_branch_id")
+    private Long createdBranchId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 }

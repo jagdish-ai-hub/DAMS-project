@@ -1,6 +1,7 @@
 package com.dams.jobcard.repository;
 
 import com.dams.jobcard.entity.JobCard;
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -36,6 +37,41 @@ public interface JobCardRepository extends JpaRepository<JobCard, Long> {
                 or (j.dbmId is not null and lower(j.dbmId) like lower(concat('%', :q, '%'))) )
         """)
     List<JobCard> search(@Param("orgId") Long orgId, @Param("q") String q, @Param("idQ") Long idQ);
+
+    /**
+     * Picker search (rev 56). Branch scope is applied here, not after the fact, so the limit is
+     * honest: {@code allBranches} true = unrestricted, else {@code branchIds} (never empty).
+     * {@code qBlank} lists the newest cards. {@code qLike} is a lower-cased %text% pattern and
+     * {@code vLike} a %NORMALISEDVEHICLE% pattern (a never-matching value when q has none).
+     */
+    @Query("""
+        select j from JobCard j
+        left join Customer c on c.id = j.customerId
+        left join Vehicle v on v.id = j.vehicleId
+        where j.orgId = :orgId
+          and (:allBranches = true or j.branchId in :branchIds)
+          and (:customerId is null or j.customerId = :customerId)
+          and (:vehicleId is null or j.vehicleId = :vehicleId)
+          and ( :qBlank = true
+                or (:idQ is not null and j.id = :idQ)
+                or (c.name is not null and lower(c.name) like :qLike)
+                or (c.phone is not null and c.phone like :qLike)
+                or (v.vehicleNo is not null and v.vehicleNo like :vLike)
+                or (j.vehicleNoText is not null and j.vehicleNoText like :vLike)
+                or (j.dbmId is not null and lower(j.dbmId) like :qLike)
+                or (j.invoiceNo is not null and lower(j.invoiceNo) like :qLike) )
+        order by j.createdAt desc, j.id desc
+        """)
+    List<JobCard> searchForPicker(@Param("orgId") Long orgId,
+                                  @Param("allBranches") boolean allBranches,
+                                  @Param("branchIds") Collection<Long> branchIds,
+                                  @Param("customerId") Long customerId,
+                                  @Param("vehicleId") Long vehicleId,
+                                  @Param("qBlank") boolean qBlank,
+                                  @Param("qLike") String qLike,
+                                  @Param("vLike") String vLike,
+                                  @Param("idQ") Long idQ,
+                                  Limit limit);
 
     /** Super Admin org-purge only. */
     long deleteByOrgId(Long orgId);

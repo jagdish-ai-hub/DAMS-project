@@ -129,7 +129,7 @@ public class MyEntriesService {
 
         return docs.stream().map(doc -> {
             JobCard jc = jobCards.get(doc.getJobCardId());
-            Customer customer = jc != null ? customers.get(jc.getCustomerId()) : null;
+            Customer customer = jc != null && jc.getCustomerId() != null ? customers.get(jc.getCustomerId()) : null;
             Branch branch = branches.get(doc.getBranchId());
             List<SettlementLine> lines = linesByDoc.getOrDefault(doc.getId(), List.of());
             BigDecimal total = lines.stream().map(SettlementLine::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);

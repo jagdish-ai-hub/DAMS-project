@@ -4,6 +4,8 @@ import com.dams.auth.dto.AcceptInviteRequest;
 import com.dams.auth.dto.ChangePasswordRequest;
 import com.dams.auth.dto.LoginRequest;
 import com.dams.auth.dto.LoginResponse;
+import com.dams.auth.dto.SwitchOptionsResponse;
+import com.dams.auth.dto.SwitchRoleRequest;
 import com.dams.auth.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -11,6 +13,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -37,6 +40,21 @@ public class AuthController {
     @Operation(summary = "Accept an invite, set a password, and log in")
     public ResponseEntity<LoginResponse> acceptInvite(@Valid @RequestBody AcceptInviteRequest request) {
         return ResponseEntity.ok(authService.acceptInvite(request));
+    }
+
+    @GetMapping("/switch-options")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "Branches and roles the caller may switch into (Owner: any; others: Owner-granted)")
+    public ResponseEntity<SwitchOptionsResponse> switchOptions(Authentication authentication) {
+        return ResponseEntity.ok(authService.switchOptions((Long) authentication.getPrincipal()));
+    }
+
+    @PostMapping("/switch-role")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "Switch into a granted role at a branch (or back to your own) — returns a new token")
+    public ResponseEntity<LoginResponse> switchRole(@Valid @RequestBody SwitchRoleRequest request,
+                                                    Authentication authentication) {
+        return ResponseEntity.ok(authService.switchRole((Long) authentication.getPrincipal(), request));
     }
 
     @PostMapping("/change-password")

@@ -25,6 +25,7 @@ public record OverrideAuditEntry(
     String lineId,
     BigDecimal amountBefore,
     BigDecimal amountAfter,
-    String reason
+    String reason,
+    String actorRole   // role the actor was switched into, or null (always null for claim closes) — rev 55
 ) {
 }

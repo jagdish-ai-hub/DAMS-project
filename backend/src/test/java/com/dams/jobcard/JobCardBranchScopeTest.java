@@ -61,7 +61,8 @@ class JobCardBranchScopeTest {
     void setUp() {
         service = new JobCardService(jobCardRepo, customerRepo, vehicleRepo, branchRepo,
             categoryRepo, statusRepo, claimTypeRepo, userRepo, branchScope, auditService,
-            pendingAmountCalculator, claimCloseRepo, paymentGuard, statusAccess);
+            pendingAmountCalculator, claimCloseRepo, paymentGuard, statusAccess,
+            new com.dams.customer.service.PartyResolver(customerRepo, vehicleRepo, branchScope));
         TenantContext.setOrgId(ORG);
     }
 
