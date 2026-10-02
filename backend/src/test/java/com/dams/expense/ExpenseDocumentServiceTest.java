@@ -346,6 +346,84 @@ class ExpenseDocumentServiceTest {
             eq(EventType.TRANSFERRED_TO_CLAIM), eq(CASHIER_ID), any());
     }
 
+    // --- rev 58: a reviewer changes an expense's business status ---
+
+    private static final long REVIEWER_ID = 777L;
+
+    private static AppUser reviewer() {
+        AppUser u = new AppUser();
+        ReflectionTestUtils.setField(u, "id", REVIEWER_ID);
+        u.setName("Asha Accountant");
+        u.setRole(Role.ACCOUNTANT);
+        return u;
+    }
+
+    private ExpenseDocument verifiedDoc() {
+        ExpenseDocument doc = submittedDoc(JC_PLAIN);
+        doc.setWorkflowStatus(ExpenseWorkflowStatus.VERIFIED);
+        doc.setLastModifiedBy(CASHIER_ID);
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(doc));
+        return doc;
+    }
+
+    @Test
+    void changeBusinessStatus_movesTheStatus_andAudits_leavingWorkflowAndMakerUntouched() {
+        ExpenseDocument doc = verifiedDoc();
+        when(statusRepo.findByIdAndOrgId(FM_STATUS_ID, ORG)).thenReturn(Optional.of(fmStatus()));
+
+        service.changeBusinessStatus(DOC_ID, FM_STATUS_ID, reviewer());
+
+        assertThat(doc.getBusinessStatusId()).isEqualTo(FM_STATUS_ID);
+        assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.VERIFIED);
+        assertThat(doc.getLastModifiedBy()).isEqualTo(CASHIER_ID);   // reviewer must not become the "maker"
+        verify(auditService).recordUserEvent(eq("ExpenseDocument"), eq(DOC_ID), any(),
+            eq(EventType.STATUS_CHANGED), eq(REVIEWER_ID), any());
+    }
+
+    @Test
+    void changeBusinessStatus_toTheClaimStatus_isAuditedAsTransferredToClaim() {
+        verifiedDoc();
+
+        service.changeBusinessStatus(DOC_ID, CLAIM_STATUS_ID, reviewer());
+
+        verify(auditService).recordUserEvent(eq("ExpenseDocument"), eq(DOC_ID), any(),
+            eq(EventType.TRANSFERRED_TO_CLAIM), eq(REVIEWER_ID), any());
+    }
+
+    @Test
+    void changeBusinessStatus_isRefused_onceClosedOrStillADraft() {
+        for (ExpenseWorkflowStatus wf : List.of(ExpenseWorkflowStatus.CLOSED, ExpenseWorkflowStatus.REJECTED,
+            ExpenseWorkflowStatus.DRAFT, ExpenseWorkflowStatus.QUERIED)) {
+            ExpenseDocument doc = verifiedDoc();
+            doc.setWorkflowStatus(wf);
+
+            assertThatThrownBy(() -> service.changeBusinessStatus(DOC_ID, CLAIM_STATUS_ID, reviewer()))
+                .isInstanceOf(DamsException.class)
+                .hasMessageContaining("cannot be changed");
+        }
+        verify(auditService, never()).recordUserEvent(any(), any(), any(), eq(EventType.STATUS_CHANGED), any(), any());
+        verify(auditService, never()).recordUserEvent(any(), any(), any(), eq(EventType.TRANSFERRED_TO_CLAIM), any(), any());
+    }
+
+    @Test
+    void changeBusinessStatus_isRefused_forABranchTheCallerCannotSee() {
+        ExpenseDocument doc = verifiedDoc();
+        when(branchScope.canSeeBranch(doc.getBranchId())).thenReturn(false);
+
+        assertThatThrownBy(() -> service.changeBusinessStatus(DOC_ID, CLAIM_STATUS_ID, reviewer()))
+            .isInstanceOf(DamsException.class);
+        assertThat(doc.getBusinessStatusId()).isEqualTo(STATUS_ID);
+    }
+
+    @Test
+    void changeBusinessStatus_toTheSameStatus_changesNothingAndWritesNoAudit() {
+        verifiedDoc();
+
+        service.changeBusinessStatus(DOC_ID, STATUS_ID, reviewer());
+
+        verify(auditService, never()).recordUserEvent(any(), any(), any(), eq(EventType.STATUS_CHANGED), any(), any());
+    }
+
     // --- rev 53: FM pre-approval of over-limit expenses (sub-category limit is 1000) ---
 
     @Test

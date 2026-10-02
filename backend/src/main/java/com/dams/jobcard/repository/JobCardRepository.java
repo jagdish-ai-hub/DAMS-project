@@ -59,7 +59,10 @@ public interface JobCardRepository extends JpaRepository<JobCard, Long> {
                 or (v.vehicleNo is not null and v.vehicleNo like :vLike)
                 or (j.vehicleNoText is not null and j.vehicleNoText like :vLike)
                 or (j.dbmId is not null and lower(j.dbmId) like :qLike)
-                or (j.invoiceNo is not null and lower(j.invoiceNo) like :qLike) )
+                or (j.invoiceNo is not null and lower(j.invoiceNo) like :qLike)
+                or exists (select 1 from ReceiveDocument r
+                            where r.jobCardId = j.id and r.orgId = :orgId
+                              and r.documentNo is not null and lower(r.documentNo) like :qLike) )
         order by j.createdAt desc, j.id desc
         """)
     List<JobCard> searchForPicker(@Param("orgId") Long orgId,
@@ -72,6 +75,17 @@ public interface JobCardRepository extends JpaRepository<JobCard, Long> {
                                   @Param("vLike") String vLike,
                                   @Param("idQ") Long idQ,
                                   Limit limit);
+
+    /**
+     * The numbered DAMS-Receive-IDs ("Ooriba IDs") of these job cards, newest first, as
+     * {@code [jobCardId, documentNo]} rows. Unsubmitted drafts have no number and are skipped.
+     */
+    @Query("""
+        select r.jobCardId, r.documentNo from ReceiveDocument r
+        where r.orgId = :orgId and r.jobCardId in :jobCardIds and r.documentNo is not null
+        order by r.createdAt desc, r.id desc
+        """)
+    List<Object[]> receiveNumbersFor(@Param("orgId") Long orgId, @Param("jobCardIds") Collection<Long> jobCardIds);
 
     /** Super Admin org-purge only. */
     long deleteByOrgId(Long orgId);

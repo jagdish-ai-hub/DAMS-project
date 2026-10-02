@@ -44,6 +44,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -279,9 +280,10 @@ public class CustomerService {
     }
 
     /**
-     * Every expense tagged to one of this customer's job cards (a workshop expense billed
-     * against their vehicle/case) — fetched only when the cashier asks for it, since most
-     * customer look-ups never need it. Same branch scoping as {@link #history}, newest first.
+     * Every expense of this customer — tagged to one of their job cards (a workshop expense
+     * billed against their vehicle/case) or linked to them directly with no job card — fetched
+     * only when the cashier asks for it, since most customer look-ups never need it. Same
+     * branch scoping as {@link #history}, newest first.
      */
     @Transactional(readOnly = true)
     public List<CustomerExpenseEntry> expenses(Long id) {
@@ -294,11 +296,21 @@ public class CustomerService {
             .filter(j -> allowed.map(set -> set.contains(j.getBranchId())).orElse(true))
             .toList();
         List<Long> jobCardIds = jobCards.stream().map(JobCard::getId).toList();
-        if (jobCardIds.isEmpty()) {
-            return List.of();
-        }
 
-        List<ExpenseDocument> docs = expenseDocumentRepo.findByOrgIdAndJobCardIdInOrderByCreatedAtDesc(orgId, jobCardIds);
+        // Expenses reach a customer two ways: tagged to one of their job cards, or linked to the
+        // customer directly (rev 56 — an expense may carry a customer with no job card at all).
+        // Union by id, branch-scoped, newest first.
+        Map<Long, ExpenseDocument> byId = new LinkedHashMap<>();
+        if (!jobCardIds.isEmpty()) {
+            expenseDocumentRepo.findByOrgIdAndJobCardIdInOrderByCreatedAtDesc(orgId, jobCardIds)
+                .forEach(d -> byId.putIfAbsent(d.getId(), d));
+        }
+        expenseDocumentRepo.findByOrgIdAndCustomerIdOrderByCreatedAtDesc(orgId, id).stream()
+            .filter(d -> allowed.map(set -> set.contains(d.getBranchId())).orElse(true))
+            .forEach(d -> byId.putIfAbsent(d.getId(), d));
+        List<ExpenseDocument> docs = byId.values().stream()
+            .sorted(Comparator.comparing(ExpenseDocument::getCreatedAt).reversed())
+            .toList();
         if (docs.isEmpty()) {
             return List.of();
         }

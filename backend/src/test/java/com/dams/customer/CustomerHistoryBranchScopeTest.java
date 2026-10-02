@@ -156,6 +156,36 @@ class CustomerHistoryBranchScopeTest {
     }
 
     @Test
+    void expenses_includesCustomerLinkedExpensesWithNoJobCard_inScopeOnly_withoutDuplicates() {
+        Customer customer = new Customer();
+        ReflectionTestUtils.setField(customer, "id", 1L);
+        customer.setOrgId(ORG);
+        customer.setName("Acme Transport");
+        when(customerRepo.findByIdAndOrgId(1L, ORG)).thenReturn(Optional.of(customer));
+        when(jobCardRepo.findByOrgIdAndCustomerIdOrderByCreatedAtDesc(ORG, 1L))
+            .thenReturn(List.of(jobCard(21L, 10L)));
+        lenient().when(branchScope.allowedBranchIds()).thenReturn(Optional.of(Set.of(10L)));
+
+        ExpenseDocument tagged = expense(600L, 10L, 21L);     // on the customer's job card
+        ExpenseDocument direct = expense(601L, 10L, null);    // linked to the customer, no job card
+        ExpenseDocument otherBranch = expense(602L, 99L, null); // customer-linked but outside the caller's branches
+        when(expenseDocumentRepo.findByOrgIdAndJobCardIdInOrderByCreatedAtDesc(ORG, List.of(21L)))
+            .thenReturn(List.of(tagged));
+        // the job-card-tagged document is also customer-linked (V34 backfill) — it must not repeat
+        when(expenseDocumentRepo.findByOrgIdAndCustomerIdOrderByCreatedAtDesc(ORG, 1L))
+            .thenReturn(List.of(tagged, direct, otherBranch));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdInOrderByLineNoAsc(any(), any()))
+            .thenReturn(List.of());
+
+        List<CustomerExpenseEntry> entries = service.expenses(1L);
+
+        assertThat(entries).extracting(CustomerExpenseEntry::id).containsExactlyInAnyOrder(600L, 601L);
+        CustomerExpenseEntry noJobCard = entries.stream().filter(e -> e.id() == 601L).findFirst().orElseThrow();
+        assertThat(noJobCard.jobCardId()).isNull();
+        assertThat(noJobCard.jobCardReference()).isNull();
+    }
+
+    @Test
     void expenses_returnsEmpty_whenTheCustomerHasNoJobCardsInScope() {
         Customer customer = new Customer();
         ReflectionTestUtils.setField(customer, "id", 1L);
@@ -167,6 +197,20 @@ class CustomerHistoryBranchScopeTest {
         lenient().when(branchScope.allowedBranchIds()).thenReturn(Optional.of(Set.of(10L)));
 
         assertThat(service.expenses(1L)).isEmpty();
+    }
+
+    private static ExpenseDocument expense(long id, long branchId, Long jobCardId) {
+        ExpenseDocument d = new ExpenseDocument();
+        ReflectionTestUtils.setField(d, "id", id);
+        d.setOrgId(ORG);
+        d.setBranchId(branchId);
+        d.setJobCardId(jobCardId);
+        d.setCustomerId(1L);
+        d.setReceiverId(5L);
+        d.setExpenseCategoryId(3L);
+        d.setBusinessStatusId(1L);
+        d.setWorkflowStatus(ExpenseWorkflowStatus.SUBMITTED);
+        return d;
     }
 
     private static JobCard jobCard(long id, long branchId) {

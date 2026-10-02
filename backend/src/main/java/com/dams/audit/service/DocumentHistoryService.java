@@ -102,6 +102,8 @@ public class DocumentHistoryService {
             // User-level event, never on a document — listed only so the switch stays exhaustive
             case ROLE_SWITCHED -> "Switched role";
             case JOB_CARD_CUSTOMER_ATTACHED -> "Customer linked to job card";
+            case STATUS_CHANGED -> "Status changed"
+                + (d.get("from") != null && d.get("to") != null ? ": " + d.get("from") + " → " + d.get("to") : "");
         };
     }
 

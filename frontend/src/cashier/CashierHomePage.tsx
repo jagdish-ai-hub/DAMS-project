@@ -607,7 +607,7 @@ function CustomerHistoryView(props: {
                 {expensesLoading && <SkeletonRows rows={3} height={44} />}
                 {!expensesLoading && expenses != null && expenses.length === 0 && (
                   <div style={{ color: 'var(--faint)', fontSize: '0.83rem' }}>
-                    No expenses tagged to this customer's job cards.
+                    No expenses linked to this customer or their job cards.
                   </div>
                 )}
                 {!expensesLoading && expenses != null && expenses.map((e) => (

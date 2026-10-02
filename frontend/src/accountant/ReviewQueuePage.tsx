@@ -7,7 +7,7 @@ import { cashApi, type CashDocument } from '../api/cash'
 import { reviewApi, type ReviewQueueItem, type ReviewType } from '../api/review'
 import { exportApi } from '../api/export'
 import { card, ErrorBanner, ghostBtn, primaryBtn, Modal, Badge, Skeleton, SkeletonRows, inr, fmtDate, fmtDateShort, inputStyle, th, td } from '../shell/ui'
-import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, type AnyDoc } from '../review/reviewShared'
+import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, EXPENSE_STATUS_EDITABLE, type AnyDoc } from '../review/reviewShared'
 import AddPaymentModal from '../cashier/AddPaymentModal'
 import { StatBox, statPanel } from '../review/StatBox'
 import GlobalSearch from '../shared/GlobalSearch'
@@ -1011,14 +1011,21 @@ function RecordDetail(props: {
   // Only receipts carry a job-card business status; expenses and cash have their own.
   const receipt = !cash && !expense ? (doc as ReceiveDocument) : null
 
+  // rev 58 — a reviewer may also change an expense's own business status, in the open states.
+  const expenseStatusEditable = expense && EXPENSE_STATUS_EDITABLE.has(wf)
+  const currentStatusId = (doc as { businessStatusId?: number }).businessStatusId
+
   useEffect(() => {
-    if (!receipt) return
+    setStatusOptions([])
+    if (!receipt && !expenseStatusEditable) return
     let live = true
-    mastersApi.listSelectable('receive-statuses')
-      .then(({ data }) => live && setStatusOptions(data))
+    const load = receipt ? mastersApi.listSelectable('receive-statuses') : mastersApi.list('expense-statuses')
+    load
+      .then(({ data }) => live && setStatusOptions(
+        receipt ? data : data.filter((s) => s.active || s.id === currentStatusId)))
       .catch((e) => live && setError(apiError(e, 'Could not load the status list.')))
     return () => { live = false }
-  }, [receipt])
+  }, [receipt, expenseStatusEditable, currentStatusId])
 
   const { user } = useAuth()
   // Maker-checker mirror: the server refuses these actions when you created or last
@@ -1089,12 +1096,16 @@ function RecordDetail(props: {
             onOverride={(lineNo, amount, reason) =>
               run(() => reviewApi.overrideLine(type, doc.id, lineNo, amount, reason),
                 `Line ${lineNo} overridden — shows on this record permanently`, true)}
-            statusOptions={receipt && statusOptions.length ? statusOptions : undefined}
+            statusOptions={(receipt || expenseStatusEditable) && statusOptions.length ? statusOptions : undefined}
             onStatusChange={receipt
               ? (statusId) => run(
                 () => jobCardsApi.patch(receipt.jobCardId, { businessStatusId: statusId }),
                 `${docNo} — status updated`, true)
-              : undefined}
+              : expenseStatusEditable
+                ? (statusId) => run(
+                  () => reviewApi.changeExpenseStatus(doc.id, statusId),
+                  `${docNo} — status updated`, true)
+                : undefined}
             onOverrideInvoice={receipt
               ? (amount, reason) => run(
                 () => reviewApi.overrideInvoiceAmount(receipt.id, amount, reason),

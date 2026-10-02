@@ -69,6 +69,7 @@ const hitFromJobCard = (j: JobCard): JobCardSearchHit => ({
   id: j.id, reference: j.reference, branchId: j.branchId, branchCode: j.branchCode ?? '',
   customerId: j.customerId, customerName: j.customerName, vehicleId: j.vehicleId, vehicleNo: j.vehicleNo,
   dbmId: j.dbmId, invoiceNo: j.invoiceNo, categoryId: j.categoryId, createdAt: j.createdAt,
+  receiveDocumentNos: j.receiveDocumentNos ?? [],
 })
 
 export default function NewExpensePage() {
@@ -842,7 +843,7 @@ export default function NewExpensePage() {
                   onOwnerFound={(v) => { setCustomerId(v.customerId); setCustomerName(v.customerName ?? '') }}
                 />
               </Row>
-              <Row label="Job Card / DBM">
+              <Row label="Job ID / PO / SO">
                 <input value={dbmId} onChange={(e) => setDbmId(e.target.value)} placeholder="4009941587" style={inputStyle} />
               </Row>
               <Row label="Invoice #">

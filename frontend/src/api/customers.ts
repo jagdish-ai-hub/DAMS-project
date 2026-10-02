@@ -59,11 +59,12 @@ export interface CustomerHistory {
   timeline: TimelineEntry[]
 }
 
-/** One expense tagged to a customer's job card — fetched on demand, not part of CustomerHistory. */
+/** One expense of a customer (on their job card, or linked to them directly) — fetched on demand, not part of CustomerHistory. */
 export interface CustomerExpenseEntry {
   id: number
   documentNo: string | null
-  jobCardId: number
+  /** null for an expense linked to the customer without a job card. */
+  jobCardId: number | null
   jobCardReference: string | null
   branchCode: string | null
   categoryName: string

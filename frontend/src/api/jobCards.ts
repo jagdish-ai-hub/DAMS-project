@@ -33,6 +33,8 @@ export interface JobCard {
   claimClosedAt: string | null
   canRecordPayment: boolean
   createdAt: string
+  /** Numbered DAMS-Receive-IDs ("Ooriba ID"), newest first. */
+  receiveDocumentNos: string[]
 }
 
 /** One row of the branch-scoped job-card picker. */
@@ -49,6 +51,8 @@ export interface JobCardSearchHit {
   invoiceNo: string | null
   categoryId: number
   createdAt: string
+  /** Numbered DAMS-Receive-IDs ("Ooriba ID"), newest first; empty until a receipt is submitted. */
+  receiveDocumentNos: string[]
 }
 
 export interface AttachCustomerRequest {

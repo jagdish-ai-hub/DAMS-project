@@ -763,6 +763,13 @@ public class ReviewService {
             ExpenseWorkflowStatus.VERIFIED, ExpenseWorkflowStatus.APPROVED, EventType.APPROVED, null, null);
     }
 
+    /** Reviewer status change (rev 58) — Accountant, Finance Manager or Owner; see {@link ExpenseDocumentService#changeBusinessStatus}. */
+    @Transactional
+    public ExpenseDocumentResponse changeExpenseStatus(Long id, Long businessStatusId) {
+        AppUser me = guard.requireStatusChanger();
+        return expenseDocumentService.changeBusinessStatus(id, businessStatusId, me);
+    }
+
     // ============================================================ FM expense pre-approval (rev 53)
 
     /**

@@ -53,6 +53,16 @@ public class ReviewGuard {
         return me;
     }
 
+    /** Assert the caller may change an expense's business status: Accountant, Finance Manager or Owner. */
+    public AppUser requireStatusChanger() {
+        AppUser me = me();
+        Role role = ActingDetails.effectiveRole(me);
+        if (role != Role.ACCOUNTANT && role != Role.FINANCE_MANAGER && role != Role.OWNER) {
+            throw DamsException.forbidden("Only an accountant, finance manager or owner can change an expense's status");
+        }
+        return me;
+    }
+
     private AppUser me() {
         return userRepo.findByIdAndOrganization_Id(branchScope.currentUserId(), TenantContext.requireOrgId())
             .orElseThrow(() -> DamsException.forbidden("The signed-in user is not part of this organization"));

@@ -203,8 +203,18 @@ export function VehicleCombobox(props: {
 
 /* ------------------------------------------------------------------ job card */
 
+/** The Ooriba ID is the DAMS-Receive-ID; a job card with no numbered receipt yet falls back to its reference. */
 export const jobCardHitLabel = (h: JobCardSearchHit) =>
-  [h.reference, h.customerName ?? 'no customer yet', h.vehicleNo].filter(Boolean).join(' · ')
+  [h.receiveDocumentNos?.[0] ?? h.reference, h.customerName ?? 'no customer yet', h.vehicleNo].filter(Boolean).join(' · ')
+
+/** Second line: whatever the first line did not already show. */
+const jobCardHitSub = (h: JobCardSearchHit) =>
+  [
+    h.receiveDocumentNos?.length ? `Job card ${h.reference}` : null,
+    h.receiveDocumentNos && h.receiveDocumentNos.length > 1 ? `Also ${h.receiveDocumentNos.slice(1).join(', ')}` : null,
+    h.dbmId ? `DBM ${h.dbmId}` : null,
+    h.invoiceNo ? `Invoice ${h.invoiceNo}` : null,
+  ].filter(Boolean).join(' · ') || undefined
 
 export function JobCardSearch(props: {
   selected: JobCardSearchHit | null
@@ -240,7 +250,7 @@ export function JobCardSearch(props: {
       onText={setText}
       disabled={props.disabled}
       refetchKey={`${props.customerId ?? ''}-${props.vehicleId ?? ''}`}
-      placeholder="Search job card: customer, vehicle no, DBM ID, invoice or reference"
+      placeholder="Search by Ooriba ID (DAMS-Receive-ID), customer, vehicle no, DBM ID or invoice"
       load={async (q) => {
         const { data } = await jobCardsApi.search({
           q: q.trim() || undefined,
@@ -250,7 +260,7 @@ export function JobCardSearch(props: {
         return data.map((h) => ({
           key: h.id,
           label: jobCardHitLabel(h),
-          sub: [h.dbmId ? `DBM ${h.dbmId}` : null, h.invoiceNo ? `Invoice ${h.invoiceNo}` : null].filter(Boolean).join(' · ') || undefined,
+          sub: jobCardHitSub(h),
           pick: () => { props.onPick(h); setText('') },
         }))
       }}

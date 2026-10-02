@@ -5,6 +5,8 @@ import com.dams.customer.repository.CustomerRepository;
 import com.dams.jobcard.entity.JobCard;
 import com.dams.jobcard.repository.JobCardRepository;
 import com.dams.organization.entity.Organization;
+import com.dams.receive.entity.ReceiveDocument;
+import com.dams.receive.repository.ReceiveDocumentRepository;
 import com.dams.user.entity.AppUser;
 import com.dams.vehicle.entity.Vehicle;
 import com.dams.vehicle.repository.VehicleRepository;
@@ -40,8 +42,10 @@ class PickerQueriesTest {
 
     @SpringBootConfiguration
     @EnableAutoConfiguration
-    @EntityScan(basePackageClasses = {JobCard.class, Customer.class, Vehicle.class, AppUser.class, Organization.class})
-    @EnableJpaRepositories(basePackageClasses = {JobCardRepository.class, CustomerRepository.class, VehicleRepository.class})
+    @EntityScan(basePackageClasses = {JobCard.class, Customer.class, Vehicle.class, AppUser.class, Organization.class,
+        ReceiveDocument.class})
+    @EnableJpaRepositories(basePackageClasses = {JobCardRepository.class, CustomerRepository.class, VehicleRepository.class,
+        ReceiveDocumentRepository.class})
     static class Cfg {
     }
 
@@ -52,6 +56,7 @@ class PickerQueriesTest {
     @Autowired private JobCardRepository jobCards;
     @Autowired private CustomerRepository customers;
     @Autowired private VehicleRepository vehicles;
+    @Autowired private ReceiveDocumentRepository receipts;
 
     private Customer ravi;
     private Customer meena;
@@ -126,6 +131,41 @@ class PickerQueriesTest {
         // a customerless job card is found by the vehicle number that is only kept as text
         assertThat(search(true, Set.of(-1L), null, "zz9999", "%ZZ9999%")).extracting(JobCard::getId)
             .containsExactly(customerlessOor.getId());
+    }
+
+    private ReceiveDocument receipt(JobCard jc, String documentNo) {
+        ReceiveDocument r = new ReceiveDocument();
+        r.setOrgId(ORG);
+        r.setBranchId(jc.getBranchId());
+        r.setJobCardId(jc.getId());
+        r.setDocumentNo(documentNo);
+        r.setCreatedBy(1L);
+        return receipts.save(r);
+    }
+
+    @Test
+    void matchesTheDamsReceiveIdOfAnyReceiptOnTheJobCard() {
+        receipt(raviOor, "OOR-AUG26-R-001");
+        receipt(meenaOob, "OOB-AUG26-R-007");
+        receipt(customerlessOor, null);   // an unnumbered draft receipt has no Ooriba ID yet
+
+        assertThat(search(true, Set.of(-1L), null, "oor-aug26-r-001", "#")).extracting(JobCard::getId)
+            .containsExactly(raviOor.getId());
+        assertThat(search(true, Set.of(-1L), null, "r-007", "#")).extracting(JobCard::getId)
+            .containsExactly(meenaOob.getId());
+        // branch scope still wins: OOR staff cannot find the OOB receipt by its number
+        assertThat(search(false, Set.of(OOR), null, "OOB-AUG26-R-007", "#")).isEmpty();
+    }
+
+    @Test
+    void receiveNumbersListNumberedReceiptsNewestFirst() {
+        receipt(raviOor, "OOR-AUG26-R-001");
+        receipt(raviOor, null);
+        receipt(raviOor, "OOR-AUG26-R-002");
+
+        List<Object[]> rows = jobCards.receiveNumbersFor(ORG, List.of(raviOor.getId(), meenaOob.getId()));
+        assertThat(rows).extracting(r -> r[1]).containsExactly("OOR-AUG26-R-002", "OOR-AUG26-R-001");
+        assertThat(rows).allSatisfy(r -> assertThat(r[0]).isEqualTo(raviOor.getId()));
     }
 
     @Test

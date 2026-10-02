@@ -410,7 +410,20 @@ public class JobCardService {
             claimClosedByName,
             claimClose != null ? claimClose.getClosedAt() : null,
             paymentGuard.canRecordPayment(orgId, jc, pending, claimClosed),
-            jc.getCreatedAt());
+            jc.getCreatedAt(),
+            receiveNumbers(orgId, List.of(jc.getId())).getOrDefault(jc.getId(), List.of()));
+    }
+
+    /** The numbered DAMS-Receive-IDs per job card, newest first. */
+    private Map<Long, List<String>> receiveNumbers(Long orgId, java.util.Collection<Long> jobCardIds) {
+        Map<Long, List<String>> out = new HashMap<>();
+        if (jobCardIds.isEmpty()) {
+            return out;
+        }
+        for (Object[] row : jobCardRepo.receiveNumbersFor(orgId, jobCardIds)) {
+            out.computeIfAbsent((Long) row[0], k -> new java.util.ArrayList<>()).add((String) row[1]);
+        }
+        return out;
     }
 
     // --- attach customer / search (rev 56) ---
@@ -467,8 +480,9 @@ public class JobCardService {
 
     /**
      * Branch-scoped job-card search for the pickers. Matches the customer's name/phone, the
-     * vehicle number (linked or typed-only), DBM id, invoice no, the internal id and the
-     * {@code {branchCode}-JC-{id}} reference. An empty {@code q} lists the newest job cards.
+     * vehicle number (linked or typed-only), DBM id, invoice no, the internal id, the
+     * {@code {branchCode}-JC-{id}} reference and the DAMS-Receive-ID ("Ooriba ID") of any of
+     * its receipts. An empty {@code q} lists the newest job cards.
      */
     @Transactional(readOnly = true)
     public List<JobCardSearchHit> search(String q, Long customerId, Long vehicleId) {
@@ -502,6 +516,7 @@ public class JobCardService {
         for (Branch b : branchRepo.findByOrgIdOrderByCodeAsc(orgId)) {
             branches.put(b.getId(), b);
         }
+        Map<Long, List<String>> receiveNos = receiveNumbers(orgId, hits.stream().map(JobCard::getId).toList());
         return hits.stream().map(j -> {
             Customer c = j.getCustomerId() == null ? null : customers.get(j.getCustomerId());
             Vehicle v = j.getVehicleId() == null ? null : vehicles.get(j.getVehicleId());
@@ -510,7 +525,8 @@ public class JobCardService {
             return new JobCardSearchHit(j.getId(), JobCardResponse.reference(code, j.getId()), j.getBranchId(), code,
                 j.getCustomerId(), c != null ? c.getName() : null,
                 j.getVehicleId(), v != null ? v.getVehicleNo() : j.getVehicleNoText(),
-                j.getDbmId(), j.getInvoiceNo(), j.getCategoryId(), j.getCreatedAt());
+                j.getDbmId(), j.getInvoiceNo(), j.getCategoryId(), j.getCreatedAt(),
+                receiveNos.getOrDefault(j.getId(), List.of()));
         }).toList();
     }
 

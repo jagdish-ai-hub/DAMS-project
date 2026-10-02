@@ -17,6 +17,9 @@ export function apiError(err: unknown, fallback: string) {
 
 export const isExpense = (d: AnyDoc): d is ExpenseDocument => 'expenseCategoryName' in d
 
+/** The workflow states in which a reviewer may change an expense's business status (rev 58) — mirrors the server. */
+export const EXPENSE_STATUS_EDITABLE = new Set(['SUBMITTED', 'VERIFIED', 'APPROVED', 'FM_QUERIED'])
+
 export function wfTone(wf: string): 'green' | 'amber' | 'gray' | 'red' {
   if (wf === 'QUERIED' || wf === 'FM_QUERIED') return 'amber'
   if (wf === 'REJECTED') return 'red'
@@ -50,9 +53,9 @@ const lcell = { padding: '8px 6px', borderTop: '1px solid var(--line)', fontSize
  * The record body every reviewer sees — header, lines (with an inline Override box when
  * {@code canOverride}), totals and history. The action bar is supplied by the caller.
  *
- * Pass {@code statusOptions} + {@code onStatusChange} to make the job-card business status
- * editable in place. Receive documents only: an expense's status is a different master list
- * with its own workflow, so it stays a read-only badge here.
+ * Pass {@code statusOptions} + {@code onStatusChange} to make the business status editable in
+ * place — a receipt's job-card status, or (rev 58) an expense's own status. Each caller passes
+ * the master list that matches the document.
  *
  * Pass {@code onOverrideInvoice} to add the same Override affordance to the invoice amount
  * that settlement lines already have. Receive documents only — an expense has no invoice
@@ -83,7 +86,7 @@ export function RecordCard(props: {
   const [invoiceAmt, setInvoiceAmt] = useState('')
   const [invoiceReason, setInvoiceReason] = useState('')
 
-  const canEditStatus = !expense && props.statusOptions != null && props.onStatusChange != null
+  const canEditStatus = props.statusOptions != null && props.onStatusChange != null
   const canOverrideInvoice = !expense && props.canOverride && props.onOverrideInvoice != null
 
   async function changeStatus(statusId: number) {
@@ -135,7 +138,10 @@ export function RecordCard(props: {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '2px 26px' }}>
           <Kv k={expense ? 'Expenses category' : 'Category'} v={expense ? doc.expenseCategoryName ?? '—' : doc.categoryName ?? '—'} />
-          <Kv k={expense ? 'Job ID / PO / SO' : 'Job card'} v={doc.jobCardReference ?? '—'} />
+          {/* Ooriba ID = a DAMS-Receive-ID: a receipt's own, or the receipt(s) an expense is linked to. */}
+          <Kv k="Ooriba ID" v={(expense ? doc.receiveDocumentNos?.join(', ') : doc.documentNo) || '—'} />
+          <Kv k="Vehicle #" v={doc.vehicleNo ?? '—'} />
+          <Kv k={expense ? 'Job ID / PO / SO' : 'Job card / DBM'} v={doc.dbmId ?? '—'} />
           <Kv k="Branch" v={doc.branchCode ?? '—'} />
           {expense ? (
             <Kv k="Entered" v={fmtDate(doc.createdAt)} />

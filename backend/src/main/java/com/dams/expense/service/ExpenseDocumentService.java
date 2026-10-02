@@ -533,6 +533,48 @@ public class ExpenseDocumentService {
         return assemble(doc);
     }
 
+    /**
+     * Reviewer status change (rev 58) — an Accountant, Finance Manager or Owner moves an expense
+     * to another business status from the review screen, like a receipt's job-card status.
+     * Allowed while the document is SUBMITTED, VERIFIED, APPROVED or FM_QUERIED; the workflow
+     * state is never changed here. A status flagged "Transfer to Claim" is audited as
+     * TRANSFERRED_TO_CLAIM, anything else as STATUS_CHANGED. {@code last_modified_by} is left
+     * alone on purpose: it drives maker-checker, and a reviewer's status edit must not stop
+     * them (or lock out another reviewer) from verifying the same document.
+     */
+    @Transactional
+    public ExpenseDocumentResponse changeBusinessStatus(Long documentId, Long statusId, AppUser actor) {
+        Long orgId = TenantContext.requireOrgId();
+        ExpenseDocument doc = load(orgId, documentId);
+        if (!branchScope.canSeeBranch(doc.getBranchId())) {
+            throw DamsException.forbidden("You do not have access to the branch of expense document " + documentId);
+        }
+        ExpenseWorkflowStatus wf = doc.getWorkflowStatus();
+        if (wf != ExpenseWorkflowStatus.SUBMITTED && wf != ExpenseWorkflowStatus.VERIFIED
+            && wf != ExpenseWorkflowStatus.APPROVED && wf != ExpenseWorkflowStatus.FM_QUERIED) {
+            throw DamsException.conflict("The status of document " + describe(doc) + " cannot be changed while it is "
+                + wf + " — only a submitted, verified, approved or Finance-queried expense can");
+        }
+        ExpenseBusinessStatus next = requireActiveStatus(orgId, statusId);
+        if (next.getId().equals(doc.getBusinessStatusId())) {
+            return assemble(doc);
+        }
+        ExpenseBusinessStatus before = statusRepo.findByIdAndOrgId(doc.getBusinessStatusId(), orgId).orElse(null);
+        doc.setBusinessStatusId(next.getId());
+        expenseDocumentRepo.save(doc);
+
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("beforeStatusId", before != null ? before.getId() : null);
+        detail.put("afterStatusId", next.getId());
+        detail.put("from", before != null ? before.getName() : null);
+        detail.put("to", next.getName());
+        auditService.recordUserEvent(ENTITY, doc.getId(), doc.getBranchId(),
+            next.isTriggersClaim() ? EventType.TRANSFERRED_TO_CLAIM : EventType.STATUS_CHANGED, actor.getId(), detail);
+        log.info("Expense status changed by reviewer: orgId={} docId={} {}->{} by={}",
+            orgId, doc.getId(), before != null ? before.getName() : null, next.getName(), actor.getId());
+        return assemble(doc);
+    }
+
     // ------------------------------------------------------------------ internals
 
     private Receiver resolveReceiver(Long orgId, CreateExpenseRequest r) {
@@ -866,6 +908,8 @@ public class ExpenseDocumentService {
             branch != null ? branch.getName() : null,
             doc.getJobCardId(),
             jc != null ? JobCardResponse.reference(branchCode, jc.getId()) : null,
+            jc == null ? List.of() : jobCardRepo.receiveNumbersFor(orgId, List.of(jc.getId())).stream()
+                .map(row -> (String) row[1]).toList(),
             doc.getReceiverId(),
             receiver != null ? receiver.getName() : null,
             receiver != null ? receiver.getPhone() : null,

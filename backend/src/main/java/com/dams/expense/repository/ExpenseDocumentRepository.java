@@ -53,6 +53,9 @@ public interface ExpenseDocumentRepository extends JpaRepository<ExpenseDocument
     /** Customer history — every expense tagged to one of this customer's job cards, newest first. */
     List<ExpenseDocument> findByOrgIdAndJobCardIdInOrderByCreatedAtDesc(Long orgId, Collection<Long> jobCardIds);
 
+    /** Customer history (rev 56) — expenses linked to the customer directly, with or without a job card. */
+    List<ExpenseDocument> findByOrgIdAndCustomerIdOrderByCreatedAtDesc(Long orgId, Long customerId);
+
     boolean existsByOrgIdAndDocumentNo(Long orgId, String documentNo);
 
     boolean existsByOrgId(Long orgId);

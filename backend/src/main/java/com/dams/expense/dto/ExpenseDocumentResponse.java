@@ -23,6 +23,7 @@ public record ExpenseDocumentResponse(
 
     Long jobCardId,                  // null for a branch-overhead expense
     String jobCardReference,         // {branchCode}-JC-{id}, or null
+    List<String> receiveDocumentNos, // numbered DAMS-Receive-IDs ("Ooriba ID") of that job card, newest first
 
     Long receiverId,
     String receiverName,

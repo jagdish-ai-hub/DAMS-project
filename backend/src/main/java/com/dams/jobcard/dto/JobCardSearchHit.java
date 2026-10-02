@@ -1,6 +1,7 @@
 package com.dams.jobcard.dto;
 
 import java.time.Instant;
+import java.util.List;
 
 /**
  * One row of the job-card picker (rev 56) -- just what a dropdown needs, so a keystroke does
@@ -20,6 +21,7 @@ public record JobCardSearchHit(
     String dbmId,
     String invoiceNo,
     Long categoryId,
-    Instant createdAt
+    Instant createdAt,
+    List<String> receiveDocumentNos   // numbered DAMS-Receive-IDs ("Ooriba ID"), newest first; empty if none yet
 ) {
 }

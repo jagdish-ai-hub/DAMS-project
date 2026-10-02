@@ -50,6 +50,8 @@ export interface ExpenseDocument {
   branchName: string | null
   jobCardId: number | null
   jobCardReference: string | null
+  /** Numbered DAMS-Receive-IDs ("Ooriba ID") of the linked job card, newest first. */
+  receiveDocumentNos: string[]
   receiverId: number
   receiverName: string | null
   receiverPhone: string | null

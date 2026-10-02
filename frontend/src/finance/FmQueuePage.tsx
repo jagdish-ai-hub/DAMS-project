@@ -6,7 +6,7 @@ import { reviewApi, type FmQueue, type ReviewQueueItem, type ReviewType } from '
 import { jobCardsApi } from '../api/jobCards'
 import { mastersApi, type MasterRow } from '../api/masters'
 import { card, ErrorBanner, ghostBtn, primaryBtn, inputStyle, Modal, Skeleton, SkeletonRows, inr, fmtDateShort } from '../shell/ui'
-import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, type AnyDoc } from '../review/reviewShared'
+import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, EXPENSE_STATUS_EDITABLE, type AnyDoc } from '../review/reviewShared'
 import GlobalSearch from '../shared/GlobalSearch'
 import { useAuth } from '../auth/useAuth'
 import AiClaimBanner from './AiClaimBanner'
@@ -451,14 +451,21 @@ function FmDetail(props: {
   const [claimModal, setClaimModal] = useState(false)
   const [statusOptions, setStatusOptions] = useState<MasterRow[]>([])
 
+  // rev 58 — the FM may also change an expense's own business status, in the open states.
+  const expenseStatusEditable = type === 'expense' && EXPENSE_STATUS_EDITABLE.has(wf)
+  const currentStatusId = (doc as { businessStatusId?: number }).businessStatusId
+
   useEffect(() => {
-    if (!receipt) return
+    setStatusOptions([])
+    if (!receipt && !expenseStatusEditable) return
     let live = true
-    mastersApi.listSelectable('receive-statuses')
-      .then(({ data }) => live && setStatusOptions(data))
+    const load = receipt ? mastersApi.listSelectable('receive-statuses') : mastersApi.list('expense-statuses')
+    load
+      .then(({ data }) => live && setStatusOptions(
+        receipt ? data : data.filter((s) => s.active || s.id === currentStatusId)))
       .catch((e) => live && setError(apiError(e, 'Could not load the status list.')))
     return () => { live = false }
-  }, [receipt])
+  }, [receipt, expenseStatusEditable, currentStatusId])
 
   const { user } = useAuth()
   // Maker-checker mirror. Ordinary approve still needs it here; Close Claim (rev 49) folds an
@@ -530,12 +537,16 @@ function FmDetail(props: {
             busy={busy}
             onError={setError}
             onOverride={async () => {}}
-            statusOptions={receipt && statusOptions.length ? statusOptions : undefined}
+            statusOptions={(receipt || expenseStatusEditable) && statusOptions.length ? statusOptions : undefined}
             onStatusChange={receipt
               ? (statusId) => run(
                 () => jobCardsApi.patch(receipt.jobCardId, { businessStatusId: statusId }),
                 `${docNo} — status updated`, true)
-              : undefined}
+              : expenseStatusEditable
+                ? (statusId) => run(
+                  () => reviewApi.changeExpenseStatus(doc.id, statusId),
+                  `${docNo} — status updated`, true)
+                : undefined}
           />
         )}
 

@@ -131,6 +131,10 @@ export const reviewApi = {
   queryExpenseApproval(id: number, note: string) {
     return api.post<ExpenseDocument>(`/api/v1/expenses/${id}/query-approval`, { note })
   },
+  /** rev 58 — Accountant / Finance Manager / Owner change an expense's business status from review. */
+  changeExpenseStatus(id: number, businessStatusId: number) {
+    return api.post<ExpenseDocument>(`/api/v1/expenses/${id}/status`, { businessStatusId })
+  },
   closeExpense(id: number) {
     return api.post<ExpenseDocument>(`/api/v1/expenses/${id}/close`)
   },

@@ -7,6 +7,17 @@
 
 ## Revision log
 
+- **rev 58 (2026-10-02)** — **"Ooriba ID" = DAMS-Receive-ID in the job-card picker.** AGENT.md "Linking" updated first.
+  No migration. `JobCardRepository.searchForPicker` also matches `receive_document.document_no` (branch scope unchanged);
+  `JobCardSearchHit` and `JobCardResponse` gain `receiveDocumentNos` (numbered receipts, newest first, via
+  `receiveNumbersFor`). Picker rows lead with the receive ID, falling back to the job-card reference when no numbered
+  receipt exists. Tests: `PickerQueriesTest` (+2). Customer / vehicle pickers and branch scope were already built in rev 56.
+  Same rev: **customer home** lists expenses linked to the customer directly (no job card) as well as job-card-tagged ones;
+  **review pane** shows Ooriba ID / Vehicle # / Job ID·PO·SO; the expense form's typed number field is now labelled
+  "Job ID / PO / SO". **Reviewer expense-status change** — V35 (`audit_event` CHECK += `STATUS_CHANGED`),
+  `POST /expenses/{id}/status` (ACCOUNTANT / FINANCE_MANAGER / OWNER, branch-scoped, open workflow states only, no
+  workflow/maker change), `ExpenseDocumentResponse.receiveDocumentNos`. Tests: `ExpenseDocumentServiceTest` (+5),
+  `CustomerHistoryBranchScopeTest` (+1).
 - **rev 57 (2026-09-29)** — **Cashier home message boxes.** AGENT.md updated first. `GET /my-entries/inbox`
   (`CashierInboxService`, no migration): left = QUERIED + recent REJECTED receipts/expenses/cash docs with who/what/when
   from the audit trail; right = FM pre-approval lifecycle of draft expenses. Badges count `needsAction` items only, derived from

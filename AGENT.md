@@ -146,7 +146,11 @@ One "cause" = one document, containing many sub-transaction lines:
   accountant = assigned branches; owner/FM = all). Typing a customer or
   vehicle that does not exist creates it on save (vehicle deduped on the
   normalised number; a number already registered to a *different* customer is
-  rejected, never silently reused). An expense/receipt may carry `customer_id`
+  rejected, never silently reused). **The job-card picker is labelled "Ooriba
+  ID" and is keyed on the receipt's DAMS-Receive-ID** (e.g. `OOR-AUG26-R-001`):
+  typing a receive ID finds its job card, and each result shows the receive ID
+  first (the job-card reference only when no numbered receipt exists yet).
+  An expense/receipt may carry `customer_id`
   + `vehicle_id` even without a job card; if a job card is also given, its
   customer/vehicle must match.
 - **Cashier home message boxes (rev 57)**: left box = documents the Accountant
@@ -196,6 +200,17 @@ has `org_id = null`.
    CGW claim** (e.g. promotional activities the OEM reimburses have no job
    card). Only a REJECTED / CLOSED document, or one awaiting FM approval,
    cannot be transferred.
+   **A reviewer may change an expense's business status (rev 58).** The
+   Accountant (own branches), Finance Manager and Owner can change it from the
+   review screen while the expense is SUBMITTED, VERIFIED, APPROVED or
+   FM_QUERIED — not DRAFT/QUERIED (the Cashier's) and not CLOSED/REJECTED. The
+   workflow state does not change, and it is audited (`STATUS_CHANGED`;
+   `TRANSFERRED_TO_CLAIM` when the new status is the claim status). A status that
+   requires FM approval then applies the normal close rule. (The Owner has no
+   expense review screen yet; the permission exists on the API.)
+   **Names on screen (rev 58):** *Ooriba ID* is a DAMS-Receive-ID (a receipt's
+   own, or the receipt an expense is linked to). On an expense, the typed
+   number field is *Job ID / PO / SO* (a separate field from the Ooriba ID).
    **Over-limit expenses need Finance Manager pre-approval before submit
    (rev 53).** When any line is above its sub-category limit, the Cashier
    cannot Submit — they **Send for Review** instead. The draft (no number

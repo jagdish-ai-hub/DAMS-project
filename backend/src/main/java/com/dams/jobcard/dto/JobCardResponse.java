@@ -2,6 +2,7 @@ package com.dams.jobcard.dto;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 /**
  * A job card with everything a screen needs: the derived {@code reference}, the resolved
@@ -46,7 +47,8 @@ public record JobCardResponse(
     String claimClosedByName,
     Instant claimClosedAt,
     boolean canRecordPayment,
-    Instant createdAt
+    Instant createdAt,
+    List<String> receiveDocumentNos   // numbered DAMS-Receive-IDs ("Ooriba ID"), newest first
 ) {
     public static String reference(String branchCode, Long id) {
         return branchCode + "-JC-" + id;

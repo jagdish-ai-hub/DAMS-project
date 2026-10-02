@@ -6,6 +6,7 @@ import com.dams.receive.dto.ReceiveDocumentResponse;
 import com.dams.review.dto.BulkApproveResponse;
 import com.dams.review.dto.BulkVerifyRequest;
 import com.dams.review.dto.BulkVerifyResponse;
+import com.dams.review.dto.ChangeStatusRequest;
 import com.dams.review.dto.FmQueue;
 import com.dams.review.dto.LineOverrideRequest;
 import com.dams.review.dto.QueryRequest;
@@ -242,6 +243,13 @@ public class ReviewController {
     @PreAuthorize("hasAuthority('ACCOUNTANT')")
     public ExpenseDocumentResponse closeExpense(@PathVariable Long id) {
         return reviewService.closeExpense(id);
+    }
+
+    @PostMapping("/expenses/{id}/status")
+    @Operation(summary = "Change an expense's business status from review (SUBMITTED / VERIFIED / APPROVED / FM_QUERIED) — Accountant, FM or Owner (rev 58)")
+    @PreAuthorize("hasAnyAuthority('ACCOUNTANT','FINANCE_MANAGER','OWNER')")
+    public ExpenseDocumentResponse changeExpenseStatus(@PathVariable Long id, @Valid @RequestBody ChangeStatusRequest request) {
+        return reviewService.changeExpenseStatus(id, request.businessStatusId());
     }
 
     @PostMapping("/expenses/{id}/pre-approve")

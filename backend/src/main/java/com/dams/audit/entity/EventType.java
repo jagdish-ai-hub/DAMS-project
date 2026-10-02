@@ -26,5 +26,7 @@ public enum EventType {
     /** A user switched into another role (or back to their own) — rev 55. */
     ROLE_SWITCHED,
     /** A customer was attached to a customerless job card (or changed by Owner/FM) — rev 56. */
-    JOB_CARD_CUSTOMER_ATTACHED
+    JOB_CARD_CUSTOMER_ATTACHED,
+    /** A reviewer changed an expense's business status from the review screen — rev 58. */
+    STATUS_CHANGED
 }
