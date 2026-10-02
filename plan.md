@@ -14,7 +14,8 @@
   receipt exists. Tests: `PickerQueriesTest` (+2). Customer / vehicle pickers and branch scope were already built in rev 56.
   Same rev: **customer home** lists expenses linked to the customer directly (no job card) as well as job-card-tagged ones;
   **review pane** shows Ooriba ID / Vehicle # / Job ID·PO·SO; the expense form's typed number field is now labelled
-  "Job ID / PO / SO". **Reviewer expense-status change** — V35 (`audit_event` CHECK += `STATUS_CHANGED`),
+  "Job ID / PO / SO". **Reviewer expense-status change** — V36 (`audit_event` CHECK += `STATUS_CHANGED`; V35 is the
+  separate receive `last_modified_by` repair),
   `POST /expenses/{id}/status` (ACCOUNTANT / FINANCE_MANAGER / OWNER, branch-scoped, open workflow states only, no
   workflow/maker change), `ExpenseDocumentResponse.receiveDocumentNos`. Tests: `ExpenseDocumentServiceTest` (+5),
   `CustomerHistoryBranchScopeTest` (+1).
