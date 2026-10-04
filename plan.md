@@ -7,6 +7,36 @@
 
 ## Revision log
 
+- **rev 59 (2026-10-04)** — **TEMPORARY maintenance page — frontend only.** Requested so people
+  cannot use DAMS for a while without taking the server down. While on, every screen — the
+  sign-in page included — shows a themed "We're under maintenance" page (navy theme, a smoking
+  server rack with one unit ajar, a turning wrench and gears; honours `prefers-reduced-motion`;
+  checks every 30s for a newer deploy and reloads itself the moment maintenance ends). The
+  backend is **untouched** and keeps running: no filter, no login change, no config. (A first
+  design that also refused non-Super-Admin API calls and logins with 503 was dropped on request
+  — it is a bigger change than "show a page", and it collided with the rev 55 role-switching
+  code, which makes the security-context authority the *acting* role.) The blocked page makes no
+  API calls at all, so it cannot wake the Neon compute.
+  Mechanism: `MAINTENANCE_MODE` in `frontend/src/maintenance/maintenance.ts` plus one gate in
+  `App.tsx`. A private way back in for whoever is doing the maintenance: open any page once with
+  `?bypass=<BYPASS_TOKEN>` (e.g. `/login?bypass=dams-staff-4f7a`) and that tab works normally
+  until it is closed — per-tab (`sessionStorage`), like the rest of the session design. The
+  token ships in the JS bundle, so this is a convenience, **not** security; nothing server-side
+  is gated, so a client that already holds a token can still call the API.
+  **Known limit:** a tab that was already open before the deploy keeps running the old bundle
+  until it is refreshed (or its login expires and the 401 redirect does a full page load) — a
+  single-page app cannot be told to reload from the server without a backend change.
+  **To end maintenance:** revert the PR that added this, or set `MAINTENANCE_MODE = false` —
+  either takes effect on the next deploy (~4 min), and any open maintenance page then reloads
+  itself into the app.
+  No migration, no entity, no endpoint, no backend change. Verified: `tsc`/`eslint`/`vitest`
+  clean (19 passing, 10 of them new); production build succeeds and the compiled bundle contains
+  the page. Checked in real Chromium against the built `dist`: `/`, a deep link
+  (`/app/new-receipt`) and `/login` all show the page, so does a tab with a leftover logged-in
+  session, with 0 API calls and no horizontal scroll at 1280px or 390px; the bypass link opens
+  the real sign-in page for that tab only; the page reloads itself when a newer bundle is
+  served. **Not verified:** the live deploy itself (nothing is merged yet).
+
 - **rev 58 (2026-10-02)** — **"Ooriba ID" = DAMS-Receive-ID in the job-card picker.** AGENT.md "Linking" updated first.
   No migration. `JobCardRepository.searchForPicker` also matches `receive_document.document_no` (branch scope unchanged);
   `JobCardSearchHit` and `JobCardResponse` gain `receiveDocumentNos` (numbered receipts, newest first, via
