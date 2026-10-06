@@ -88,7 +88,10 @@ public class DocumentHistoryService {
             case QUERIED -> Boolean.TRUE.equals(d.get("preApproval")) ? "Approval request queried" : "Queried";
             case REJECTED -> "Rejected";
             case OVERRIDE -> "Overrode a line amount";
-            case CLOSED -> "Closed";
+            case CLOSED -> Boolean.TRUE.equals(d.get("claim"))
+                ? "Claim closed" + (d.get("finalAmount") != null ? " — final ₹" + d.get("finalAmount") : "")
+                    + (Boolean.TRUE.equals(d.get("overridden")) ? " (Overridden · Final)" : "")
+                : "Closed";
             case SETTLED -> Boolean.TRUE.equals(d.get("unsettled"))
                 ? "Reopened after being paid in full (new payment added)"
                 : "Auto-settled — paid in full";
@@ -104,6 +107,8 @@ public class DocumentHistoryService {
             case JOB_CARD_CUSTOMER_ATTACHED -> "Customer linked to job card";
             case STATUS_CHANGED -> "Status changed"
                 + (d.get("from") != null && d.get("to") != null ? ": " + d.get("from") + " → " + d.get("to") : "");
+            case CASH_REOPENED -> "Cash day reopened"
+                + (d.get("closeDate") != null ? " (" + d.get("closeDate") + ")" : "");
         };
     }
 

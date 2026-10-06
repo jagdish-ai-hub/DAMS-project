@@ -82,6 +82,7 @@ public class OverrideAuditService {
         out.addAll(lineOverrides(orgId, from, to, branchId, actorId, branchCodes, userNames));
         out.addAll(invoiceOverrides(orgId, from, to, branchId, actorId, branchCodes, userNames));
         out.addAll(claimOverrides(orgId, from, to, branchId, actorId, branchCodes, userNames));
+        out.addAll(expenseClaimOverrides(orgId, from, to, branchId, actorId, branchCodes, userNames));
         out.sort(Comparator.comparing(OverrideAuditEntry::at).reversed());
         return out;
     }
@@ -175,6 +176,35 @@ public class OverrideAuditService {
                 received,
                 cc.getFinalAmount(),
                 cc.getOverrideReason(),
+                null));
+        }
+        return out;
+    }
+
+    // ---- Finance Manager expense-claim close overrides (rev 61) ----
+
+    private List<OverrideAuditEntry> expenseClaimOverrides(Long orgId, Instant from, Instant to, Long branchId, Long actorId,
+                                                           Map<Long, String> branchCodes, Map<Long, String> userNames) {
+        List<OverrideAuditEntry> out = new ArrayList<>();
+        for (var d : expenseDocumentRepo.findByOrgIdAndClaimOverriddenTrueAndClaimClosedAtBetweenOrderByClaimClosedAtDesc(orgId, from, to)) {
+            if (actorId != null && !actorId.equals(d.getClaimClosedBy())) {
+                continue;
+            }
+            if (branchId != null && !branchId.equals(d.getBranchId())) {
+                continue;
+            }
+            BigDecimal total = d.getClaimComputedTotal();
+            out.add(new OverrideAuditEntry(
+                d.getClaimClosedAt(),
+                "claim",
+                actorName(d.getClaimClosedBy(), userNames),
+                d.getBranchId(),
+                branchCode(orgId, d.getBranchId(), branchCodes),
+                d.getDocumentNo(),
+                null,
+                total,
+                d.getClaimFinalAmount(),
+                d.getClaimOverrideReason(),
                 null));
         }
         return out;

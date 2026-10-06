@@ -14,6 +14,12 @@ public interface UserRoleGrantRepository extends JpaRepository<UserRoleGrant, Lo
 
     List<UserRoleGrant> findByUserIdIn(java.util.Collection<Long> userIds);
 
+    /** Everyone granted {@code role} at {@code branchId} (ACCOUNTANT / CASHIER grants). */
+    List<UserRoleGrant> findByRoleAndBranchId(Role role, Long branchId);
+
+    /** Everyone granted the org-wide {@code role} (FINANCE_MANAGER — branch_id is null). */
+    List<UserRoleGrant> findByRoleAndBranchIdIsNull(Role role);
+
     void deleteByUserId(Long userId);
 
     /** Branch-scoped grant (ACCOUNTANT / CASHIER). */

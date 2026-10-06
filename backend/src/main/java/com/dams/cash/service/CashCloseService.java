@@ -10,6 +10,7 @@ import com.dams.cash.dto.CashDocumentResponse;
 import com.dams.cash.dto.CashDrawerResponse;
 import com.dams.cash.dto.CashOpeningRequest;
 import com.dams.cash.dto.CloseDayRequest;
+import com.dams.cash.dto.ReopenDayRequest;
 import com.dams.cash.entity.BranchCashOpening;
 import com.dams.cash.entity.CashDayClose;
 import com.dams.cash.entity.CashDocument;
@@ -84,6 +85,7 @@ public class CashCloseService {
         String branchCode = branch != null ? branch.getCode() : "?";
         DrawerService.DrawerLines lines = drawerService.lineBreakdown(orgId, branchId, date, branchCode);
         CashDayClose close = cashDayCloseRepo.findByOrgIdAndBranchIdAndCloseDate(orgId, branchId, date).orElse(null);
+        boolean reopenable = close != null && isLatestClose(orgId, branchId, close);
         List<CashDocumentResponse> movements = cashDocumentRepo
             .findByOrgIdAndBranchIdAndTransactionDateOrderByIdAsc(orgId, branchId, date)
             .stream().map(cashDocumentService::assemble).toList();
@@ -102,6 +104,7 @@ public class CashCloseService {
             p.computedPosition(),
             close != null,
             close != null ? toCloseResponse(orgId, close) : null,
+            reopenable,
             movements,
             lines.cashReceiptLines(),
             lines.cashExpenseLines());
@@ -188,6 +191,48 @@ public class CashCloseService {
         return toCloseResponse(orgId, close);
     }
 
+    /**
+     * Reopen a closed day (rev 60) — Owner only, for a close made by mistake. Only the branch's
+     * <b>latest</b> close can be reopened: each day's opening is the previous close's counted
+     * amount, so an earlier close under a later one would leave that later day's opening stale.
+     * The close row is deleted (that is what unlocks the date); the audit event keeps its
+     * figures and the Owner's reason, so the original close is never lost.
+     */
+    @Transactional
+    public CashDrawerResponse reopenDay(ReopenDayRequest request) {
+        Long orgId = TenantContext.requireOrgId();
+        AppUser me = guard.requireOwner(orgId);
+        Long branchId = request.getBranchId();
+        Branch branch = branchRepo.findByIdAndOrgId(branchId, orgId)
+            .orElseThrow(() -> DamsException.notFound("Branch", branchId));
+        String code = branch.getCode();
+
+        CashDayClose close = cashDayCloseRepo.findByOrgIdAndBranchIdAndCloseDate(orgId, branchId, request.getCloseDate())
+            .orElseThrow(() -> DamsException.conflict(code + "'s cash for " + request.getCloseDate()
+                + " is not closed — there is nothing to reopen"));
+        CashDayClose latest = cashDayCloseRepo.findFirstByOrgIdAndBranchIdOrderByCloseDateDesc(orgId, branchId).orElse(close);
+        if (!latest.getId().equals(close.getId())) {
+            throw DamsException.conflict("Only the latest close can be reopened — " + code + " is closed through "
+                + latest.getCloseDate() + ". Reopen " + latest.getCloseDate() + " first.");
+        }
+
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("closeDate", close.getCloseDate().toString());
+        detail.put("countedAmount", close.getCountedAmount());
+        detail.put("computedClosing", close.getComputedClosing());
+        detail.put("variance", close.getVariance());
+        detail.put("varianceRemark", close.getVarianceRemark());
+        detail.put("closedBy", close.getClosedBy());
+        detail.put("closedAt", close.getClosedAt().toString());
+        detail.put("reason", request.getReason().trim());
+
+        cashDayCloseRepo.delete(close);
+        auditService.recordUserEvent("CashDayClose", close.getId(), branchId, EventType.CASH_REOPENED, me.getId(), detail);
+        log.info("Cash day reopened: orgId={} branchId={} date={} counted={} by userId={}",
+            orgId, branchId, close.getCloseDate(), close.getCountedAmount(), me.getId());
+        return drawer(branchId, request.getCloseDate());
+    }
+
     @Transactional(readOnly = true)
     public CashDayCloseResponse getClose(Long requestedBranchId, LocalDate date) {
         Long orgId = TenantContext.requireOrgId();
@@ -198,6 +243,12 @@ public class CashCloseService {
     }
 
     // ------------------------------------------------------------------ helpers
+
+    private boolean isLatestClose(Long orgId, Long branchId, CashDayClose close) {
+        return cashDayCloseRepo.findFirstByOrgIdAndBranchIdOrderByCloseDateDesc(orgId, branchId)
+            .map(latest -> latest.getId().equals(close.getId()))
+            .orElse(false);
+    }
 
     private CashDayCloseResponse toCloseResponse(Long orgId, CashDayClose c) {
         String branchCode = branchRepo.findByIdAndOrgId(c.getBranchId(), orgId).map(Branch::getCode).orElse(null);

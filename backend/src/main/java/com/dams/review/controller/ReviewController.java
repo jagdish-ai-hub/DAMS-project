@@ -2,6 +2,7 @@ package com.dams.review.controller;
 
 import com.dams.cash.dto.CashDocumentResponse;
 import com.dams.expense.dto.ExpenseDocumentResponse;
+import com.dams.jobcard.dto.CloseClaimRequest;
 import com.dams.receive.dto.ReceiveDocumentResponse;
 import com.dams.review.dto.BulkApproveResponse;
 import com.dams.review.dto.BulkVerifyRequest;
@@ -11,8 +12,11 @@ import com.dams.review.dto.FmQueue;
 import com.dams.review.dto.LineOverrideRequest;
 import com.dams.review.dto.QueryRequest;
 import com.dams.review.dto.RejectRequest;
+import com.dams.review.dto.ReviewerResponse;
 import com.dams.review.dto.ReviewQueueItem;
 import com.dams.review.service.ReviewService;
+import com.dams.review.service.ReviewerLookupService;
+import com.dams.user.entity.Role;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -36,9 +40,23 @@ import org.springframework.security.access.prepost.PreAuthorize;
 public class ReviewController {
 
     private final ReviewService reviewService;
+    private final ReviewerLookupService reviewerLookupService;
 
-    public ReviewController(ReviewService reviewService) {
+    public ReviewController(ReviewService reviewService, ReviewerLookupService reviewerLookupService) {
         this.reviewService = reviewService;
+        this.reviewerLookupService = reviewerLookupService;
+    }
+
+    // ---- who can clear a maker-checker-blocked entry (rev 59) ----
+
+    @GetMapping("/review/reviewers")
+    @Operation(summary = "People who can verify (ACCOUNTANT) or approve (FINANCE_MANAGER) an entry at a branch, "
+        + "minus the excluded ids — names for the 'blocked by maker-checker' note")
+    @PreAuthorize("hasAnyAuthority('ACCOUNTANT','FINANCE_MANAGER')")
+    public List<ReviewerResponse> reviewers(@RequestParam Long branchId,
+                                            @RequestParam Role step,
+                                            @RequestParam(required = false) List<Long> exclude) {
+        return reviewerLookupService.reviewersFor(branchId, step, exclude);
     }
 
     // ---- queue ----
@@ -104,6 +122,13 @@ public class ReviewController {
     @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
     public FmQueue fmExpenseQueue() {
         return reviewService.fmExpenseQueue();
+    }
+
+    @GetMapping("/review/owner/expenses")
+    @Operation(summary = "Owner: every non-draft expense in every branch, newest first — oversight + status change only (rev 60)")
+    @PreAuthorize("hasAuthority('OWNER')")
+    public List<ReviewQueueItem> ownerExpenseList() {
+        return reviewService.ownerExpenseList();
     }
 
     @GetMapping("/review/cash")
@@ -243,6 +268,13 @@ public class ReviewController {
     @PreAuthorize("hasAuthority('ACCOUNTANT')")
     public ExpenseDocumentResponse closeExpense(@PathVariable Long id) {
         return reviewService.closeExpense(id);
+    }
+
+    @PostMapping("/expenses/{id}/close-claim")
+    @Operation(summary = "Finance Manager: close an expense marked Transfer to Claim — final amount actually recovered, reason if it differs (rev 61)")
+    @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
+    public ExpenseDocumentResponse closeExpenseClaim(@PathVariable Long id, @Valid @RequestBody CloseClaimRequest request) {
+        return reviewService.closeExpenseClaim(id, request.finalAmount(), request.reason());
     }
 
     @PostMapping("/expenses/{id}/status")

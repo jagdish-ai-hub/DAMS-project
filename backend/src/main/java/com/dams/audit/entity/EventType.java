@@ -28,5 +28,7 @@ public enum EventType {
     /** A customer was attached to a customerless job card (or changed by Owner/FM) — rev 56. */
     JOB_CARD_CUSTOMER_ATTACHED,
     /** A reviewer changed an expense's business status from the review screen — rev 58. */
-    STATUS_CHANGED
+    STATUS_CHANGED,
+    /** The Owner reopened a closed cash day — the original close is kept in the detail — rev 60. */
+    CASH_REOPENED
 }

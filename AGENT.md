@@ -56,6 +56,11 @@ accountants, plus the owner's live window into branch operations.
   adds payments against existing job cards, does daily cash closing.
 
 A user never verifies or approves an entry they created or last modified.
+**Exception (rev 59):** a user whose own role is **Owner** may review, verify
+or approve entries they made while acting in another role — the Owner owns
+the business and is the one person who may act as every role (see "Acting
+roles"). Nobody else is exempt: a switched Accountant or Finance Manager is
+still blocked from their own entries.
 
 ### Acting roles (role switching — plan.md rev 55)
 
@@ -82,7 +87,12 @@ One person can hold more than one job. Each user has a **primary role**
   store `actor_role` while acting ("Ajay · as Cashier"), and each switch is
   itself audited (`ROLE_SWITCHED`).
 - **Maker-checker is per person, not per role.** Ajay's cashier entry can
-  never be verified or approved by Ajay acting as Accountant.
+  never be verified or approved by Ajay acting as Accountant — **except when
+  the person is an Owner** (rev 59): an Owner acting as Cashier and then as
+  Accountant / Finance Manager may review their own entries. When an entry is
+  blocked, the review screen says who entered it and in which role, and names
+  the people who *can* clear it (active accountants at that branch, or
+  Finance Managers), so the entry is never a dead end.
 - A revoked grant takes effect on the next request (the acting role is
   re-checked against the DB); the user is sent back to login.
 
@@ -200,14 +210,50 @@ has `org_id = null`.
    CGW claim** (e.g. promotional activities the OEM reimburses have no job
    card). Only a REJECTED / CLOSED document, or one awaiting FM approval,
    cannot be transferred.
+   **A "Transfer to Claim" expense is closed by the Finance Manager, not the
+   Accountant (rev 61).** It goes Cashier → Accountant (verify, or query back
+   to the Cashier) → **Finance Manager**, who presses **Close Claim**: they
+   enter the **final amount actually recovered** from the claim (default = the
+   expense total; 0 is allowed), with a **reason mandatory whenever it
+   differs**, or **Query** it back to the Accountant (`FM_QUERIED`, as for any
+   verified entry). Close Claim is itself the FM's approval — there is no
+   separate Approve. A differing amount is permanent and shown "Overridden ·
+   Final" everywhere the record appears, and in Override Audit. The Accountant
+   cannot close a claim expense. It reaches the FM only **after** the
+   Accountant has verified it. The route follows the status the expense is in
+   *now* (checked by the `triggers_claim` flag, never the label): moved onto
+   Transfer to Claim after verification it goes to the FM; moved off it before
+   the FM closes it, it returns to the Accountant's normal close; once closed
+   it is locked. An over-limit claim expense still needs the FM's pre-approval
+   before submit (rev 53) — Close Claim comes on top of that, at the end.
+   **Claims at a glance (rev 62).** The Owner dashboard (under its branch and
+   period filters) and the Finance Manager page show a Claims card:
+   **Total claimed**, **Total received**, **Claim rejected / not recovered** and
+   **Still open**, for expense claims and warranty / AMC / CG receipt claims
+   together, then split by kind. Claimed = received + rejected + still open. A
+   claim counts in the period it was **raised** (an expense when submitted; a
+   receipt claim when its first live receipt is submitted). *Claimed*: an
+   expense's total, or a receipt claim's invoice amount. *Received*: a closed
+   claim's Finance Manager final amount; for a still-open receipt claim, the
+   payments received so far (an open expense claim has none yet). *Rejected*:
+   closed claims only — claimed minus the final amount (a claim closed at ₹0 is
+   entirely rejected). *Still open*: open claims only — claimed minus received so
+   far. An expense closed by the Accountant before claim closing existed (no
+   recorded final amount) is left out. The Expenses KPI is unchanged — it
+   counts what was actually spent.
    **A reviewer may change an expense's business status (rev 58).** The
    Accountant (own branches), Finance Manager and Owner can change it from the
    review screen while the expense is SUBMITTED, VERIFIED, APPROVED or
    FM_QUERIED — not DRAFT/QUERIED (the Cashier's) and not CLOSED/REJECTED. The
    workflow state does not change, and it is audited (`STATUS_CHANGED`;
    `TRANSFERRED_TO_CLAIM` when the new status is the claim status). A status that
-   requires FM approval then applies the normal close rule. (The Owner has no
-   expense review screen yet; the permission exists on the API.)
+   requires FM approval then applies the normal close rule.
+   **Owner expense page (rev 60):** the Owner has an **Expenses** page — every
+   non-draft expense in every branch, all workflow states, filterable by
+   branch / status / date. It is oversight plus status change only: the Owner
+   can open any expense and change its business status (same states as above),
+   but verify / query / reject / approve / close / line override stay with the
+   Accountant and Finance Manager.
    **Names on screen (rev 58):** *Ooriba ID* is a DAMS-Receive-ID (a receipt's
    own, or the receipt an expense is linked to). On an expense, the typed
    number field is *Job ID / PO / SO* (a separate field from the Ooriba ID).
@@ -229,6 +275,13 @@ has `org_id = null`.
    masters) sends the expense through exactly this flow even when every
    line is within its limit: choosing it switches Submit to Send for Review.
    Checked by the flag, never the status name.
+   **The FM's Expenses queue lists only expenses that need the FM (rev 60).**
+   A VERIFIED expense appears there only when it is over a sub-category limit
+   or in a status flagged "needs Finance Manager approval", and no FM
+   pre-approval still covers its total. An in-limit expense with an ordinary
+   status is the Accountant's to close alone and never reaches the FM. (If a
+   reviewer later moves it to a flagged status, or it grows past a
+   pre-approval, it appears.)
 3. **Warranty / AMC / CG claims are closed explicitly by the Finance
    Manager.** FM may override the final settled amount at closing (e.g.
    accepting Eicher's partial payment as final). That override is
@@ -382,6 +435,16 @@ flag the conflict and ask rather than silently working around it.
    - End-of-day **Close Cash** on the same page: cashier enters physically
      counted cash, variance auto-computed, remark mandatory if variance
      ≠ 0, closing locks that date against new cash entries.
+   - **Only the Owner can reopen a closed day (rev 60)** — for a close made
+     by mistake. From the Cash page (Owner picks the branch), the Owner
+     reopens the branch's **latest** close with a mandatory reason; earlier
+     closes can't be reopened first because each day's opening is the
+     previous close's counted amount. Reopening removes the close row, so the
+     date unlocks and the Cashier can add the missed entries and close again
+     with a fresh count. The original close (counted amount, variance,
+     remark, who closed it) is preserved in the audit trail as
+     `CASH_REOPENED` together with the Owner's reason. Nobody else —
+     Cashier, Accountant, Finance Manager — can reopen.
    - The old "Cash Deposit" / "Cash Out" expense sub-categories are
      **removed** — fully replaced by this page.
    - Cash In/Out documents are **excluded from Collections and Expenses

@@ -27,4 +27,5 @@ Count the drawer properly first — all of it. You'll type the counted figure in
 
 - You can't close a **future** date.
 - You can't close a day that a later close already covers.
+- **Closed it by mistake?** You can't undo it yourself — ask your Owner. They can reopen the branch's latest closed day (with a reason), and then you add the missed entries and close again with a fresh count.
 - Everything else about a closed day — its receipts, expenses, non-cash lines — stays visible and unchanged. Closing only locks *cash* for that date.

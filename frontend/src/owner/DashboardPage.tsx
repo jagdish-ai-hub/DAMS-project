@@ -11,6 +11,7 @@ import {
 import { cashApi } from '../api/cash'
 import { card, ErrorBanner, Skeleton, inr, fmtDate, fmtDateTime, primaryBtn, ghostBtn, istToday } from '../shell/ui'
 import GlobalSearch from '../shared/GlobalSearch'
+import ClaimsSummaryCard from '../shared/ClaimsSummaryCard'
 import AskDamsPanel from './AskDamsPanel'
 import AiInsightsSection from './AiInsightsSection'
 import { Download, AlertTriangle } from 'lucide-react'
@@ -231,6 +232,8 @@ export default function DashboardPage() {
             <Kpi label="Cash in hand" value={inr(summary.kpis.cashInHand)} tone="var(--amber)"
               sub={`${summary.kpis.pendingReview} pending review`} onClick={openCashBreakdown} />
           </div>
+
+          <ClaimsSummaryCard branchId={branchId === '' ? undefined : branchId} period={period} />
 
           <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4 mb-4">
             <div style={{ ...card }}>

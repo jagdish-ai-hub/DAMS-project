@@ -62,6 +62,12 @@ export interface BulkApproveResponse {
   skippedReasons: string[]
 }
 
+/** Someone who can clear a maker-checker-blocked entry (rev 59). */
+export interface Reviewer {
+  id: number
+  name: string
+}
+
 export const reviewApi = {
   receiptQueue() {
     return api.get<ReviewQueueItem[]>('/api/v1/review/receipts')
@@ -80,6 +86,10 @@ export const reviewApi = {
   verifiedQueue(t: ReviewType) {
     const segment = SEGMENT[t] === 'cash-documents' ? 'cash' : SEGMENT[t]
     return api.get<ReviewQueueItem[]>(`/api/v1/review/${segment}/verified`)
+  },
+  /** Owner (rev 60) — every non-draft expense in every branch, newest first. Oversight + status change only. */
+  ownerExpenses() {
+    return api.get<ReviewQueueItem[]>('/api/v1/review/owner/expenses')
   },
   fmQueue(t: ReviewType) {
     return api.get<FmQueue>(`/api/v1/review/fm/${fmSegment(t)}`)
@@ -135,7 +145,21 @@ export const reviewApi = {
   changeExpenseStatus(id: number, businessStatusId: number) {
     return api.post<ExpenseDocument>(`/api/v1/expenses/${id}/status`, { businessStatusId })
   },
+  /** rev 61 — Finance Manager closes a Transfer-to-Claim expense with the amount actually recovered (reason if it differs). */
+  closeExpenseClaim(id: number, finalAmount: number, reason?: string) {
+    return api.post<ExpenseDocument>(`/api/v1/expenses/${id}/close-claim`, { finalAmount, reason })
+  },
   closeExpense(id: number) {
     return api.post<ExpenseDocument>(`/api/v1/expenses/${id}/close`)
+  },
+  /**
+   * rev 59 - who can verify (`ACCOUNTANT`) or approve (`FINANCE_MANAGER`) an entry at a branch,
+   * minus the people who made it. `exclude` goes as one comma-separated value: axios would send
+   * an array as `exclude[]=...`, which Spring does not bind to a List.
+   */
+  reviewers(branchId: number, step: 'ACCOUNTANT' | 'FINANCE_MANAGER', exclude: number[]) {
+    return api.get<Reviewer[]>('/api/v1/review/reviewers', {
+      params: { branchId, step, exclude: exclude.length > 0 ? exclude.join(',') : undefined },
+    })
   },
 }

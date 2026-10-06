@@ -111,6 +111,30 @@ public class ExpenseDocument {
     private Instant approvalRequestedAt;
 
     /**
+     * Finance Manager's Close Claim on a "Transfer to Claim" expense (rev 61, V38): the amount
+     * actually recovered. Null until closed. {@code claimOverridden} when it differs from the
+     * document total, in which case a reason is mandatory.
+     */
+    @Column(name = "claim_final_amount", precision = 14, scale = 2)
+    private java.math.BigDecimal claimFinalAmount;
+
+    /** The document total as it stood when the claim was closed — what "final" is compared against. */
+    @Column(name = "claim_computed_total", precision = 14, scale = 2)
+    private java.math.BigDecimal claimComputedTotal;
+
+    @Column(name = "claim_overridden", nullable = false)
+    private boolean claimOverridden = false;
+
+    @Column(name = "claim_override_reason", length = 300)
+    private String claimOverrideReason;
+
+    @Column(name = "claim_closed_by")
+    private Long claimClosedBy;
+
+    @Column(name = "claim_closed_at")
+    private Instant claimClosedAt;
+
+    /**
      * Monotonic line-number counter (V22) — see ReceiveDocument.lineNoSeq.
      * Numbers are never reused even after a line is voided.
      */

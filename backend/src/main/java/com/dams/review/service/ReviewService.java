@@ -60,6 +60,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -90,6 +91,8 @@ public class ReviewService {
     private static final String RECEIVE = "ReceiveDocument";
     private static final String EXPENSE = "ExpenseDocument";
     private static final int RECENTLY_CLOSED_LIMIT = 12;
+    /** Cap on the Owner's Expenses list (rev 60) — newest first; the page filters it client-side. */
+    private static final int OWNER_EXPENSE_LIST_LIMIT = 500;
 
     private final ReceiveDocumentRepository receiveDocumentRepo;
     private final SettlementLineRepository settlementLineRepo;
@@ -290,12 +293,52 @@ public class ReviewService {
     public FmQueue fmExpenseQueue() {
         Long orgId = TenantContext.requireOrgId();
         guard.requireFinanceManager();
-        // rev 53: an expense the FM already pre-approved (total still within it) doesn't come
-        // back for a second approval — the Accountant closes it after verifying.
-        List<ReviewQueueItem> awaiting = toExpenseItems(orgId, expenseDocumentRepo
-            .findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(orgId, ExpenseWorkflowStatus.VERIFIED))
+        Set<Long> claimStatusIds = expenseDocumentService.claimStatusIds(orgId);
+        List<ExpenseDocument> verified = expenseDocumentRepo
+            .findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(orgId, ExpenseWorkflowStatus.VERIFIED);
+
+        // rev 61: an expense marked Transfer to Claim is closed by the FM, once the Accountant has
+        // verified it (so VERIFIED — or APPROVED, if it was approved before being marked a claim).
+        // They are the FM's "open claims", not "awaiting approval": Close Claim is the approval.
+        List<ExpenseDocument> claimDocs = new ArrayList<>(verified.stream()
+            .filter(d -> claimStatusIds.contains(d.getBusinessStatusId())).toList());
+        if (!claimStatusIds.isEmpty()) {
+            claimDocs.addAll(expenseDocumentRepo
+                .findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(orgId, ExpenseWorkflowStatus.APPROVED).stream()
+                .filter(d -> claimStatusIds.contains(d.getBusinessStatusId())).toList());
+            claimDocs.sort(Comparator.comparing(ExpenseDocument::getSubmittedAt, Comparator.nullsLast(Comparator.naturalOrder())));
+        }
+        List<ReviewQueueItem> openClaims = toExpenseItems(orgId, claimDocs);
+
+        // rev 60: for everything else, only expenses that actually need the FM — over a
+        // sub-category limit, or in a status flagged requires_fm_approval (the same test
+        // closeExpense applies). An in-limit expense in an ordinary status is the Accountant's to
+        // close alone, so it never lands here. rev 53: an expense the FM already pre-approved
+        // (total still within it) doesn't come back for a second approval either.
+        List<ExpenseDocument> needFm = verified.stream()
+            .filter(d -> !claimStatusIds.contains(d.getBusinessStatusId()))
+            .filter(d -> d.isOverLimit() || expenseDocumentService.statusRequiresFmApproval(orgId, d))
+            .toList();
+        List<ReviewQueueItem> awaiting = toExpenseItems(orgId, needFm)
             .stream().filter(it -> !it.preApproved()).toList();
-        return new FmQueue(awaiting, List.of(), List.of());
+
+        List<ReviewQueueItem> recentlyClosed = toExpenseItems(orgId, expenseDocumentRepo
+            .findByOrgIdAndClaimClosedAtIsNotNullOrderByClaimClosedAtDesc(orgId, Limit.of(RECENTLY_CLOSED_LIMIT)));
+        return new FmQueue(awaiting, openClaims, recentlyClosed);
+    }
+
+    /**
+     * The Owner's Expenses page (rev 60): every non-draft expense in every branch, newest first,
+     * all workflow states. Oversight only — the page offers a business-status change and nothing
+     * else; verify / approve / close stay with the Accountant and Finance Manager.
+     */
+    @Transactional(readOnly = true)
+    public List<ReviewQueueItem> ownerExpenseList() {
+        Long orgId = TenantContext.requireOrgId();
+        guard.requireOwner();
+        return toExpenseItems(orgId, expenseDocumentRepo
+            .findByOrgIdAndWorkflowStatusNotOrderBySubmittedAtDescIdDesc(orgId, ExpenseWorkflowStatus.DRAFT,
+                Limit.of(OWNER_EXPENSE_LIST_LIMIT)));
     }
 
     // ============================================================ cash queue
@@ -898,6 +941,12 @@ public class ReviewService {
             throw DamsException.conflict("Only a verified or approved expense can be closed (document "
                 + label + " is " + s + ")");
         }
+        // rev 61: an expense marked Transfer to Claim is the Finance Manager's to close (Close
+        // Claim), not the Accountant's — the Accountant's job on it ends at Verify.
+        if (expenseDocumentService.statusTriggersClaim(orgId, doc)) {
+            throw DamsException.conflict("Expense " + label + " is marked Transfer to Claim — the Finance Manager"
+                + " closes it (Close Claim). Verify it and it goes to them.");
+        }
         // rev 53: an FM pre-approval that still covers the total counts as that approval —
         // no second FM step. If the total has grown past it, the normal FM Approve applies.
         // rev 54: a status flagged requires_fm_approval needs the same approval as over-limit.
@@ -920,6 +969,60 @@ public class ReviewService {
             detail("documentNo", doc.getDocumentNo(), "fromStatus", s.name()));
         log.info("ExpenseDocument closed: orgId={} branchId={} docId={} documentNo={} from={} by={}",
             orgId, doc.getBranchId(), doc.getId(), doc.getDocumentNo(), s, me.getId());
+        return expenseDocumentService.get(id);
+    }
+
+    /**
+     * Finance Manager's Close Claim on an expense marked Transfer to Claim (rev 61) — the expense
+     * twin of {@code ClaimCloseService.closeClaim}. The Accountant has verified it (VERIFIED, or
+     * APPROVED); the FM records the amount actually recovered. It differs from the total → a reason
+     * is mandatory and the claim is marked "Overridden · Final". Close Claim is itself the FM's
+     * approval, so no over-limit / pre-approval check applies here. Maker-checker still does.
+     */
+    @Transactional
+    public ExpenseDocumentResponse closeExpenseClaim(Long id, BigDecimal finalAmount, String reason) {
+        Long orgId = TenantContext.requireOrgId();
+        AppUser me = guard.requireFinanceManager();
+        ExpenseDocument doc = loadExpense(orgId, id);
+        String label = describe(doc);
+        guard.requireCanReview(me, doc.getBranchId(), doc.getCreatedBy(), doc.getLastModifiedBy(), label);
+
+        if (!expenseDocumentService.statusTriggersClaim(orgId, doc)) {
+            throw DamsException.conflict("Expense " + label + " is not marked Transfer to Claim — there is no claim to close");
+        }
+        ExpenseWorkflowStatus s = doc.getWorkflowStatus();
+        if (s != ExpenseWorkflowStatus.VERIFIED && s != ExpenseWorkflowStatus.APPROVED) {
+            throw DamsException.conflict("Expense " + label + " is " + s
+                + " — the Accountant must verify it before the claim can be closed");
+        }
+
+        BigDecimal computedTotal = expenseTotal(orgId, doc.getId());
+        boolean overridden = finalAmount.compareTo(computedTotal) != 0;
+        String trimmed = reason == null ? null : reason.trim();
+        if (overridden && (trimmed == null || trimmed.isBlank())) {
+            throw DamsException.badRequest("A reason is required when the final amount (" + finalAmount
+                + ") differs from the expense total (" + computedTotal + ")");
+        }
+
+        doc.setClaimFinalAmount(finalAmount);
+        doc.setClaimComputedTotal(computedTotal);
+        doc.setClaimOverridden(overridden);
+        doc.setClaimOverrideReason(overridden ? trimmed : null);
+        doc.setClaimClosedBy(me.getId());
+        doc.setClaimClosedAt(Instant.now());
+        doc.setWorkflowStatus(ExpenseWorkflowStatus.CLOSED);
+        expenseDocumentRepo.save(doc);
+
+        List<Long> lineIds = expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(orgId, doc.getId())
+            .stream().map(ExpenseLine::getId).toList();
+        attachmentService.freezeExpenseDocument(orgId, doc.getId(), lineIds);
+
+        auditService.recordUserEvent(EXPENSE, doc.getId(), doc.getBranchId(), EventType.CLOSED, me.getId(),
+            detail("documentNo", doc.getDocumentNo(), "fromStatus", s.name(), "claim", true,
+                "finalAmount", finalAmount, "computedTotal", computedTotal,
+                "overridden", overridden, "reason", overridden ? trimmed : null));
+        log.info("Expense claim closed: orgId={} branchId={} docId={} documentNo={} final={} computed={} overridden={} by={}",
+            orgId, doc.getBranchId(), doc.getId(), doc.getDocumentNo(), finalAmount, computedTotal, overridden, me.getId());
         return expenseDocumentService.get(id);
     }
 
@@ -1042,6 +1145,7 @@ public class ReviewService {
         Map<Long, String> receiverNames = receiverNamesById(orgId, docs.stream().map(ExpenseDocument::getReceiverId).toList());
         Map<Long, String> categoryNames = expenseCategoryNames(orgId);
         Map<Long, List<ExpenseLine>> linesByDoc = groupExpenseLines(orgId, docs.stream().map(ExpenseDocument::getId).toList());
+        Set<Long> claimStatusIds = expenseDocumentService.claimStatusIds(orgId);
 
         List<ReviewQueueItem> out = new ArrayList<>(docs.size());
         for (ExpenseDocument d : docs) {
@@ -1054,7 +1158,7 @@ public class ReviewService {
             out.add(new ReviewQueueItem("expense", d.getId(), d.getDocumentNo(),
                 d.getBranchId(), branchCode(orgId, d.getBranchId(), branchCodes),
                 party, category, amount, d.isOverLimit(), hasOverride, d.getSubmittedAt(),
-                d.getWorkflowStatus().name(), false, false,
+                d.getWorkflowStatus().name(), claimStatusIds.contains(d.getBusinessStatusId()), false,
                 ExpenseDocumentService.preApprovalCovers(d, amount), d.getApprovalRequestedAt()));
         }
         return out;

@@ -16,6 +16,19 @@ Every receive document on the job card has to be **verified by the accountant** 
    - Different — for example, Eicher settled short and you're accepting it — a **reason is required**.
 5. Press **Confirm & close**.
 
+## Expenses marked Transfer to Claim
+
+An expense the cashier (or a reviewer) marked **Transfer to Claim** — money the manufacturer will pay back — is closed by **you**, not the accountant.
+
+1. The cashier submits it and the **accountant verifies it** (or queries it back to the cashier). Only then does it reach you, under **Open expense claims** on the **Expenses** tab.
+2. Open it and press **Close claim**. The box shows the **expense total**.
+3. Enter the **final amount actually recovered** from the claim:
+   - Same as the total — no reason needed.
+   - Different — for example the manufacturer paid only ₹4,200 of a ₹5,000 repair, or nothing (0) — a **reason is required**.
+4. Press **Confirm & close**. The expense closes and locks. A different amount shows **"Overridden · Final"** with your reason everywhere, and appears in **Override Audit**.
+
+Not right yet? Press **Query** instead — it goes back to the **accountant** (not the cashier), who fixes it and sends it to you again. There is no Approve button on a claim expense: Close claim is your approval. If the expense was also over its limit, you will already have pre-approved it before it was submitted; Close claim still comes at the end.
+
 ## What closing does
 
 - Writes a **locked final amount** for the job card.

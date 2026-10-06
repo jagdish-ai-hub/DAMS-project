@@ -6,6 +6,7 @@ import com.dams.branch.entity.Branch;
 import com.dams.branch.repository.BranchRepository;
 import com.dams.cash.dto.CashDayCloseResponse;
 import com.dams.cash.dto.CloseDayRequest;
+import com.dams.cash.dto.ReopenDayRequest;
 import com.dams.cash.entity.CashDayClose;
 import com.dams.cash.repository.BranchCashOpeningRepository;
 import com.dams.cash.repository.CashDayCloseRepository;
@@ -24,12 +25,14 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -51,6 +54,7 @@ class CashCloseServiceTest {
 
     private static final long ORG = 1L;
     private static final long CASHIER_ID = 7L;
+    private static final long OWNER_ID = 2L;
     private static final long BRANCH = 3L;
     private static final LocalDate CLOSE_DATE = LocalDate.of(2026, 7, 30);
 
@@ -139,6 +143,99 @@ class CashCloseServiceTest {
             .isInstanceOf(DamsException.class)
             .hasMessageContaining("already closed through");
         verify(cashDayCloseRepo, never()).save(any());
+    }
+
+    // ------------------------------------------------------------ reopen (rev 60)
+
+    @Test
+    void reopenDay_latestClose_deletesTheRowAndKeepsTheOriginalInTheAudit() {
+        CashDayClose latest = existingClose(500L, CLOSE_DATE);
+        when(guard.requireOwner(ORG)).thenReturn(owner());
+        when(cashDayCloseRepo.findByOrgIdAndBranchIdAndCloseDate(ORG, BRANCH, CLOSE_DATE)).thenReturn(Optional.of(latest));
+        when(cashDayCloseRepo.findFirstByOrgIdAndBranchIdOrderByCloseDateDesc(ORG, BRANCH)).thenReturn(Optional.of(latest));
+        when(guard.resolveViewBranch(ORG, BRANCH)).thenReturn(BRANCH);
+        when(drawerService.position(ORG, BRANCH, CLOSE_DATE)).thenReturn(
+            new DrawerService.DrawerPosition(BigDecimal.ZERO, true, BigDecimal.ZERO, BigDecimal.ZERO,
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
+        when(drawerService.lineBreakdown(eq(ORG), eq(BRANCH), eq(CLOSE_DATE), any()))
+            .thenReturn(new DrawerService.DrawerLines(java.util.List.of(), java.util.List.of()));
+
+        service.reopenDay(reopenRequest("Closed too early"));
+
+        verify(cashDayCloseRepo).delete(latest);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> detail = ArgumentCaptor.forClass(Map.class);
+        verify(auditService).recordUserEvent(eq("CashDayClose"), eq(500L), eq(BRANCH),
+            eq(EventType.CASH_REOPENED), eq(OWNER_ID), detail.capture());
+        assertThat(detail.getValue())
+            .containsEntry("closeDate", CLOSE_DATE.toString())
+            .containsEntry("reason", "Closed too early")
+            .containsEntry("closedBy", CASHIER_ID);
+        assertThat((BigDecimal) detail.getValue().get("countedAmount")).isEqualByComparingTo("25000");
+    }
+
+    @Test
+    void reopenDay_anEarlierCloseUnderALaterOne_isRefused() {
+        CashDayClose earlier = existingClose(500L, CLOSE_DATE);
+        CashDayClose later = existingClose(501L, CLOSE_DATE.plusDays(1));
+        when(guard.requireOwner(ORG)).thenReturn(owner());
+        when(cashDayCloseRepo.findByOrgIdAndBranchIdAndCloseDate(ORG, BRANCH, CLOSE_DATE)).thenReturn(Optional.of(earlier));
+        when(cashDayCloseRepo.findFirstByOrgIdAndBranchIdOrderByCloseDateDesc(ORG, BRANCH)).thenReturn(Optional.of(later));
+
+        assertThatThrownBy(() -> service.reopenDay(reopenRequest("oops")))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("Only the latest close can be reopened");
+        verify(cashDayCloseRepo, never()).delete(any(CashDayClose.class));
+        verify(auditService, never()).recordUserEvent(any(), any(), any(), eq(EventType.CASH_REOPENED), any(), any());
+    }
+
+    @Test
+    void reopenDay_aDayThatIsNotClosed_isRefused() {
+        when(guard.requireOwner(ORG)).thenReturn(owner());
+        when(cashDayCloseRepo.findByOrgIdAndBranchIdAndCloseDate(ORG, BRANCH, CLOSE_DATE)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.reopenDay(reopenRequest("oops")))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("is not closed");
+        verify(cashDayCloseRepo, never()).delete(any(CashDayClose.class));
+    }
+
+    @Test
+    void reopenDay_isRefusedForAnyoneButTheOwner() {
+        when(guard.requireOwner(ORG)).thenThrow(DamsException.forbidden("Only the Owner can reopen a closed cash day"));
+
+        assertThatThrownBy(() -> service.reopenDay(reopenRequest("oops"))).isInstanceOf(DamsException.class);
+        verify(cashDayCloseRepo, never()).delete(any(CashDayClose.class));
+    }
+
+    private static ReopenDayRequest reopenRequest(String reason) {
+        ReopenDayRequest r = new ReopenDayRequest();
+        r.setBranchId(BRANCH);
+        r.setCloseDate(CLOSE_DATE);
+        r.setReason(reason);
+        return r;
+    }
+
+    private static CashDayClose existingClose(long id, LocalDate date) {
+        CashDayClose c = new CashDayClose();
+        ReflectionTestUtils.setField(c, "id", id);
+        c.setOrgId(ORG);
+        c.setBranchId(BRANCH);
+        c.setCloseDate(date);
+        c.setOpeningAmount(new BigDecimal("10000"));
+        c.setComputedClosing(new BigDecimal("25000"));
+        c.setCountedAmount(new BigDecimal("25000"));
+        c.setVariance(BigDecimal.ZERO);
+        c.setClosedBy(CASHIER_ID);
+        return c;
+    }
+
+    private static AppUser owner() {
+        AppUser u = new AppUser();
+        ReflectionTestUtils.setField(u, "id", OWNER_ID);
+        u.setName("Priya Nair");
+        u.setRole(Role.OWNER);
+        return u;
     }
 
     private static CloseDayRequest request(BigDecimal counted, String remark) {

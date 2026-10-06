@@ -6,11 +6,12 @@ import { reviewApi, type FmQueue, type ReviewQueueItem, type ReviewType } from '
 import { jobCardsApi } from '../api/jobCards'
 import { mastersApi, type MasterRow } from '../api/masters'
 import { card, ErrorBanner, ghostBtn, primaryBtn, inputStyle, Modal, Skeleton, SkeletonRows, inr, fmtDateShort } from '../shell/ui'
-import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, EXPENSE_STATUS_EDITABLE, type AnyDoc } from '../review/reviewShared'
+import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, EXPENSE_STATUS_EDITABLE, isMakerOf, MakerBlockedNote, type AnyDoc } from '../review/reviewShared'
 import GlobalSearch from '../shared/GlobalSearch'
 import { useAuth } from '../auth/useAuth'
 import AiClaimBanner from './AiClaimBanner'
 import ExpenseRequestBanner from './ExpenseRequestBanner'
+import ClaimsSummaryCard from '../shared/ClaimsSummaryCard'
 import { useRiskMap, RiskDot } from '../review/AiRiskBadge'
 import SortModeControl, { groupItems, type SortMode } from '../review/SortModeControl'
 import { StatBox } from '../review/StatBox'
@@ -172,6 +173,8 @@ export default function FmQueuePage() {
 
       <ExpenseRequestBanner requests={requests} onOpen={openRequest} />
       {type === 'receipt' && <AiClaimBanner />}
+      <ClaimsSummaryCard />
+
 
       <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] border border-[var(--line)] rounded-[var(--radius)] overflow-hidden bg-[var(--surface)] min-h-[68vh]">
         <div className={selectedId != null ? 'hidden lg:flex flex-col overflow-y-auto' : 'flex flex-col overflow-y-auto'}>
@@ -189,9 +192,9 @@ export default function FmQueuePage() {
             ))}
           </div>
 
-          {type === 'receipt' && (
+          {(type === 'receipt' || (type === 'expense' && queue.openClaims.length > 0)) && (
             <Section
-              title="Open warranty / AMC / CG claims"
+              title={type === 'receipt' ? 'Open warranty / AMC / CG claims' : 'Open expense claims (Transfer to Claim)'}
               items={filteredOpenClaims}
               selectedId={selectedId}
               onSelect={setSelectedId}
@@ -206,7 +209,7 @@ export default function FmQueuePage() {
             <Section title="Approval requests from cashiers" items={requests} selectedId={selectedId} onSelect={setSelectedId} sortMode={sortMode} />
           )}
           <Section title="Awaiting final approval" items={awaitingRegular} selectedId={selectedId} onSelect={setSelectedId} riskMap={riskMap} sortMode={sortMode} />
-          {type === 'receipt' && (
+          {(type === 'receipt' || (type === 'expense' && queue.recentlyClosed.length > 0)) && (
             <Section title="Recently closed" items={queue.recentlyClosed} selectedId={selectedId} onSelect={setSelectedId} plain />
           )}
         </div>
@@ -377,7 +380,7 @@ function Overview({
         Reviewing {type === 'receipt' ? 'receipts' : type === 'expense' ? 'expenses' : 'cash movements'}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 190px), 1fr))', gap: 12 }}>
-        {type === 'receipt' && (
+        {(type === 'receipt' || type === 'expense') && (
           <>
             <StatBox accent="var(--purple, #6B3FA0)" label="Open claims" value={String(openClaimsList.length)}
               note={`${readyToClose} ready to close · ${openClaimsList.length - readyToClose} still with the Accountant`}
@@ -392,7 +395,7 @@ function Overview({
           note={`avg ${avg(total, count)} per entry`} />
       </div>
 
-      {type === 'receipt' && openClaimsList.length > 0 && (
+      {(type === 'receipt' || type === 'expense') && openClaimsList.length > 0 && (
         <div style={{ ...card, marginTop: 16 }}>
           <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--navy)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
             <span>⏱️</span> OEM Claim Aging Buckets
@@ -472,18 +475,23 @@ function FmDetail(props: {
   // implicit approve into the same click, and the service checks maker-checker there too — the
   // FE doesn't pre-hide Close Claim for it since the check is per receive-document on the job
   // card, not just this one, so a rejection surfaces as a normal error instead.
-  const isMaker = user != null && (user.userId === doc.createdBy
-    || (doc.lastModifiedBy != null && user.userId === doc.lastModifiedBy))
+  // An Owner is exempt (rev 59) — see isMakerOf.
+  const isMaker = isMakerOf(user, doc)
   const isClaim = !!receipt && receipt.isClaim
   const claimSettled = !!receipt && receipt.settledViaClaimClose
   // Query is available at VERIFIED regardless of claim-ness; Approve is the ordinary
   // (non-claim) path only — a claim's approval now happens inside Close Claim itself.
   const canQuery = wf === 'VERIFIED' && !isMaker
-  const canApprove = canQuery && !isClaim
   // Approve / Close claim are disabled while the Query box is open (see ReviewQueuePage).
   // rev 53 — an over-limit expense draft the cashier sent for pre-approval.
   const expense = type === 'expense' ? (doc as ExpenseDocument) : null
   const isApprovalRequest = !!expense && wf === 'DRAFT' && expense.preApprovalStatus === 'PENDING'
+  // rev 61 — an expense marked Transfer to Claim: Close Claim (final amount recovered, reason if it
+  // differs) is the FM's approval, exactly like a receipt claim, so there is no separate Approve.
+  const isClaimExpense = !!expense && expense.businessStatusTriggersClaim
+  const claimExpenseClosed = !!expense && expense.claimFinalAmount != null
+  const canCloseExpenseClaim = isClaimExpense && !claimExpenseClosed && (wf === 'VERIFIED' || wf === 'APPROVED') && !isMaker
+  const canApprove = canQuery && !isClaim && !isClaimExpense
 
   const isOpenClaim = isClaim && (wf === 'VERIFIED' || wf === 'APPROVED') && !claimSettled
   const isClosedClaim = claimSettled
@@ -506,12 +514,13 @@ function FmDetail(props: {
 
   function submitBox() {
     const text = boxText.trim()
-    if (!text) { setError('Type the question for the cashier'); return }
+    if (!text) { setError(isApprovalRequest ? 'Type the question for the cashier' : 'Type the question for the Accountant'); return }
     if (isApprovalRequest) {
       run(() => reviewApi.queryExpenseApproval(doc.id, text), `Request #${doc.id} sent back to the cashier with your note`)
       return
     }
-    run(() => reviewApi.query(type, doc.id, text), `${docNo} queried — sent back to the cashier`)
+    // rev 49: an FM query on a verified entry goes back to the Accountant, not the cashier.
+    run(() => reviewApi.query(type, doc.id, text), `${docNo} queried — sent back to the Accountant`)
   }
 
   return (
@@ -582,10 +591,18 @@ function FmDetail(props: {
         </div>
       )}
 
-      {!canQuery && !isOpenClaim && !isApprovalRequest ? (
+      {isClaimExpense && !claimExpenseClosed && (wf === 'VERIFIED' || wf === 'APPROVED') && (
+        <div style={{ ...card, background: 'var(--purple-bg, #EFE7FB)', borderColor: '#D9C7EF', marginBottom: 14, fontSize: '0.82rem' }}>
+          <strong>Transfer to Claim.</strong> The Accountant has verified this expense. Close Claim records the amount
+          actually recovered ({inr(expense!.totalAmount)} was spent) — enter a different amount with a reason if the claim
+          paid less, or Query it back to the Accountant. Closing is final.
+        </div>
+      )}
+
+      {!canQuery && !isOpenClaim && !isApprovalRequest && !canCloseExpenseClaim ? (
         <div style={{ ...card, textAlign: 'center', color: 'var(--faint)', fontSize: '0.84rem' }}>
           {isMaker
-            ? 'You created or last edited this entry — maker-checker requires another reviewer.'
+            ? <MakerBlockedNote doc={doc} step="FINANCE_MANAGER" />
             : 'No action needed from you right now.'}
         </div>
       ) : (
@@ -613,7 +630,7 @@ function FmDetail(props: {
                 disabled={busy || box != null} title={box != null ? 'Send or cancel the Query first' : undefined}
                 style={{ ...primaryBtn(busy || box != null), minHeight: 36 }}>Approve</button>
             )}
-            {isOpenClaim && (
+            {(isOpenClaim || canCloseExpenseClaim) && (
               <button type="button" onClick={() => setClaimModal(true)} disabled={busy || box != null}
                 title={box != null ? 'Send or cancel the Query first' : undefined}
                 style={{ ...primaryBtn(busy || box != null), background: 'var(--purple, #6B3FA0)', minHeight: 36 }}>
@@ -626,9 +643,24 @@ function FmDetail(props: {
 
       {claimModal && receipt && (
         <ClaimCloseModal
-          jobCardId={receipt.jobCardId}
-          jobCardReference={receipt.jobCardReference}
+          reference={receipt.jobCardReference}
+          totalLabel="Received so far"
           computedTotal={receipt.totalReceived}
+          overrideHint="e.g. Eicher partial settlement — remainder written off"
+          lockNote="This is final and immutable. The job card's category and business status lock, and no new receipt can be opened against it."
+          close={(finalAmount, reason) => jobCardsApi.closeClaim(receipt.jobCardId, { finalAmount, reason })}
+          onClose={() => setClaimModal(false)}
+          onDone={() => { setClaimModal(false); props.onDone(`${docNo} claim closed — locked`, false) }}
+        />
+      )}
+      {claimModal && expense && (
+        <ClaimCloseModal
+          reference={docNo}
+          totalLabel="Expense total"
+          computedTotal={expense.totalAmount}
+          overrideHint="e.g. OEM paid part of the repair — remainder not recoverable"
+          lockNote="This is the amount actually recovered from the claim. It is final: the expense closes and its lines and attachments lock."
+          close={(finalAmount, reason) => reviewApi.closeExpenseClaim(expense.id, finalAmount, reason)}
           onClose={() => setClaimModal(false)}
           onDone={() => { setClaimModal(false); props.onDone(`${docNo} claim closed — locked`, false) }}
         />
@@ -637,10 +669,14 @@ function FmDetail(props: {
   )
 }
 
+/** Close Claim for a receipt's job card or an expense (rev 61): final amount + a reason if it differs from the total. */
 function ClaimCloseModal(props: {
-  jobCardId: number
-  jobCardReference: string
+  reference: string
+  totalLabel: string
   computedTotal: number
+  overrideHint: string
+  lockNote: string
+  close: (finalAmount: number, reason?: string) => Promise<unknown>
   onClose: () => void
   onDone: () => void
 }) {
@@ -654,11 +690,11 @@ function ClaimCloseModal(props: {
 
   async function confirm() {
     if (amount === '' || finalAmount < 0) { setError('Enter the final amount'); return }
-    if (overridden && !reason.trim()) { setError('A reason is required when the final amount differs from what was received'); return }
+    if (overridden && !reason.trim()) { setError(`A reason is required when the final amount differs from the ${props.totalLabel.toLowerCase()}`); return }
     setBusy(true)
     setError('')
     try {
-      await jobCardsApi.closeClaim(props.jobCardId, { finalAmount, reason: reason.trim() || undefined })
+      await props.close(finalAmount, reason.trim() || undefined)
       props.onDone()
     } catch (e) {
       setError(apiError(e, 'Could not close the claim.'))
@@ -668,10 +704,10 @@ function ClaimCloseModal(props: {
   }
 
   return (
-    <Modal title="Close the claim" subtitle={props.jobCardReference} onClose={props.onClose}>
+    <Modal title="Close the claim" subtitle={props.reference} onClose={props.onClose}>
       <ErrorBanner message={error} />
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem', padding: '4px 0' }}>
-        <span style={{ color: 'var(--muted)' }}>Received so far</span>
+        <span style={{ color: 'var(--muted)' }}>{props.totalLabel}</span>
         <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{inr(props.computedTotal)}</span>
       </div>
       <label style={fieldLabel}>Final amount (locked once closed)
@@ -680,11 +716,11 @@ function ClaimCloseModal(props: {
       <label style={fieldLabel}>
         Reason {overridden && <span style={{ color: 'var(--red)' }}>*</span>}
         <input value={reason} onChange={(e) => setReason(e.target.value)} disabled={!overridden}
-          placeholder={overridden ? 'e.g. Eicher partial settlement — remainder written off' : 'not needed — matches what was received'}
+          placeholder={overridden ? props.overrideHint : 'not needed — matches the total'}
           style={inputStyle} />
       </label>
       <div style={{ fontSize: '0.74rem', color: 'var(--faint)' }}>
-        This is final and immutable. The job card's category and business status lock, and no new receipt can be opened against it.
+        {props.lockNote}
       </div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 4 }}>
         <button type="button" onClick={props.onClose} style={{ ...ghostBtn, minHeight: 36 }} disabled={busy}>Cancel</button>

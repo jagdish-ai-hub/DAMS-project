@@ -34,7 +34,8 @@ They then see a **⇄ Switch role** button next to **Help**. They pick a branch,
 What to expect:
 
 - **Entries always carry their own name.** If Ajay switches to Cashier and records a receipt, it says Ajay. History and Override Audit also note "as Cashier".
-- **They can't approve their own work.** An entry Ajay made as Cashier still can't be verified or approved by Ajay as Accountant.
+- **They can't approve their own work.** An entry Ajay made as Cashier still can't be verified or approved by Ajay as Accountant — another accountant or the Finance Manager has to. The review screen says who entered it and names the people who can clear it.
+- **You are the exception.** As Owner, an entry you made while working as Cashier *can* be verified and approved by you when you switch to Accountant or Finance Manager. Nobody else gets this.
 - **One branch at a time.** As Cashier at OOR they post to OOR only. To work at another branch, they switch again.
 - **You're never locked out of anything.** As Owner you always have the Switch role button and can work as any role at any branch.
 - **Removing a role takes effect straight away.** If you take away a role while they're using it, they're sent back to sign in on their next click.

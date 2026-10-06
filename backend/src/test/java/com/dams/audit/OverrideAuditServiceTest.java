@@ -112,6 +112,30 @@ class OverrideAuditServiceTest {
     }
 
     @Test
+    void list_includesAnExpenseClaimCloseOverride_asAClaim() {
+        com.dams.expense.entity.ExpenseDocument d = new com.dams.expense.entity.ExpenseDocument();
+        d.setBranchId(3L);
+        d.setDocumentNo("OOR-JUL26-E-009");
+        d.setClaimOverridden(true);
+        d.setClaimComputedTotal(new BigDecimal("5000"));
+        d.setClaimFinalAmount(new BigDecimal("4200"));
+        d.setClaimOverrideReason("OEM part payment");
+        d.setClaimClosedBy(8L);
+        d.setClaimClosedAt(Instant.parse("2026-07-26T09:00:00Z"));
+        when(expenseDocumentRepo.findByOrgIdAndClaimOverriddenTrueAndClaimClosedAtBetweenOrderByClaimClosedAtDesc(ORG, FROM, TO))
+            .thenReturn(List.of(d));
+
+        List<OverrideAuditEntry> out = service.list(FROM, TO, null, null);
+
+        assertThat(out).hasSize(1);
+        assertThat(out.get(0).kind()).isEqualTo("claim");
+        assertThat(out.get(0).documentNo()).isEqualTo("OOR-JUL26-E-009");
+        assertThat(out.get(0).amountBefore()).isEqualByComparingTo("5000");
+        assertThat(out.get(0).amountAfter()).isEqualByComparingTo("4200");
+        assertThat(out.get(0).reason()).isEqualTo("OEM part payment");
+    }
+
+    @Test
     void list_includesInvoiceAmountOverride_asItsOwnKind_notMisfiledAsAnExpense() {
         AuditEvent invoiceOverride = overrideEvent(
             "JobCard", 70L, 3L, Instant.parse("2026-07-22T10:00:00Z"),

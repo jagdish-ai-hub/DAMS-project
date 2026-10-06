@@ -14,6 +14,8 @@ public interface UserBranchAccessRepository extends JpaRepository<UserBranchAcce
 
     List<UserBranchAccess> findByUserId(Long userId);
 
+    List<UserBranchAccess> findByBranchId(Long branchId);
+
     long countByBranchId(Long branchId);
 
     /** {branchId, count} of access rows for the given branches — one query for the branch list. */

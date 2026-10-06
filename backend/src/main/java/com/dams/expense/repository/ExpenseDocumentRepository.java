@@ -50,6 +50,37 @@ public interface ExpenseDocumentRepository extends JpaRepository<ExpenseDocument
     List<ExpenseDocument> findByOrgIdAndWorkflowStatusInAndBranchIdInOrderBySubmittedAtDescIdDesc(
         Long orgId, Collection<ExpenseWorkflowStatus> workflowStatuses, Collection<Long> branchIds);
 
+    /** Owner's Expenses page (rev 60) — every document not in the given state (DRAFT), org-wide, newest first. */
+    List<ExpenseDocument> findByOrgIdAndWorkflowStatusNotOrderBySubmittedAtDescIdDesc(
+        Long orgId, ExpenseWorkflowStatus workflowStatus, Limit limit);
+
+    /**
+     * Claims summary (rev 62) — expenses raised (submitted) in a window that are in a claim
+     * status, or were closed as a claim. Drafts and rejected expenses are not claims yet / any more.
+     * {@code claimStatusIds} must be non-empty (pass a dummy id when the org has none).
+     */
+    @Query("""
+        select d from ExpenseDocument d
+        where d.orgId = :orgId
+          and (:branchId is null or d.branchId = :branchId)
+          and d.submittedAt >= :from and d.submittedAt < :to
+          and d.workflowStatus <> com.dams.expense.entity.ExpenseWorkflowStatus.DRAFT
+          and d.workflowStatus <> com.dams.expense.entity.ExpenseWorkflowStatus.REJECTED
+          and (d.businessStatusId in :claimStatusIds or d.claimFinalAmount is not null)
+        """)
+    List<ExpenseDocument> findClaimExpenses(@Param("orgId") Long orgId,
+                                            @Param("branchId") Long branchId,
+                                            @Param("from") java.time.Instant from,
+                                            @Param("to") java.time.Instant to,
+                                            @Param("claimStatusIds") Collection<Long> claimStatusIds);
+
+    /** FM "recently closed claims" (rev 61) — expense claims the Finance Manager has closed, newest first. */
+    List<ExpenseDocument> findByOrgIdAndClaimClosedAtIsNotNullOrderByClaimClosedAtDesc(Long orgId, Limit limit);
+
+    /** Override Audit (rev 61) — Finance Manager claim closes whose final amount differed from the total. */
+    List<ExpenseDocument> findByOrgIdAndClaimOverriddenTrueAndClaimClosedAtBetweenOrderByClaimClosedAtDesc(
+        Long orgId, java.time.Instant from, java.time.Instant to);
+
     /** Customer history — every expense tagged to one of this customer's job cards, newest first. */
     List<ExpenseDocument> findByOrgIdAndJobCardIdInOrderByCreatedAtDesc(Long orgId, Collection<Long> jobCardIds);
 

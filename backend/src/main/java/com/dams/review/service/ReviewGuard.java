@@ -17,7 +17,9 @@ import org.springframework.stereotype.Component;
  *   - the document must sit in a branch the caller can see ({@link BranchScope} — an
  *     accountant's assigned branches; FM / Owner are org-wide so this never restricts them);
  *   - maker-checker (AGENT.md): a user never reviews or approves an entry they created or
- *     last modified — someone else must.
+ *     last modified — someone else must. The one exception is a user whose OWN role is Owner
+ *     ({@link #mayReviewOwnEntries}, plan.md rev 59): the Owner can act as every role, so they
+ *     may review what they entered while acting as Cashier.
  *
  * "Last modified" tracks the cashier's last touch (create / submit / resubmit / line edit).
  * An accountant's own amount override deliberately does NOT bump it — the override trail is
@@ -53,6 +55,15 @@ public class ReviewGuard {
         return me;
     }
 
+    /** Assert the caller is acting as the Owner (the Owner's Expenses page, rev 60). Returns them. */
+    public AppUser requireOwner() {
+        AppUser me = me();
+        if (ActingDetails.effectiveRole(me) != Role.OWNER) {
+            throw DamsException.forbidden("Only the Owner can view the organization-wide expense list");
+        }
+        return me;
+    }
+
     /** Assert the caller may change an expense's business status: Accountant, Finance Manager or Owner. */
     public AppUser requireStatusChanger() {
         AppUser me = me();
@@ -69,6 +80,16 @@ public class ReviewGuard {
     }
 
     /**
+     * True when {@code me} is exempt from maker-checker (rev 59): their STORED role is Owner.
+     * Deliberately the user's own role, not the acting role — an Accountant or Finance Manager
+     * who has switched is still blocked from their own entries. Mirrored in the frontend as
+     * {@code isMakerOf} (review/reviewShared.tsx); the server stays authoritative.
+     */
+    public static boolean mayReviewOwnEntries(AppUser me) {
+        return me.getRole() == Role.OWNER;
+    }
+
+    /**
      * Assert this accountant may act on this specific document: branch in scope, and neither
      * its creator nor its last modifier.
      *
@@ -78,7 +99,7 @@ public class ReviewGuard {
         if (!branchScope.canSeeBranch(branchId)) {
             throw DamsException.forbidden("You are not assigned to the branch of document " + docLabel);
         }
-        if (me.getId().equals(createdBy) || me.getId().equals(lastModifiedBy)) {
+        if (!mayReviewOwnEntries(me) && (me.getId().equals(createdBy) || me.getId().equals(lastModifiedBy))) {
             throw DamsException.conflict("You cannot review document " + docLabel
                 + " because you created or last modified it — a different accountant must.");
         }

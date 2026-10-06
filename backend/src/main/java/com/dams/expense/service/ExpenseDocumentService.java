@@ -357,6 +357,24 @@ public class ExpenseDocumentService {
             .orElse(false);
     }
 
+    /**
+     * rev 61 — is the expense in the "Transfer to Claim" status (flag {@code triggers_claim}, never
+     * the label)? A claim expense is closed by the Finance Manager, not the Accountant. Public —
+     * ReviewService routes the close on it.
+     */
+    public boolean statusTriggersClaim(Long orgId, ExpenseDocument doc) {
+        return statusRepo.findByIdAndOrgId(doc.getBusinessStatusId(), orgId)
+            .map(ExpenseBusinessStatus::isTriggersClaim)
+            .orElse(false);
+    }
+
+    /** rev 61 — ids of the org's claim statuses, so a queue can tag many documents with one lookup. */
+    public java.util.Set<Long> claimStatusIds(Long orgId) {
+        return statusRepo.findByOrgIdAndTriggersClaimTrue(orgId).stream()
+            .map(ExpenseBusinessStatus::getId)
+            .collect(Collectors.toSet());
+    }
+
     /** Over any sub-category limit (rev 53), or in a status flagged for FM approval (rev 54). */
     private boolean requiresFmApproval(Long orgId, ExpenseDocument doc) {
         return doc.isOverLimit() || statusRequiresFmApproval(orgId, doc);
@@ -938,6 +956,12 @@ public class ExpenseDocumentService {
             doc.getApprovalRequestedAt(),
             preApprovalCovers(doc, total),
             requiresFmApproval(orgId, doc),
+            doc.getClaimFinalAmount(),
+            doc.isClaimOverridden(),
+            doc.getClaimOverrideReason(),
+            doc.getClaimClosedBy() == null ? null
+                : userRepo.findByIdAndOrganization_Id(doc.getClaimClosedBy(), orgId).map(AppUser::getName).orElse(null),
+            doc.getClaimClosedAt(),
             lineDtos,
             documentHistoryService.forDocument(ENTITY, doc.getId()));
     }

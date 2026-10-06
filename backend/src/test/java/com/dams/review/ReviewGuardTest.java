@@ -115,6 +115,51 @@ class ReviewGuardTest {
         guard.requireCanReview(me, BRANCH, 7L, 8L, "OOR-AUG26-R-001"); // no throw
     }
 
+    // --- Owner exemption (plan.md rev 59) ---
+
+    @Test
+    void requireCanReview_passes_whenAnOwnerReviewsAnEntryTheyMadeActingAsCashier() {
+        when(branchScope.canSeeBranch(BRANCH)).thenReturn(true);
+        // Priya is an Owner who entered it as Cashier, then switched to Accountant. The token's
+        // acting role is irrelevant here — the exemption keys on her stored (own) role.
+        AppUser owner = user(ACCOUNTANT_ID, Role.OWNER);
+        guard.requireCanReview(owner, BRANCH, ACCOUNTANT_ID, ACCOUNTANT_ID, "OOJ-OCT26-E-001"); // no throw
+    }
+
+    @Test
+    void requireCanReview_stillBlocksAFinanceManagerWhoSwitchedAndEnteredTheEntry() {
+        when(branchScope.canSeeBranch(BRANCH)).thenReturn(true);
+        AppUser fm = user(ACCOUNTANT_ID, Role.FINANCE_MANAGER);
+        assertThatThrownBy(() -> guard.requireCanReview(fm, BRANCH, ACCOUNTANT_ID, ACCOUNTANT_ID, "OOJ-OCT26-E-001"))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("created or last modified it");
+    }
+
+    @Test
+    void requireCanReview_stillBlocksACashierWhoSwitchedToAccountantOnTheirOwnEntry() {
+        when(branchScope.canSeeBranch(BRANCH)).thenReturn(true);
+        AppUser cashier = user(ACCOUNTANT_ID, Role.CASHIER);
+        assertThatThrownBy(() -> guard.requireCanReview(cashier, BRANCH, ACCOUNTANT_ID, 7L, "OOJ-OCT26-R-001"))
+            .isInstanceOf(DamsException.class);
+    }
+
+    @Test
+    void requireCanReview_stillEnforcesBranchScope_forAnOwner() {
+        when(branchScope.canSeeBranch(BRANCH)).thenReturn(false);
+        AppUser owner = user(ACCOUNTANT_ID, Role.OWNER);
+        assertThatThrownBy(() -> guard.requireCanReview(owner, BRANCH, ACCOUNTANT_ID, ACCOUNTANT_ID, "OOJ-OCT26-E-001"))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("not assigned to the branch");
+    }
+
+    @Test
+    void mayReviewOwnEntries_isTrueOnlyForAnOwner() {
+        assertThat(ReviewGuard.mayReviewOwnEntries(user(1L, Role.OWNER))).isTrue();
+        assertThat(ReviewGuard.mayReviewOwnEntries(user(1L, Role.FINANCE_MANAGER))).isFalse();
+        assertThat(ReviewGuard.mayReviewOwnEntries(user(1L, Role.ACCOUNTANT))).isFalse();
+        assertThat(ReviewGuard.mayReviewOwnEntries(user(1L, Role.CASHIER))).isFalse();
+    }
+
     private static AppUser user(long id, Role role) {
         AppUser u = new AppUser();
         ReflectionTestUtils.setField(u, "id", id);

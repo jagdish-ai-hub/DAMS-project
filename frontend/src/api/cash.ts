@@ -66,6 +66,8 @@ export interface CashDrawer {
   computedPosition: number
   closed: boolean
   close: CashDayClose | null
+  /** The close is the branch's latest — the Owner may reopen it (rev 60). */
+  reopenable: boolean
   movements: CashDocument[]
   cashReceiptLines: MoneyMovementItem[]
   cashExpenseLines: MoneyMovementItem[]
@@ -104,6 +106,12 @@ export interface CashOpeningRequest {
   amount: number
 }
 
+export interface ReopenDayRequest {
+  branchId: number
+  closeDate: string
+  reason: string
+}
+
 export const cashApi = {
   drawer(date: string, branchId?: number) {
     return api.get<CashDrawer>('/api/v1/cash/drawer', { params: { date, branchId } })
@@ -128,6 +136,10 @@ export const cashApi = {
   },
   closeDay(data: CloseDayRequest) {
     return api.post<CashDayClose>('/api/v1/cash/close-day', data)
+  },
+  /** Owner only (rev 60) — reopen a branch's latest closed day; the reason is kept in the audit trail. */
+  reopenDay(data: ReopenDayRequest) {
+    return api.post<CashDrawer>('/api/v1/cash/reopen-day', data)
   },
   setOpening(data: CashOpeningRequest) {
     return api.post<CashDrawer>('/api/v1/cash/opening', data)

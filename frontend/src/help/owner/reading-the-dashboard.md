@@ -11,6 +11,17 @@ Your home screen is the **Dashboard** — the group's money at a glance. Two con
 
 **Cash In / Cash Out never appear in Collections or Expenses.** They only move money between the bank and a drawer, so they only change Cash in hand.
 
+## Claims
+
+Just under the headline numbers, the **Claims** card shows what you have claimed back from the manufacturer and how it has gone. It follows the same branch and period filters.
+
+- **Total claimed** — for an expense claim, what was spent; for a warranty / AMC / CG claim, the job's invoice amount.
+- **Total received** — what has come back: the final amount the Finance Manager recorded when closing a claim, plus payments received so far on claims still open.
+- **Claim rejected / not recovered** — the part a *closed* claim did not recover. A ₹5,000 claim closed at ₹4,200 shows ₹800 here; a claim closed at ₹0 shows all ₹5,000.
+- **Still open** — what is still outstanding on claims the Finance Manager has not closed yet.
+
+Claimed always equals received + rejected + still open. A claim counts in the period it was **raised** (an expense when submitted, a receipt claim when its first receipt is submitted), and the card splits expense claims from receipt claims below the figures.
+
 ## The panels below
 
 - **Collections vs Expenses** — a 14-day trend line. This always shows 14 days, whatever the period filter says.

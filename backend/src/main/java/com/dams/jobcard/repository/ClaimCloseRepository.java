@@ -22,6 +22,9 @@ public interface ClaimCloseRepository extends JpaRepository<ClaimClose, Long> {
     @org.springframework.data.jpa.repository.Query("select c.jobCardId from ClaimClose c where c.orgId = :orgId")
     List<Long> findJobCardIdsByOrgId(@org.springframework.data.repository.query.Param("orgId") Long orgId);
 
+    /** Every claim close in the org — the claims summary (rev 62) reads each closed claim's final amount. */
+    List<ClaimClose> findByOrgId(Long orgId);
+
     /** FM queue "recently closed" — newest first. */
     List<ClaimClose> findByOrgIdOrderByClosedAtDesc(Long orgId, Limit limit);
 

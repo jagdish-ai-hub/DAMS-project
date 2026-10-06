@@ -63,6 +63,14 @@ public record ExpenseDocumentResponse(
     // rev 54 — FM approval is needed for this expense: over a limit, or its status is flagged.
     boolean needsFmApproval,
 
+    // rev 61 — set once the Finance Manager has closed a "Transfer to Claim" expense: the amount
+    // actually recovered ("Final"), whether it differs from the total ("Overridden · Final"), why.
+    BigDecimal claimFinalAmount,
+    boolean claimOverridden,
+    String claimOverrideReason,
+    String claimClosedByName,
+    Instant claimClosedAt,
+
     List<ExpenseLineResponse> lines,
     List<DocumentHistoryEntry> history   // oldest-first; drives the review pane + the cashier's "why queried"
 ) {

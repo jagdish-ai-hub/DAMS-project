@@ -22,6 +22,8 @@ A request has no document number yet — it's still the cashier's draft. It show
    - **Query** — send it back with a question. It goes straight back to the **accountant**, not the cashier — they already own the verification you're questioning. They fix it (or explain, with a remark) and resend it to you; it does not need to go through the cashier again.
    - **Reject** — the entry shouldn't stand. Give a reason; a rejected entry is closed.
 
+**Which expenses reach you:** only a verified expense that is **over a sub-category limit** or in a status that **needs Finance Manager approval**, and that you haven't already pre-approved. An ordinary in-limit expense is closed by the accountant alone, so it never appears in your queue.
+
 A warranty / AMC / CG claim receipt has no separate Approve step — see *Closing a claim*: Close Claim approves it and closes the claim in one action.
 
 ## Good to know

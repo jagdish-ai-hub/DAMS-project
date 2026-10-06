@@ -637,6 +637,204 @@ class ReviewServiceTest {
     }
 
     @Test
+    void fmExpenseQueue_leavesOutInLimitExpensesTheAccountantCanCloseAlone() {
+        ExpenseDocument inLimit = expenseDoc(ExpenseWorkflowStatus.VERIFIED, false);   // ordinary status (mock default)
+        when(expenseDocumentRepo.findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(ORG, ExpenseWorkflowStatus.VERIFIED))
+            .thenReturn(List.of(inLimit));
+
+        var queue = service.fmExpenseQueue();
+
+        assertThat(queue.awaitingApproval()).isEmpty();
+    }
+
+    @Test
+    void fmExpenseQueue_keepsAnInLimitExpenseInAStatusFlaggedForFmApproval() {
+        ExpenseDocument flagged = expenseDoc(ExpenseWorkflowStatus.VERIFIED, false);
+        ExpenseDocument plain = expenseDoc(ExpenseWorkflowStatus.VERIFIED, false);
+        ReflectionTestUtils.setField(plain, "id", 602L);
+        when(expenseDocumentRepo.findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(ORG, ExpenseWorkflowStatus.VERIFIED))
+            .thenReturn(List.of(flagged, plain));
+        when(expenseDocumentService.statusRequiresFmApproval(ORG, flagged)).thenReturn(true);
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdInOrderByLineNoAsc(eq(ORG), any()))
+            .thenReturn(List.of(expenseLine(1, new BigDecimal("500"))));
+
+        var queue = service.fmExpenseQueue();
+
+        assertThat(queue.awaitingApproval()).extracting(ReviewQueueItem::id).containsExactly(E_ID);
+    }
+
+    @Test
+    void ownerExpenseList_requiresTheOwner_andListsEveryNonDraftExpense() {
+        when(guard.requireOwner()).thenReturn(actor(Role.OWNER));
+        ExpenseDocument closed = expenseDoc(ExpenseWorkflowStatus.CLOSED, false);
+        when(expenseDocumentRepo.findByOrgIdAndWorkflowStatusNotOrderBySubmittedAtDescIdDesc(
+            eq(ORG), eq(ExpenseWorkflowStatus.DRAFT), any())).thenReturn(List.of(closed));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdInOrderByLineNoAsc(eq(ORG), any()))
+            .thenReturn(List.of(expenseLine(1, new BigDecimal("500"))));
+
+        List<ReviewQueueItem> items = service.ownerExpenseList();
+
+        assertThat(items).extracting(ReviewQueueItem::workflowStatus).containsExactly("CLOSED");
+        verify(guard).requireOwner();
+    }
+
+    @Test
+    void ownerExpenseList_isRefusedForAnyoneElse() {
+        when(guard.requireOwner()).thenThrow(DamsException.forbidden("Only the Owner"));
+
+        assertThatThrownBy(() -> service.ownerExpenseList()).isInstanceOf(DamsException.class);
+        verify(expenseDocumentRepo, never()).findByOrgIdAndWorkflowStatusNotOrderBySubmittedAtDescIdDesc(any(), any(), any());
+    }
+
+    // ---------------------------------------------------- expense claims (rev 61)
+
+    @Test
+    void closeExpense_onAClaimExpense_isRefusedForTheAccountant_theFmClosesIt() {
+        ExpenseDocument doc = expenseDoc(ExpenseWorkflowStatus.VERIFIED, false);
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+        when(expenseDocumentService.statusTriggersClaim(ORG, doc)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.closeExpense(E_ID))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("Finance Manager closes it");
+        assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.VERIFIED);
+    }
+
+    @Test
+    void closeExpenseClaim_withADifferentAmountAndReason_closesAndMarksItOverridden() {
+        ExpenseDocument doc = verifiedClaimExpense("5000");
+
+        service.closeExpenseClaim(E_ID, new BigDecimal("4200"), "  OEM part payment  ");
+
+        assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.CLOSED);
+        assertThat(doc.getClaimFinalAmount()).isEqualByComparingTo("4200");
+        assertThat(doc.getClaimComputedTotal()).isEqualByComparingTo("5000");
+        assertThat(doc.isClaimOverridden()).isTrue();
+        assertThat(doc.getClaimOverrideReason()).isEqualTo("OEM part payment");
+        assertThat(doc.getClaimClosedBy()).isEqualTo(ACTOR_ID);
+        assertThat(doc.getClaimClosedAt()).isNotNull();
+        verify(attachmentService).freezeExpenseDocument(eq(ORG), eq(E_ID), any());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> detail = ArgumentCaptor.forClass(Map.class);
+        verify(auditService).recordUserEvent(eq("ExpenseDocument"), eq(E_ID), eq(BRANCH),
+            eq(EventType.CLOSED), eq(ACTOR_ID), detail.capture());
+        assertThat(detail.getValue())
+            .containsEntry("claim", true)
+            .containsEntry("overridden", true)
+            .containsEntry("reason", "OEM part payment");
+    }
+
+    @Test
+    void closeExpenseClaim_atTheSameAmount_needsNoReason_andIsNotOverridden() {
+        ExpenseDocument doc = verifiedClaimExpense("5000");
+
+        service.closeExpenseClaim(E_ID, new BigDecimal("5000.00"), null);
+
+        assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.CLOSED);
+        assertThat(doc.isClaimOverridden()).isFalse();
+        assertThat(doc.getClaimOverrideReason()).isNull();
+    }
+
+    @Test
+    void closeExpenseClaim_zeroIsAllowed_aFullyWrittenOffClaim() {
+        ExpenseDocument doc = verifiedClaimExpense("5000");
+
+        service.closeExpenseClaim(E_ID, BigDecimal.ZERO, "OEM rejected the claim");
+
+        assertThat(doc.getClaimFinalAmount()).isEqualByComparingTo("0");
+        assertThat(doc.isClaimOverridden()).isTrue();
+    }
+
+    @Test
+    void closeExpenseClaim_withADifferentAmountButNoReason_isRefused() {
+        ExpenseDocument doc = verifiedClaimExpense("5000");
+
+        assertThatThrownBy(() -> service.closeExpenseClaim(E_ID, new BigDecimal("4200"), "   "))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("A reason is required");
+        assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.VERIFIED);
+        assertThat(doc.getClaimFinalAmount()).isNull();
+    }
+
+    @Test
+    void closeExpenseClaim_onAnExpenseThatIsNotAClaim_isRefused() {
+        ExpenseDocument doc = expenseDoc(ExpenseWorkflowStatus.VERIFIED, false);
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+        when(expenseDocumentService.statusTriggersClaim(ORG, doc)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.closeExpenseClaim(E_ID, new BigDecimal("1"), "x"))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("not marked Transfer to Claim");
+        assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.VERIFIED);
+    }
+
+    @Test
+    void closeExpenseClaim_beforeTheAccountantHasVerified_isRefused() {
+        ExpenseDocument doc = expenseDoc(ExpenseWorkflowStatus.SUBMITTED, false);
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+        when(expenseDocumentService.statusTriggersClaim(ORG, doc)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.closeExpenseClaim(E_ID, new BigDecimal("1"), "x"))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("Accountant must verify");
+        assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.SUBMITTED);
+    }
+
+    @Test
+    void closeExpenseClaim_stillAppliesMakerChecker() {
+        ExpenseDocument doc = expenseDoc(ExpenseWorkflowStatus.VERIFIED, false);
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+        doThrow(DamsException.conflict("You cannot review document"))
+            .when(guard).requireCanReview(any(), any(), any(), any(), any());
+
+        assertThatThrownBy(() -> service.closeExpenseClaim(E_ID, new BigDecimal("5000"), null))
+            .isInstanceOf(DamsException.class);
+        assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.VERIFIED);
+    }
+
+    @Test
+    void fmExpenseQueue_putsClaimExpensesUnderOpenClaims_notAwaitingApproval_evenWhenInLimit() {
+        ExpenseDocument claim = expenseDoc(ExpenseWorkflowStatus.VERIFIED, false);   // in limit, status 41 = claim
+        ExpenseDocument ordinary = expenseDoc(ExpenseWorkflowStatus.VERIFIED, true);
+        ReflectionTestUtils.setField(ordinary, "id", 603L);
+        ordinary.setBusinessStatusId(42L);
+        when(expenseDocumentService.claimStatusIds(ORG)).thenReturn(java.util.Set.of(41L));
+        when(expenseDocumentRepo.findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(ORG, ExpenseWorkflowStatus.VERIFIED))
+            .thenReturn(List.of(claim, ordinary));
+
+        var queue = service.fmExpenseQueue();
+
+        assertThat(queue.openClaims()).extracting(ReviewQueueItem::id).containsExactly(E_ID);
+        assertThat(queue.openClaims().get(0).isClaim()).isTrue();
+        assertThat(queue.awaitingApproval()).extracting(ReviewQueueItem::id).containsExactly(603L);
+    }
+
+    @Test
+    void fmExpenseQueue_keepsAClaimExpenseEvenWhenAnFmPreApprovalCoversIt() {
+        ExpenseDocument claim = expenseDoc(ExpenseWorkflowStatus.VERIFIED, true);
+        claim.setPreApprovalStatus(PreApprovalStatus.APPROVED);
+        claim.setPreApprovedAmount(new BigDecimal("1400"));
+        when(expenseDocumentService.claimStatusIds(ORG)).thenReturn(java.util.Set.of(41L));
+        when(expenseDocumentRepo.findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(ORG, ExpenseWorkflowStatus.VERIFIED))
+            .thenReturn(List.of(claim));
+
+        var queue = service.fmExpenseQueue();
+
+        // Close Claim is still the FM's closing decision — the pre-approval does not replace it.
+        assertThat(queue.openClaims()).extracting(ReviewQueueItem::id).containsExactly(E_ID);
+    }
+
+    /** A VERIFIED expense in the Transfer to Claim status, total {@code total}. */
+    private ExpenseDocument verifiedClaimExpense(String total) {
+        ExpenseDocument doc = expenseDoc(ExpenseWorkflowStatus.VERIFIED, false);
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+        when(expenseDocumentService.statusTriggersClaim(ORG, doc)).thenReturn(true);
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, E_ID))
+            .thenReturn(List.of(expenseLine(1, new BigDecimal(total))));
+        return doc;
+    }
+
+    @Test
     void closeExpense_inAStatusThatNeedsFmApproval_isRefused_withoutAnyFmApproval() {
         ExpenseDocument doc = expenseDoc(ExpenseWorkflowStatus.VERIFIED, false);   // within every limit
         when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));

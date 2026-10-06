@@ -4,6 +4,7 @@ import com.dams.cash.dto.CashDayCloseResponse;
 import com.dams.cash.dto.CashDrawerResponse;
 import com.dams.cash.dto.CashOpeningRequest;
 import com.dams.cash.dto.CloseDayRequest;
+import com.dams.cash.dto.ReopenDayRequest;
 import com.dams.cash.service.CashCloseService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -54,6 +55,13 @@ public class CashController {
     @PreAuthorize("hasAuthority('CASHIER')")
     public ResponseEntity<CashDayCloseResponse> closeDay(@Valid @RequestBody CloseDayRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(cashCloseService.closeDay(request));
+    }
+
+    @PostMapping("/reopen-day")
+    @Operation(summary = "OWNER — reopen a branch's latest closed day (a close made by mistake); reason required (rev 60)")
+    @PreAuthorize("hasAuthority('OWNER')")
+    public CashDrawerResponse reopenDay(@Valid @RequestBody ReopenDayRequest request) {
+        return cashCloseService.reopenDay(request);
     }
 
     @GetMapping("/close-day")

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { mastersApi, type MasterRow } from '../api/masters'
+import { branchesApi, type Branch } from '../api/branches'
+import { useAuth } from '../auth/useAuth'
 import {
   cashApi,
   type CashDirection,
@@ -38,15 +40,22 @@ export default function CashPage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const editDocId = params.get('editDoc') ? Number(params.get('editDoc')) : null
+  // rev 60 — the Owner views any branch (picker) and may reopen a mistaken close; every write
+  // on this page (cash in/out, close day) stays the Cashier's.
+  const { user } = useAuth()
+  const isOwner = user?.role === 'OWNER'
 
   const [date, setDate] = useState(todayStr())
   const [drawer, setDrawer] = useState<CashDrawer | null>(null)
   const [banks, setBanks] = useState<MasterRow[]>([])
+  const [branches, setBranches] = useState<Branch[]>([])
+  const [branchId, setBranchId] = useState<number | null>(null)
   const [error, setError] = useState('')
   const [reloadTick, setReloadTick] = useState(0)
 
   const [movementModal, setMovementModal] = useState<{ direction: CashDirection; editDoc?: CashDocument } | null>(null)
   const [closeModal, setCloseModal] = useState(false)
+  const [reopenModal, setReopenModal] = useState(false)
   const [breakdown, setBreakdown] = useState<{ title: string; rows: BreakdownRow[] } | null>(null)
 
   function openBreakdown(title: string, rows: BreakdownRow[]) {
@@ -64,13 +73,26 @@ export default function CashPage() {
   }, [])
 
   useEffect(() => {
+    if (!isOwner) return
+    branchesApi.list()
+      .then(({ data }) => {
+        const active = data.filter((b) => b.active)
+        setBranches(active)
+        setBranchId((cur) => cur ?? active[0]?.id ?? null)
+      })
+      .catch((e) => setError(apiError(e, 'Could not load the branches.')))
+  }, [isOwner])
+
+  useEffect(() => {
+    // The server needs a branch for anyone but a Cashier — wait for the Owner's picker.
+    if (isOwner && branchId == null) return
     let live = true
     setError('')
-    cashApi.drawer(date)
+    cashApi.drawer(date, isOwner ? branchId ?? undefined : undefined)
       .then(({ data }) => { if (live) setDrawer(data) })
       .catch((e) => { if (live) setError(apiError(e, 'Could not load the drawer.')) })
     return () => { live = false }
-  }, [date, reloadTick])
+  }, [date, reloadTick, isOwner, branchId])
 
   // ?editDoc= — open the movement form for a queried / draft entry
   useEffect(() => {
@@ -104,6 +126,16 @@ export default function CashPage() {
           Cash{drawer?.branchName ? ` — ${drawer.branchName}` : ''}
         </h1>
         <HelpButton slug="closing-the-day" />
+        {isOwner && (
+          <select
+            aria-label="Branch"
+            value={branchId ?? ''}
+            onChange={(e) => { setDrawer(null); setBranchId(Number(e.target.value)) }}
+            style={{ ...inputStyle, width: 'auto', padding: '6px 9px', fontSize: '0.82rem' }}
+          >
+            {branches.map((b) => <option key={b.id} value={b.id}>{b.name} ({b.code})</option>)}
+          </select>
+        )}
         <input
           type="date"
           value={date}
@@ -129,7 +161,11 @@ export default function CashPage() {
           <DrawerCard drawer={drawer} onLineClick={openBreakdown} />
 
           {drawer.closed ? (
-            <ClosedBanner drawer={drawer} />
+            <ClosedBanner drawer={drawer} onReopen={isOwner ? () => setReopenModal(true) : undefined} />
+          ) : isOwner ? (
+            <div style={{ fontSize: '0.8rem', color: 'var(--muted)', margin: '14px 0 18px' }}>
+              This day is open. Cash movements and closing the day are the Cashier&rsquo;s.
+            </div>
           ) : (
             <div style={{ display: 'flex', gap: 10, margin: '14px 0 18px', flexWrap: 'wrap' }}>
               <button type="button" onClick={() => setMovementModal({ direction: 'IN' })}
@@ -155,7 +191,7 @@ export default function CashPage() {
 
           <MovementsTable
             movements={drawer.movements}
-            locked={drawer.closed}
+            locked={drawer.closed || isOwner}
             onEdit={(m) => setMovementModal({ direction: m.direction, editDoc: m })}
           />
         </>
@@ -176,6 +212,13 @@ export default function CashPage() {
           drawer={drawer}
           onClose={() => setCloseModal(false)}
           onDone={() => { setCloseModal(false); refresh() }}
+        />
+      )}
+      {reopenModal && drawer && (
+        <ReopenDayModal
+          drawer={drawer}
+          onClose={() => setReopenModal(false)}
+          onDone={() => { setReopenModal(false); refresh() }}
         />
       )}
       {breakdown && (
@@ -243,7 +286,7 @@ function Line({ k, v, tone, note, onClick }: { k: string; v: string; tone?: 'gre
   )
 }
 
-function ClosedBanner({ drawer }: { drawer: CashDrawer }) {
+function ClosedBanner({ drawer, onReopen }: { drawer: CashDrawer; onReopen?: () => void }) {
   const c = drawer.close!
   return (
     <div style={{
@@ -256,6 +299,17 @@ function ClosedBanner({ drawer }: { drawer: CashDrawer }) {
       <div style={{ fontSize: '0.74rem', color: 'var(--faint)', marginTop: 3 }}>
         This date is locked — no new cash movements or backdated cash payments.
       </div>
+      {onReopen && (
+        <div style={{ marginTop: 10 }}>
+          {drawer.reopenable
+            ? <button type="button" onClick={onReopen} style={ghostBtn}>Reopen day</button>
+            : (
+              <span style={{ fontSize: '0.76rem', color: 'var(--amber)' }}>
+                A later day is already closed — only the latest close can be reopened. Open that day first.
+              </span>
+            )}
+        </div>
+      )}
     </div>
   )
 }
@@ -514,6 +568,60 @@ function CloseDayModal(props: { drawer: CashDrawer; onClose: () => void; onDone:
       </label>
       <div style={{ fontSize: '0.74rem', color: 'var(--faint)' }}>
         Closing locks {fmtDate(props.drawer.date)} — no new or backdated cash entries for this branch after this.
+      </div>
+    </Modal>
+  )
+}
+
+// ───────────────────────────── Reopen-day modal (Owner, rev 60) ─────────────────────────────
+
+function ReopenDayModal(props: { drawer: CashDrawer; onClose: () => void; onDone: () => void }) {
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const c = props.drawer.close
+
+  async function confirm() {
+    if (!reason.trim()) { setError('A reason is required to reopen a closed day'); return }
+    setBusy(true)
+    setError('')
+    try {
+      await cashApi.reopenDay({ branchId: props.drawer.branchId, closeDate: props.drawer.date, reason: reason.trim() })
+      props.onDone()
+    } catch (e) {
+      setError(apiError(e, 'Could not reopen the day.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal
+      title="Reopen the day"
+      subtitle={`${props.drawer.branchName ?? ''} · ${fmtDate(props.drawer.date)}`}
+      onClose={props.onClose}
+      footer={
+        <>
+          <button type="button" onClick={props.onClose} style={ghostBtn} disabled={busy}>Cancel</button>
+          <button type="button" onClick={confirm} style={primaryBtn(busy)} disabled={busy}>Reopen day</button>
+        </>
+      }
+    >
+      <ErrorBanner message={error} />
+      {c && (
+        <div style={{ fontSize: '0.84rem', padding: '4px 0' }}>
+          Closed by <strong>{c.closedByName ?? '—'}</strong> with {inr(c.countedAmount)} counted
+          (variance {inr(c.variance)}).
+        </div>
+      )}
+      <label style={fieldLabel}>
+        Reason <span style={{ color: 'var(--red)' }}>*</span>
+        <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300}
+          placeholder="Why is this close being undone?" style={inputStyle} />
+      </label>
+      <div style={{ fontSize: '0.74rem', color: 'var(--faint)' }}>
+        The date unlocks so the Cashier can add the missed entries and close again with a fresh count.
+        The original close and your reason stay in the audit trail.
       </div>
     </Modal>
   )

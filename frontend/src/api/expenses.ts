@@ -82,6 +82,12 @@ export interface ExpenseDocument {
   preApprovalCovers: boolean
   /** rev 54 — needs FM approval: over a limit, or its status is flagged "requires FM approval". */
   needsFmApproval: boolean
+  /** rev 61 — set once the Finance Manager closed a Transfer-to-Claim expense: the amount actually recovered. */
+  claimFinalAmount: number | null
+  claimOverridden: boolean
+  claimOverrideReason: string | null
+  claimClosedByName: string | null
+  claimClosedAt: string | null
   lines: ExpenseLine[]
   history: DocumentHistoryEntry[]
 }

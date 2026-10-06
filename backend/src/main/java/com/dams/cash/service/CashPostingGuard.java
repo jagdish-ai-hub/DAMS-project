@@ -59,6 +59,15 @@ public class CashPostingGuard {
         return me;
     }
 
+    /** Assert the caller is acting as the Owner — the only role that may reopen a closed day (rev 60). Returns them. */
+    public AppUser requireOwner(Long orgId) {
+        AppUser me = me(orgId);
+        if (ActingDetails.effectiveRole(me) != Role.OWNER) {
+            throw DamsException.forbidden("Only the Owner can reopen a closed cash day");
+        }
+        return me;
+    }
+
     /**
      * Resolve which branch a read is for: a CASHIER is pinned to their home branch (the
      * {@code requestedBranchId} is ignored); everyone else must name a branch they can see.

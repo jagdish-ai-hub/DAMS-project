@@ -1,11 +1,13 @@
-import { useState, type ReactNode } from 'react'
-import type { ReceiveDocument, SettlementLine } from '../api/receipts'
+import { useEffect, useState, type ReactNode } from 'react'
+import type { DocumentHistoryEntry, ReceiveDocument, SettlementLine } from '../api/receipts'
+import { reviewApi, type Reviewer } from '../api/review'
 import type { ExpenseDocument, ExpenseLine } from '../api/expenses'
 import type { CashDocument } from '../api/cash'
 import type { MasterRow } from '../api/masters'
 import { BusinessStatusSelect } from '../shared/BusinessStatusSelect'
 import { card, Badge, ghostBtn, primaryBtn, inputStyle, inr, fmtDate, fmtDateTime } from '../shell/ui'
-import { actorLabel } from '../auth/roleLabels'
+import { actorLabel, ROLE_LABEL } from '../auth/roleLabels'
+import type { AuthUser, Role } from '../auth/AuthContext'
 
 /** Shared pieces for the Accountant review queue and the Finance Manager queue. */
 
@@ -16,6 +18,77 @@ export function apiError(err: unknown, fallback: string) {
 }
 
 export const isExpense = (d: AnyDoc): d is ExpenseDocument => 'expenseCategoryName' in d
+
+/** The fields every document type (receipt, expense, cash) carries for maker-checker. */
+export interface MakerDoc {
+  createdBy: number
+  lastModifiedBy: number | null
+  branchId: number
+  branchCode: string | null
+  history: DocumentHistoryEntry[]
+}
+
+/**
+ * Maker-checker mirror (AGENT.md): the server refuses review actions on an entry the caller
+ * created or last modified, so the screens hide them to avoid a dead-end click. An Owner is the
+ * one exception (rev 59) - they may act as every role, so they may review their own entries.
+ * It keys on `primaryRole` (the user's own role), not the acting role: a switched Accountant or
+ * Finance Manager is still blocked. The server stays authoritative.
+ */
+export function isMakerOf(user: AuthUser | null, doc: MakerDoc): boolean {
+  if (!user || user.primaryRole === 'OWNER') return false
+  return user.userId === doc.createdBy
+    || (doc.lastModifiedBy != null && user.userId === doc.lastModifiedBy)
+}
+
+function joinNames(names: string[]): string {
+  const shown = names.slice(0, 3)
+  const more = names.length - shown.length
+  if (more > 0) return `${shown.join(', ')} and ${more} more`
+  return shown.length > 1 ? `${shown.slice(0, -1).join(', ')} or ${shown[shown.length - 1]}` : shown[0]
+}
+
+/**
+ * Shown in place of the action buttons when maker-checker blocks the signed-in user (rev 59).
+ * Says who entered it and in which role, and who can clear it, so it is never a dead end.
+ * The reviewer list is advisory: if it cannot be loaded the first sentence still stands alone.
+ */
+export function MakerBlockedNote({ doc, step }: { doc: MakerDoc; step: Extract<Role, 'ACCOUNTANT' | 'FINANCE_MANAGER'> }) {
+  const [reviewers, setReviewers] = useState<Reviewer[] | null>(null)
+  const verb = step === 'ACCOUNTANT' ? 'verify' : 'approve'
+  const who = step === 'ACCOUNTANT' ? 'accountant' : 'Finance Manager'
+
+  // The role they were acting in when they made it, from the entry's own CREATED event.
+  const enteredAs = doc.history.find((h) => h.action === 'Created')?.actorRole
+  const roleText = enteredAs ? ` as ${ROLE_LABEL[enteredAs as Role] ?? enteredAs}` : ''
+
+  const { branchId, createdBy, lastModifiedBy } = doc
+  useEffect(() => {
+    let live = true
+    const makers = [createdBy, lastModifiedBy].filter((id): id is number => id != null)
+    reviewApi.reviewers(branchId, step, makers)
+      .then(({ data }) => { if (live) setReviewers(data) })
+      .catch(() => { if (live) setReviewers(null) })
+    return () => { live = false }
+  }, [branchId, createdBy, lastModifiedBy, step])
+
+  const where = doc.branchCode ? ` at ${doc.branchCode}` : ''
+  return (
+    <>
+      You entered this{roleText} (or edited it last), so you can&rsquo;t {verb} it yourself &mdash; maker-checker needs a different person.
+      {reviewers && reviewers.length > 0 && (
+        <div style={{ marginTop: 6, color: 'var(--ink)' }}>
+          <strong>{joinNames(reviewers.map((r) => r.name))}</strong> can {verb} it.
+        </div>
+      )}
+      {reviewers && reviewers.length === 0 && (
+        <div style={{ marginTop: 6, color: 'var(--ink)' }}>
+          No other {who}{where} is set up yet &mdash; ask your Owner to add one in Team &amp; Branches.
+        </div>
+      )}
+    </>
+  )
+}
 
 /** The workflow states in which a reviewer may change an expense's business status (rev 58) — mirrors the server. */
 export const EXPENSE_STATUS_EDITABLE = new Set(['SUBMITTED', 'VERIFIED', 'APPROVED', 'FM_QUERIED'])
@@ -179,6 +252,20 @@ export function RecordCard(props: {
             </div>
           )}
         </div>
+        {expense && doc.claimFinalAmount != null && (
+          <div style={{ background: 'var(--purple-bg, #EFE7FB)', border: '1px solid #D9C7EF', borderRadius: 8, padding: '10px 12px', marginTop: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: '0.86rem' }}>
+              <span style={{ fontWeight: 700 }}>Claim closed · Final amount recovered (locked)</span>
+              <span style={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{inr(doc.claimFinalAmount)}</span>
+            </div>
+            <div style={{ fontSize: '0.76rem', color: doc.claimOverridden ? 'var(--amber)' : 'var(--muted)', marginTop: 4 }}>
+              {doc.claimOverridden
+                ? `Overridden · Final — ${doc.claimOverrideReason ?? ''} (expense total ${inr(doc.totalAmount)})`
+                : 'Recovered in full — no override.'}
+              {doc.claimClosedByName ? ` · closed by ${doc.claimClosedByName}` : ''}
+            </div>
+          </div>
+        )}
         {expense && doc.needsFmApproval && doc.workflowStatus !== 'DRAFT' && (doc.preApprovalCovers ? (
           <div style={{ fontSize: '0.76rem', color: 'var(--green)', marginTop: 10 }}>
             ✓ {doc.overLimit ? 'Over the category limit' : `Status “${doc.businessStatusName ?? ''}” needs Finance Manager approval`}, but pre-approved by {doc.preApprovedByName ?? 'the Finance Manager'} for

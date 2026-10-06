@@ -26,6 +26,7 @@ public record CashDrawerResponse(
 
     boolean closed,                 // a cash_day_close exists for (branch, date)
     CashDayCloseResponse close,     // the close row when closed, else null
+    boolean reopenable,             // the close is the branch's latest — an Owner may reopen it (rev 60)
 
     List<CashDocumentResponse> movements,           // cash_document rows — the UI filters by direction for In/Out
     List<MoneyMovementItem> cashReceiptLines,        // the settlement lines behind cashReceipts

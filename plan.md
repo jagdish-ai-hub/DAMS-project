@@ -7,6 +7,145 @@
 
 ## Revision log
 
+- **rev 62 (2026-10-06)** — **Claims summary: total claimed / received / rejected / still open.**
+  Asked for "total amount claimed and total received" on the Owner dashboard and Finance page.
+  Decisions (confirmed): show on **both**; count **expense and receipt claims together** (split by
+  kind underneath); the part a closed claim did not recover is **"Claim rejected / not recovered"**;
+  follows the **dashboard's period** (Today / month-to-date) and branch filter. AGENT.md updated
+  (after the code, as in rev 61).
+  - `GET /api/v1/dashboard/claims?branchId&period` (Owner + FM, same gate as the rest of
+    `DashboardController`) → `ClaimsSummary{period,total,expenses,receipts}`, each `ClaimTotals{count,
+    open, claimed, received, rejected, pending}`; computed by the new read-only `ClaimsSummaryService`.
+    No migration (reads rev-61 columns, `claim_close`, `job_card`, settlement lines).
+  - Definitions: a claim counts in the period it was **raised** — expense `submitted_at`; receipt claim
+    = its first live receive document's `submitted_at`. Claimed = expense total (at close:
+    `claim_computed_total`) / receipt-claim job card invoice amount (falls back to payments if none).
+    Closed: received = final amount, rejected = max(claimed − final, 0). Open: received = payments so
+    far (receipt claims; 0 for expenses), pending = max(claimed − received, 0). Claimed = received +
+    rejected + pending. DRAFT / REJECTED are not claims; a CLOSED expense with no recorded final amount
+    (closed by the Accountant before rev 61) is excluded.
+  - Frontend: shared `ClaimsSummaryCard` — on the Owner dashboard it follows the page's period/branch;
+    on the FM page it has its own Today / This month toggle. Help: owner `reading-the-dashboard`.
+  - Not changed: the **Expenses KPI** still counts line amounts of APPROVED/CLOSED expenses (the money
+    actually spent); the existing "Outstanding" list is untouched.
+  - Verified: `mvn test` 366 green (0 failures, 4 Docker-only skips) — new `ClaimsSummaryServiceTest`
+    (7: all-zero; expense closed short-paid → rejected, open → pending, legacy closed left out; ₹0
+    close fully rejected; receipt claim closed vs open; a claim raised before the period excluded;
+    total = both kinds and claimed = received + rejected + pending; unknown branch refused); frontend
+    `tsc`, `eslint`, `vitest` (22) clean; production bundle has `/api/v1/dashboard/claims` and the
+    card's labels. **Not yet verified against the live DB or in a browser.** No migration of its own,
+    but the rev-61 columns (V38) must be applied first — the new JPQL reads them.
+
+- **rev 61 (2026-10-06)** — **Transfer-to-Claim expenses are closed by the Finance Manager, with a
+  final amount.** Before: marking an expense "Transfer to Claim" only changed its business status;
+  routing was unchanged (Accountant verifies and closes it; the FM sees it only if over limit /
+  flagged), no claim record, no amount, no FM step. Asked for: Cashier → Accountant → Finance
+  Manager, who closes the claim like a receipt claim — enters a different final amount with a
+  reason, or queries it back to the Accountant. Decisions (confirmed): final amount = **amount
+  actually recovered**; the FM sees a claim expense **only after the Accountant verifies**; an
+  **over-limit claim keeps the rev-53 pre-approval** (Close Claim comes on top). AGENT.md written in
+  the same change (after the code this time, reversing CLAUDE.md's order).
+  - **V38** `expense_document` += `claim_final_amount`, `claim_computed_total` (total at close),
+    `claim_overridden`, `claim_override_reason`, `claim_closed_by/_at`; CHECKs (final ≥ 0; reason
+    present when overridden); partial index for the "recently closed" list. No audit CHECK change —
+    the close is a `CLOSED` event with `claim:true` + final/computed/overridden/reason in `detail`.
+  - `POST /api/v1/expenses/{id}/close-claim {finalAmount, reason}` (**FM only**; reuses
+    `CloseClaimRequest`: final ≥ 0, reason ≤ 300). Allowed from VERIFIED or APPROVED, only when the
+    expense is in a `triggers_claim` status; reason mandatory when final ≠ total; maker-checker via
+    `requireCanReview`; writes the fields, sets `CLOSED`, freezes attachments, audits.
+  - `ReviewService.closeExpense` (Accountant) now refuses a claim expense ("the Finance Manager
+    closes it"). The FM's expense queue: claim expenses (VERIFIED/APPROVED) go under **openClaims**
+    (never "awaiting approval", never hidden by a pre-approval); the rev-60 filter applies to the
+    rest; **recentlyClosed** = the 12 latest claim-closed expenses. `ReviewQueueItem.isClaim` is now
+    set for expenses. `ExpenseDocumentResponse` gains the claim fields.
+  - Override Audit includes expense-claim overrides (kind `claim`, before = total at close, after =
+    final). History reads "Claim closed — final ₹X (Overridden · Final)".
+  - Frontend: FM page — "Open expense claims" + "Recently closed" sections on the Expenses tab, no
+    Approve on a claim expense, **Close claim** button + modal (shared with receipts; now generic),
+    "Query" label fixed (it goes to the Accountant, rev 49); Accountant page — Close expense hidden
+    on a claim expense with an explanatory note, and the Verify toast no longer says "moved to Finance
+    Manager" for an in-limit ordinary expense (rev 60); `RecordCard` shows the "Claim closed · Final"
+    block (so it appears for Accountant, FM and Owner).
+  - Help: FM `closing-a-claim`, Accountant `closing-an-expense`.
+  Known limits, not changed: the Owner dashboard's expense KPIs still sum line amounts, not the
+  claim's final amount; moving an expense off "Requires Finance Approval" still removes that
+  requirement (flagged to the owner, awaiting a decision).
+  Verified: `mvn test` 359 green (0 failures, 4 Docker-only skips) — `ReviewServiceTest` +11 (Accountant
+  close refused on a claim; FM Close Claim with a different amount + reason / same amount no reason /
+  zero / reason missing / not a claim / not yet verified / maker-checker; claim expenses land under
+  openClaims even when in limit or pre-approved), `OverrideAuditServiceTest` +1,
+  `ReviewControllerSecurityTest` +2 (close-claim is FM only; negative amount 400); frontend `tsc`,
+  `eslint`, `vitest` (22) clean; production bundle has `/close-claim`, "Open expense claims", the
+  "Final amount recovered" block, the Accountant claim note and the corrected Query / Verify messages.
+  **Not yet verified against the live DB or in a browser, and V38 is not applied until CI/CD runs
+  Flyway** — until then the app would fail to start on the new `expense_document` columns
+  (`ddl-auto: validate`), so deploy the migration together with this code.
+
+- **rev 60 (2026-10-06)** — **FM queue only shows what needs the FM; Owner reopens a mistaken cash
+  close; Owner Expenses page.** Three requests, confirmed (AGENT.md updated first):
+  1. *FM Expenses queue.* It listed every VERIFIED expense not already pre-approved, including
+     in-limit ones in an ordinary status that the Accountant may close alone. Now it lists only
+     expenses that are over limit **or** in a `requires_fm_approval` status (the same test
+     `closeExpense` applies) and not covered by a pre-approval. Hide only — the FM endpoints still
+     work if called directly. `ReviewService.fmExpenseQueue`.
+  2. *Reopen a closed cash day (Owner only).* Before: a day close had no undo anywhere — the
+     `cash_day_close` row is the lock, and only a manual DB delete could remove it. Now
+     `POST /api/v1/cash/reopen-day {branchId, closeDate, reason}` (Owner; reason mandatory)
+     reopens the branch's **latest** close only (each day's opening is the previous close's counted
+     amount). Storage = **Option 1, confirmed**: the row is deleted and the original close (counted,
+     computed, variance, remark, closer, closed-at) + the reason go into a `CASH_REOPENED` audit
+     event (`entity CashDayClose`, branch-tagged); no soft-void columns. `CashDrawerResponse` gains
+     `reopenable` (close exists and is the branch's latest). **V37** extends the audit CHECK.
+  3. *Owner Expenses page* (`/app/expenses`, new nav item; **Cash** also added to the Owner nav).
+     `GET /api/v1/review/owner/expenses` (Owner only): every non-draft expense, all branches,
+     newest first, capped at 500; filtered client-side by branch / state / date / text. **Oversight +
+     status change only (confirmed)** — opens the shared `RecordCard` with the existing rev-58
+     status change; no verify / approve / close / override. The Cash page, which previously 400'd for
+     an Owner (no branch), now has a branch picker for the Owner, hides cash-in/out and Close Day,
+     and shows **Reopen day** on a closed latest day.
+  Out of scope, flagged: *Transfer to Claim* on an expense is still only a business-status label —
+  it creates no claim record, appears in no FM claims list and tracks no reimbursement.
+  Help: owner `reopening-a-closed-day` (new), cashier `closing-the-day`, FM `approving-entries`.
+  Verified: `mvn test` 346 green (0 failures, 4 Docker-only skips) — `CashCloseServiceTest` +4
+  (latest close deleted + audit snapshot; earlier close refused; not-closed refused; non-Owner
+  refused), `ReviewServiceTest` +4 (FM queue drops in-limit / keeps flagged-status; Owner list +
+  guard), `CashControllerSecurityTest` (new, 3: Owner only, reason required),
+  `ReviewControllerSecurityTest` +1; frontend `tsc`, `eslint`, `vitest` (22) clean; production
+  bundle contains `/api/v1/cash/reopen-day`, `/api/v1/review/owner/expenses`, "Reopen day", the
+  `/app/expenses` nav and route. **Not yet verified against the live DB or in a browser, and V37
+  is not applied until CI/CD runs Flyway** — until then reopening would fail on the audit CHECK.
+
+- **rev 59 (2026-10-06)** — **Owner exempt from maker-checker; blocked entries name who can
+  clear them.** Found on the live DB: Owner Priya Nair (user 2) entered OOJ receipt R-001 and
+  expenses E-001/E-002 as Cashier (all SUBMITTED, `created_by = last_modified_by = 2`), then
+  switched to Accountant / Finance Manager and was blocked by the rev-55 "per person" rule
+  ("You created or last edited this entry — maker-checker requires another reviewer"). Not a
+  regression — the rule dates from Stage 7 and was never relaxed; it only became reachable once
+  one person could hold both roles. Decisions (confirmed): **Owner exempt only** (a user whose
+  *own* role is Owner; a switched Accountant/FM is still blocked), and the blocked note **names
+  the reviewers who can clear it**. AGENT.md updated first.
+  - Backend: `ReviewGuard.requireCanReview` skips the creator/last-modifier check when
+    `ReviewGuard.mayReviewOwnEntries(me)` (stored role = OWNER). It is the single server choke
+    point for verify / approve / query / reject / override / close / cash / claim close.
+  - New `GET /api/v1/review/reviewers?branchId&step=ACCOUNTANT|FINANCE_MANAGER&exclude=…`
+    (Accountant + Finance Manager callers, branch-scoped): active holders of that role — by
+    primary role (+ branch access for accountants) or an Owner-granted extra role — minus the
+    excluded ids. Names only; Owners are not listed.
+  - Frontend: `isMakerOf` in `review/reviewShared.tsx` replaces the two copies of the check
+    (Accountant + FM pages) and ignores the maker rule for `primaryRole === 'OWNER'`;
+    `MakerBlockedNote` says who entered it, in which role, and who can clear it.
+  - No migration. Help: `owner/team-and-branches.md` (the Owner is the exception).
+  Verified: `mvn test` 334 green (0 failures, 4 Docker-only skips) — new `ReviewerLookupServiceTest`
+  (8), `ReviewGuardTest` +5 (Owner passes; switched FM / Cashier / branch scope still enforced),
+  `ReviewControllerSecurityTest` +1 (reviewers endpoint: Accountant + FM only); frontend `tsc`,
+  `eslint`, `vitest` (22) clean; production build has the `primaryRole==="OWNER"` exemption and the
+  new note text, and the old "created or last edited this entry" wording is gone from
+  `dist/assets/*.js`. **Not yet verified against the live DB or in a browser** — the three stuck OOJ
+  entries (R-001, E-001, E-002) only clear once this is deployed.
+  Test note: `makerChecker.test.tsx` exercises the reviewer-lookup failure path by resolving with an
+  unusable response, because vitest 3.2.7 reports its own spy bookkeeping of a rejected mock
+  promise as an unhandled rejection.
+
 - **rev 58 (2026-10-02)** — **"Ooriba ID" = DAMS-Receive-ID in the job-card picker.** AGENT.md "Linking" updated first.
   No migration. `JobCardRepository.searchForPicker` also matches `receive_document.document_no` (branch scope unchanged);
   `JobCardSearchHit` and `JobCardResponse` gain `receiveDocumentNos` (numbered receipts, newest first, via
@@ -1422,7 +1561,7 @@
 | Cashier posting branch | `User.home_branch_id` — exactly one, mandatory for every CASHIER, fixed. **Every** document a cashier creates posts under this branch, with no exception and regardless of any toggle. |
 | `UserBranchAccess` join table | ACCOUNTANT only. FM/Owner are always org-wide. Cashier uses `home_branch_id`, not this table. |
 | `multi_branch_cashier_access` toggle | Org-level, default OFF. Changes **only** what a cashier can search / see (own branch vs org-wide customers & job cards). Never changes which branch their own documents post under. |
-| Maker-checker identity | Every document carries `created_by` **and** `last_modified_by`. A user may not verify or approve a document on which they are either. |
+| Maker-checker identity | Every document carries `created_by` **and** `last_modified_by`. A user may not verify or approve a document on which they are either — **except a user whose own role is Owner (rev 59).** |
 | Attachments | Separate `attachment` table, polymorphic `(parent_type, parent_id)`, **0..n** per settlement line / expense line / parent document. `frozen = true` once the parent is Approved or Closed — no replace, no delete. Served only via short-lived signed URLs. |
 | Business status vs workflow status | Two separate columns, never derived from each other. (`business_status` now lives on `JobCard` for the receive side, on `ExpenseDocument` for the expense side.) |
 | Transfer to Claim | Status change on the expense document only, no new document. |
@@ -1646,6 +1785,8 @@ Flyway callback / profile guard and instead runs a masters-only seed.
 | V32 | `expense_business_status.requires_fm_approval` + a "Requires Finance Approval" status per org *(rev 54)* | expense pre-approval ✅ |
 | V33 | `user_role_grant`; `audit_event.actor_role`; `audit_event` CHECK += `ROLE_SWITCHED` *(rev 55)* | role switching |
 | V34 | `job_card.customer_id` nullable + `vehicle_no_text`; `expense_document.customer_id/vehicle_id`; `customer.created_branch_id`; `audit_event` CHECK += `JOB_CARD_CUSTOMER_ATTACHED` *(rev 56)* | expense/customer/vehicle linking |
+| V38 | `expense_document` += `claim_final_amount/_computed_total/_overridden/_override_reason/_closed_by/_closed_at` + CHECKs + partial index *(rev 61)* | FM closes Transfer-to-Claim expenses |
+| V37 | `audit_event` CHECK += `CASH_REOPENED` *(rev 60; V35 repair and V36 `STATUS_CHANGED` precede it)* | Owner reopen of a closed cash day |
 
 ---
 
@@ -1746,6 +1887,7 @@ POST   /api/v1/expenses/{id}/reject
 POST   /api/v1/expenses/{id}/resubmit
 POST   /api/v1/expenses/{id}/close           # ACCOUNTANT
 POST   /api/v1/expenses/{id}/transfer-to-claim
+POST   /api/v1/expenses/{id}/close-claim      # FINANCE_MANAGER — final amount recovered + reason if it differs (rev 61)
 POST   /api/v1/expenses/{id}/lines
 PATCH  /api/v1/expenses/{id}/lines/{lineNo}/override
 POST   /api/v1/expenses/{id}/attachments
@@ -1763,6 +1905,9 @@ GET    /api/v1/cash-documents?branch_id=&date=
 GET    /api/v1/cash/drawer?branch_id=&date=  # live computed drawer position
 POST   /api/v1/cash/opening                  # ACCOUNTANT — first-ever opening for a branch
 POST   /api/v1/cash/close-day                # CASHIER — counted amount + variance remark; locks the date
+POST   /api/v1/cash/reopen-day               # OWNER — reopen a branch's latest close; reason required (rev 60)
+GET    /api/v1/review/owner/expenses         # OWNER — every non-draft expense, all branches (rev 60)
+GET    /api/v1/dashboard/claims?branchId=&period=   # OWNER + FM — claimed / received / rejected / pending (rev 62)
 GET    /api/v1/cash/close-day?branch_id=&date=
 ```
 

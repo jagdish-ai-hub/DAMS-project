@@ -32,6 +32,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -58,6 +59,8 @@ class ReviewControllerSecurityTest {
     @MockBean
     private ReviewService reviewService;
     @MockBean
+    private com.dams.review.service.ReviewerLookupService reviewerLookupService;
+    @MockBean
     private JobCardService jobCardService;
     @MockBean
     private ClaimCloseService claimCloseService;
@@ -82,6 +85,23 @@ class ReviewControllerSecurityTest {
         stubToken("owner-token", 5L, 1L, Role.OWNER);
         mockMvc.perform(get("/api/v1/review/receipts").header("Authorization", "Bearer owner-token"))
             .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void reviewers_okForAccountantAndFinanceManager_forbiddenForCashierAndOwner() throws Exception {
+        when(reviewerLookupService.reviewersFor(eq(1L), eq(Role.ACCOUNTANT), any())).thenReturn(List.of());
+        for (Role ok : List.of(Role.ACCOUNTANT, Role.FINANCE_MANAGER)) {
+            stubToken("t-" + ok, 6L, 1L, ok);
+            mockMvc.perform(get("/api/v1/review/reviewers?branchId=1&step=ACCOUNTANT&exclude=2&exclude=3")
+                    .header("Authorization", "Bearer t-" + ok))
+                .andExpect(status().isOk());
+        }
+        for (Role no : List.of(Role.CASHIER, Role.OWNER)) {
+            stubToken("t-" + no, 6L, 1L, no);
+            mockMvc.perform(get("/api/v1/review/reviewers?branchId=1&step=ACCOUNTANT")
+                    .header("Authorization", "Bearer t-" + no))
+                .andExpect(status().isForbidden());
+        }
     }
 
     @Test
@@ -140,6 +160,50 @@ class ReviewControllerSecurityTest {
             .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/expenses/1/query-approval").header("Authorization", "Bearer cashier-token")
                 .contentType("application/json").content("{\"note\":\"x\"}"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void closeExpenseClaim_isFinanceManagerOnly() throws Exception {
+        String body = "{\"finalAmount\":4200,\"reason\":\"OEM part payment\"}";
+        when(reviewService.closeExpenseClaim(eq(1L), any(), any())).thenReturn(mock(ExpenseDocumentResponse.class));
+        stubToken("fm-token", 8L, 1L, Role.FINANCE_MANAGER);
+        mockMvc.perform(post("/api/v1/expenses/1/close-claim").header("Authorization", "Bearer fm-token")
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isOk());
+
+        for (Role role : new Role[]{Role.ACCOUNTANT, Role.CASHIER, Role.OWNER}) {
+            String token = role.name() + "-token";
+            stubToken(token, 9L, 1L, role);
+            mockMvc.perform(post("/api/v1/expenses/1/close-claim").header("Authorization", "Bearer " + token)
+                    .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isForbidden());
+        }
+    }
+
+    @Test
+    void closeExpenseClaim_rejectsANegativeFinalAmount() throws Exception {
+        stubToken("fm-token", 8L, 1L, Role.FINANCE_MANAGER);
+        mockMvc.perform(post("/api/v1/expenses/1/close-claim").header("Authorization", "Bearer fm-token")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"finalAmount\":-1}"))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void ownerExpenseList_isOwnerOnly() throws Exception {
+        when(reviewService.ownerExpenseList()).thenReturn(List.of());
+        stubToken("owner-token", 5L, 1L, Role.OWNER);
+        mockMvc.perform(get("/api/v1/review/owner/expenses").header("Authorization", "Bearer owner-token"))
+            .andExpect(status().isOk());
+
+        stubToken("fm-token", 8L, 1L, Role.FINANCE_MANAGER);
+        mockMvc.perform(get("/api/v1/review/owner/expenses").header("Authorization", "Bearer fm-token"))
+            .andExpect(status().isForbidden());
+        stubToken("acct-token", 6L, 1L, Role.ACCOUNTANT);
+        mockMvc.perform(get("/api/v1/review/owner/expenses").header("Authorization", "Bearer acct-token"))
+            .andExpect(status().isForbidden());
+        stubToken("cashier-token", 7L, 1L, Role.CASHIER);
+        mockMvc.perform(get("/api/v1/review/owner/expenses").header("Authorization", "Bearer cashier-token"))
             .andExpect(status().isForbidden());
     }
 

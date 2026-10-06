@@ -78,7 +78,30 @@ export interface MoneyMovementItem {
   amount: number
 }
 
+/** One slice of the claims summary (rev 62). claimed = received + rejected + pending. */
+export interface ClaimTotals {
+  count: number
+  open: number
+  claimed: number
+  received: number
+  /** Closed claims only — claimed minus the Finance Manager's final amount. */
+  rejected: number
+  /** Open claims only — claimed minus received so far. */
+  pending: number
+}
+
+export interface ClaimsSummary {
+  period: DashboardPeriod
+  total: ClaimTotals
+  expenses: ClaimTotals
+  receipts: ClaimTotals
+}
+
 export const dashboardApi = {
+  /** rev 62 — claimed / received / rejected / pending, expense + receipt claims. Owner and Finance Manager. */
+  claims(period: DashboardPeriod, branchId?: number) {
+    return api.get<ClaimsSummary>('/api/v1/dashboard/claims', { params: { period, branchId } })
+  },
   summary(period: DashboardPeriod, branchId?: number) {
     return api.get<DashboardSummary>('/api/v1/dashboard/summary', { params: { period, branchId } })
   },

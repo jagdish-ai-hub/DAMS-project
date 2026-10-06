@@ -9,6 +9,10 @@ An expense document doesn't finish on its own — you close it, once it's fully 
 
 Once closed, the expense is locked — its lines and attachments can't be changed by anyone.
 
+## Expenses marked Transfer to Claim
+
+If the expense is marked **Transfer to Claim** (money the manufacturer will pay back), you **don't close it**. Verify it, and it goes to the **finance manager**, who closes the claim and records the final amount recovered. **Close expense** isn't offered on it. If the finance manager queries it, it comes back to your queue — fix it and resend it.
+
 ## Over-limit expenses
 
 If any line went over its sub-category limit, or the expense is in a status that needs finance approval (such as **Requires Finance Approval**), it needs the **finance manager's approval** before you can close it. Verifying it yourself isn't enough.

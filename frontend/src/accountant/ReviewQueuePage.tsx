@@ -7,7 +7,7 @@ import { cashApi, type CashDocument } from '../api/cash'
 import { reviewApi, type ReviewQueueItem, type ReviewType } from '../api/review'
 import { exportApi } from '../api/export'
 import { card, ErrorBanner, ghostBtn, primaryBtn, Modal, Badge, Skeleton, SkeletonRows, inr, fmtDate, fmtDateShort, inputStyle, th, td } from '../shell/ui'
-import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, EXPENSE_STATUS_EDITABLE, type AnyDoc } from '../review/reviewShared'
+import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, EXPENSE_STATUS_EDITABLE, isMakerOf, MakerBlockedNote, type AnyDoc } from '../review/reviewShared'
 import AddPaymentModal from '../cashier/AddPaymentModal'
 import { StatBox, statPanel } from '../review/StatBox'
 import GlobalSearch from '../shared/GlobalSearch'
@@ -1030,13 +1030,16 @@ function RecordDetail(props: {
   const { user } = useAuth()
   // Maker-checker mirror: the server refuses these actions when you created or last
   // touched the entry — hiding them avoids a dead-end click (server stays authoritative).
-  const isMaker = user != null && (user.userId === doc.createdBy
-    || (doc.lastModifiedBy != null && user.userId === doc.lastModifiedBy))
+  // An Owner is exempt (rev 59) — see isMakerOf.
+  const isMaker = isMakerOf(user, doc)
   const canReview = wf === 'SUBMITTED' && !isMaker
   // FM sent it back (rev 49) — fix it with the same override tools, then resend to the FM.
   // The Cashier is never involved in this path.
   const canResendToFm = wf === 'FM_QUERIED' && !isMaker
-  const canClose = expense && (wf === 'VERIFIED' || wf === 'APPROVED') && !isMaker
+  // rev 61 — an expense marked Transfer to Claim is closed by the Finance Manager (Close Claim),
+  // so the Accountant's job on it ends at Verify. The server refuses the close too.
+  const claimExpense = !!expense && !!(doc as { businessStatusTriggersClaim?: boolean }).businessStatusTriggersClaim
+  const canClose = expense && (wf === 'VERIFIED' || wf === 'APPROVED') && !isMaker && !claimExpense
   const overLimit = expense ? (doc as { overLimit: boolean }).overLimit : false
   // rev 53 — an FM pre-approval that still covers the total counts as that approval: the
   // Accountant closes it after verifying, with no second trip to the FM.
@@ -1114,6 +1117,15 @@ function RecordDetail(props: {
           />
         )}
 
+      {claimExpense && wf !== 'CLOSED' && wf !== 'REJECTED' && (
+        <div style={{ ...card, background: 'var(--purple-bg, #EFE7FB)', borderColor: '#D9C7EF', marginBottom: 14, fontSize: '0.82rem' }}>
+          <strong>Transfer to Claim.</strong>{' '}
+          {wf === 'VERIFIED' || wf === 'APPROVED'
+            ? 'You have verified this — the Finance Manager closes the claim and records the final amount. Nothing more for you unless they query it back.'
+            : 'After you verify it, it goes to the Finance Manager, who closes the claim and records the final amount recovered. You do not close it.'}
+        </div>
+      )}
+
       {canResendToFm && (
         <div style={{ ...card, background: 'var(--amber-bg)', borderColor: '#EAD3AE', marginBottom: 14, fontSize: '0.82rem' }}>
           <strong>Queried by Finance.</strong> See their note in the History below. Fix it with the
@@ -1124,7 +1136,7 @@ function RecordDetail(props: {
       {!canReview && !canClose && !canResendToFm ? (
         <div style={{ ...card, textAlign: 'center', color: 'var(--faint)', fontSize: '0.84rem' }}>
           {isMaker
-            ? 'You created or last edited this entry — maker-checker requires another reviewer.'
+            ? <MakerBlockedNote doc={doc} step="ACCOUNTANT" />
             : 'No action needed from you right now.'}
         </div>
       ) : (
@@ -1149,7 +1161,11 @@ function RecordDetail(props: {
               <>
                 <button type="button" onClick={() => { setBox(box === 'query' ? null : 'query'); setBoxText(''); setError('') }}
                   style={{ ...ghostBtn, color: 'var(--amber)', minHeight: 36 }}>Query</button>
-                <button type="button" onClick={() => run(() => reviewApi.verify(type, doc.id), `${docNo} verified — moved to Finance Manager`)}
+                <button type="button" onClick={() => run(() => reviewApi.verify(type, doc.id),
+                  // rev 60: an in-limit expense in an ordinary status never goes to the FM — the Accountant closes it.
+                  expense && !claimExpense && !(needsFm && !preApproved)
+                    ? `${docNo} verified — you can close it now`
+                    : `${docNo} verified — moved to Finance Manager`)}
                   disabled={busy || queryOpen} title={queryOpen ? 'Send or cancel the Query first' : undefined}
                   style={{ ...primaryBtn(busy || queryOpen), minHeight: 36 }}>Verify</button>
               </>

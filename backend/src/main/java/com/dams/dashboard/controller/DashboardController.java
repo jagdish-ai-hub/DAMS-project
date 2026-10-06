@@ -1,9 +1,11 @@
 package com.dams.dashboard.controller;
 
 import com.dams.dashboard.dto.ActivityItem;
+import com.dams.dashboard.dto.ClaimsSummary;
 import com.dams.dashboard.dto.DashboardSummary;
 import com.dams.dashboard.dto.MoneyMovementItem;
 import com.dams.dashboard.dto.OutstandingItem;
+import com.dams.dashboard.service.ClaimsSummaryService;
 import com.dams.dashboard.service.DashboardService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -29,9 +31,11 @@ import java.util.List;
 public class DashboardController {
 
     private final DashboardService dashboardService;
+    private final ClaimsSummaryService claimsSummaryService;
 
-    public DashboardController(DashboardService dashboardService) {
+    public DashboardController(DashboardService dashboardService, ClaimsSummaryService claimsSummaryService) {
         this.dashboardService = dashboardService;
+        this.claimsSummaryService = claimsSummaryService;
     }
 
     @GetMapping("/summary")
@@ -39,6 +43,13 @@ public class DashboardController {
     public DashboardSummary summary(@RequestParam(required = false) Long branchId,
                                     @RequestParam(required = false, defaultValue = "mtd") String period) {
         return dashboardService.summary(branchId, period);
+    }
+
+    @GetMapping("/claims")
+    @Operation(summary = "Claims at a glance — claimed / received / rejected / pending, expense + receipt claims (rev 62)")
+    public ClaimsSummary claims(@RequestParam(required = false) Long branchId,
+                                @RequestParam(required = false, defaultValue = "mtd") String period) {
+        return claimsSummaryService.summary(branchId, period);
     }
 
     @GetMapping("/outstanding")

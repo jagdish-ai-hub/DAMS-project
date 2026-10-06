@@ -11,6 +11,7 @@ import RoleLanding from './RoleLanding'
 import OrganizationsPage from '../superadmin/OrganizationsPage'
 import TeamAndBranchesPage from '../owner/TeamAndBranchesPage'
 import MastersPage from '../owner/MastersPage'
+import OwnerExpensesPage from '../owner/ExpensesPage'
 import SettingsPage from '../settings/SettingsPage'
 import CashierHomePage from '../cashier/CashierHomePage'
 import NewReceiptPage from '../cashier/NewReceiptPage'
@@ -36,6 +37,8 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   ],
   OWNER: [
     { to: '/app', label: 'Dashboard', end: true },
+    { to: '/app/expenses', label: 'Expenses' },
+    { to: '/app/cash', label: 'Cash' },
     { to: '/app/team', label: 'Team & Branches' },
     { to: '/app/masters', label: 'Masters' },
     { to: '/app/override-audit', label: 'Override Audit' },
@@ -312,6 +315,7 @@ export default function AppShell() {
           <Routes>
             <Route index element={homeElement} />
             {isSuperAdmin && <Route path="organizations" element={<OrganizationsPage />} />}
+            {isOwner && <Route path="expenses" element={<OwnerExpensesPage />} />}
             {isOwner && <Route path="team" element={<TeamAndBranchesPage />} />}
             {isOwner && <Route path="masters" element={<MastersPage />} />}
             {(isCashier || isOwner || isFinanceManager) && <Route path="new-receipt" element={<NewReceiptPage />} />}

@@ -40,6 +40,7 @@ export const HELP_MANIFEST: Record<HelpRole, HelpEntry[]> = {
     { slug: 'reading-the-dashboard', title: 'Reading the dashboard' },
     { slug: 'comparing-branches', title: 'Comparing branches' },
     { slug: 'team-and-branches', title: 'Team & branches' },
+    { slug: 'reopening-a-closed-day', title: 'Reopening a closed day' },
     { slug: 'masters', title: 'Masters' },
   ],
   'super-admin': [
