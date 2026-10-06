@@ -9,8 +9,8 @@ import { MAINTENANCE_MODE, isMaintenanceBlocked, maintenanceBypassed } from './m
 export default function App() {
   const { search } = useLocation()
 
-  // TEMPORARY maintenance mode (plan.md rev 59): every screen, the sign-in page included, shows
-  // the maintenance page — unless this tab came in through the private ?bypass= link.
+  // Maintenance mode (plan.md revs 59-60), currently off — see maintenance/maintenance.ts. When on,
+  // every screen shows the maintenance page unless this tab came in through the ?bypass= link.
   if (isMaintenanceBlocked(MAINTENANCE_MODE, maintenanceBypassed(search))) {
     return <MaintenancePage />
   }

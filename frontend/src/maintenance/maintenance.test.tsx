@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { AuthProvider } from '../auth/AuthContext'
 import App from '../App'
 import MaintenancePage from './MaintenancePage'
-import { BYPASS_TOKEN, bundleOf, isMaintenanceBlocked, maintenanceBypassed } from './maintenance'
+import { BYPASS_TOKEN, MAINTENANCE_MODE, bundleOf, isMaintenanceBlocked, maintenanceBypassed } from './maintenance'
 
 beforeEach(() => sessionStorage.clear())
 
@@ -51,25 +51,17 @@ describe('bundleOf', () => {
   })
 })
 
-describe('maintenance screen in the app', () => {
-  it('replaces a role page with the maintenance page', () => {
-    renderAt('/app')
-    expect(screen.getByRole('heading', { name: /we.re under maintenance/i })).toBeInTheDocument()
-  })
-
-  it('replaces the sign-in page too', () => {
+describe('maintenance screen', () => {
+  it('is off: the app shows its normal sign-in page', () => {
+    expect(MAINTENANCE_MODE).toBe(false)
     renderAt('/login')
-    expect(screen.getByRole('heading', { name: /we.re under maintenance/i })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: /sign in to dams/i })).not.toBeInTheDocument()
-  })
-
-  it('lets the private bypass link through to the real sign-in page', () => {
-    renderAt(`/login?bypass=${BYPASS_TOKEN}`)
     expect(screen.getByRole('heading', { name: /sign in to dams/i })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /we.re under maintenance/i })).not.toBeInTheDocument()
   })
 
-  it('describes the illustration for screen readers and offers a manual re-check', () => {
+  it('the kept page still renders, ready to switch back on', () => {
     render(<MaintenancePage />)
+    expect(screen.getByRole('heading', { name: /we.re under maintenance/i })).toBeInTheDocument()
     expect(screen.getByRole('img', { name: /server rack/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /check again/i })).toBeInTheDocument()
   })

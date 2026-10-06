@@ -1,14 +1,14 @@
 /*
- * TEMPORARY maintenance mode (plan.md rev 59) — FRONTEND ONLY. The backend is untouched and keeps
- * running; this just makes the web app show the maintenance page to anyone who loads it, the
- * sign-in screen included. Everything for it lives in this folder plus one gate in App.tsx. To
- * end it, revert the PR that added them (or set MAINTENANCE_MODE to false).
+ * Maintenance mode (plan.md revs 59-60) — FRONTEND ONLY, currently OFF. The page and gate are kept
+ * so it can be switched back on later: set MAINTENANCE_MODE to true and deploy. While on, the web
+ * app shows the maintenance page to anyone who loads it, the sign-in screen included; the backend
+ * is never touched.
  *
- * This is a "closed" sign on the door, not a lock: nothing server-side stops a client that
- * already holds a token, and a tab that was open before the deploy keeps running the old app
- * until it is refreshed (or its login expires).
+ * It is a "closed" sign on the door, not a lock: nothing server-side stops a client that already
+ * holds a token, and a tab that was open before the deploy keeps running the old app until it is
+ * refreshed (or its login expires).
  */
-export const MAINTENANCE_MODE = true
+export const MAINTENANCE_MODE = false
 
 /*
  * A private way back in, so whoever is doing the maintenance can still use the app. Open any

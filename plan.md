@@ -7,6 +7,13 @@
 
 ## Revision log
 
+- **rev 60 (2026-10-06)** — **Maintenance mode switched OFF; the page is kept for later.** `MAINTENANCE_MODE`
+  in `frontend/src/maintenance/maintenance.ts` is now `false`, so every screen behaves normally again. The
+  maintenance page, the `App.tsx` gate and the `?bypass=` link (rev 59) stay in the code, dormant — to turn it
+  back on later, set the flag to `true` and deploy. Backend unchanged. Verified: `tsc`/`eslint`/`vitest` clean
+  (17 passing), production build succeeds, and in real Chromium against the built `dist` `/`, `/login` and
+  `/app/new-receipt` all land on the normal sign-in page with no maintenance page.
+
 - **rev 59 (2026-10-04)** — **TEMPORARY maintenance page — frontend only.** Requested so people
   cannot use DAMS for a while without taking the server down. While on, every screen — the
   sign-in page included — shows a themed "We're under maintenance" page (navy theme, a smoking
