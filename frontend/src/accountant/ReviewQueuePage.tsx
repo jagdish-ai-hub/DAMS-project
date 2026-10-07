@@ -6,7 +6,8 @@ import { jobCardsApi } from '../api/jobCards'
 import { cashApi, type CashDocument } from '../api/cash'
 import { reviewApi, type ReviewQueueItem, type ReviewType } from '../api/review'
 import { exportApi } from '../api/export'
-import { card, ErrorBanner, ghostBtn, primaryBtn, Modal, Badge, Skeleton, SkeletonRows, inr, fmtDate, fmtDateShort, inputStyle, th, td } from '../shell/ui'
+import { card, ErrorBanner, ghostBtn, primaryBtn, Modal, Badge, Skeleton, SkeletonRows, inr, fmtDate, fmtDateShort, inputStyle, th, td, istToday } from '../shell/ui'
+import { FileSpreadsheet } from 'lucide-react'
 import { RecordCard, CashRecordCard, QueryRejectBox, Tag, apiError, EXPENSE_STATUS_EDITABLE, isMakerOf, MakerBlockedNote, type AnyDoc } from '../review/reviewShared'
 import AddPaymentModal from '../cashier/AddPaymentModal'
 import { StatBox, statPanel } from '../review/StatBox'
@@ -481,43 +482,9 @@ function QueuePane(props: {
         </div>
       ))}
 
-      {closed.length > 0 && (
-        <div style={{ marginTop: 18, borderTop: '1px solid var(--line)' }}>
-          <button
-            type="button"
-            onClick={() => setClosedOpen((o) => !o)}
-            aria-expanded={closedOpen}
-            style={{
-              width: '100%', display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left',
-              padding: '12px 14px 8px', border: 'none', background: 'transparent', cursor: 'pointer',
-              fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em',
-              color: 'var(--faint)', fontWeight: 700,
-            }}
-          >
-            <span style={{
-              display: 'inline-block', transition: 'transform var(--dur) var(--ease)',
-              transform: closedOpen ? 'rotate(90deg)' : 'none',
-            }}>▶</span>
-            <span style={{ color: 'var(--red)' }}>Closed entries</span>
-            <span style={{ background: 'var(--red-bg)', color: 'var(--red)', borderRadius: 999, fontSize: '0.66rem', padding: '1px 7px' }}>
-              {closed.length}
-            </span>
-            <span style={{ marginLeft: 'auto', textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>
-              verified / approved
-            </span>
-          </button>
-          {closedOpen && closed.map((it) => (
-            <QueueRow
-              key={`closed-${it.id}`}
-              it={it}
-              closed
-              selected={props.selectedId === it.id}
-              onSelect={() => props.onSelect(it.id)}
-            />
-          ))}
-        </div>
-      )}
-
+      {/* The bulk bar closes the OPEN entries: it sits right after them, above "Closed entries" — it acts on
+          the open list's selection, so it must not be pushed below the closed ones. Sticky, so it stays
+          at the bottom of the screen while the open list is being scrolled. */}
       {showBulkCheckboxes && props.selectedIds.length > 0 && (
         <div style={{
           position: 'sticky', bottom: 0, zIndex: 10,
@@ -562,6 +529,44 @@ function QueuePane(props: {
           </div>
         </div>
       )}
+
+      {closed.length > 0 && (
+        <div style={{ marginTop: 18, borderTop: '1px solid var(--line)' }}>
+          <button
+            type="button"
+            onClick={() => setClosedOpen((o) => !o)}
+            aria-expanded={closedOpen}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left',
+              padding: '12px 14px 8px', border: 'none', background: 'transparent', cursor: 'pointer',
+              fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em',
+              color: 'var(--faint)', fontWeight: 700,
+            }}
+          >
+            <span style={{
+              display: 'inline-block', transition: 'transform var(--dur) var(--ease)',
+              transform: closedOpen ? 'rotate(90deg)' : 'none',
+            }}>▶</span>
+            <span style={{ color: 'var(--red)' }}>Closed entries</span>
+            <span style={{ background: 'var(--red-bg)', color: 'var(--red)', borderRadius: 999, fontSize: '0.66rem', padding: '1px 7px' }}>
+              {closed.length}
+            </span>
+            <span style={{ marginLeft: 'auto', textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>
+              verified / approved
+            </span>
+          </button>
+          {closedOpen && closed.map((it) => (
+            <QueueRow
+              key={`closed-${it.id}`}
+              it={it}
+              closed
+              selected={props.selectedId === it.id}
+              onSelect={() => props.onSelect(it.id)}
+            />
+          ))}
+        </div>
+      )}
+
     </div>
   )
 }
@@ -893,8 +898,55 @@ function DrilldownModal(props: {
     color: active ? '#fff' : 'var(--muted)',
   })
 
+  // Export to Excel (rev 67): exactly the rows shown, in this order — the server adds each
+  // transaction's settlement / expense lines. The filters opened from the tile are the default.
+  const [exportBusy, setExportBusy] = useState(false)
+  const [exportError, setExportError] = useState('')
+  async function handleExport() {
+    setExportBusy(true)
+    setExportError('')
+    const name = [
+      label.replace(' ', '-'),
+      props.type === 'receipt' && bucket !== 'awaiting' ? bucket : '',
+      [...statuses].sort().join('-'),
+      branch,
+      from || to ? `${from || 'start'}-to-${to || istToday()}` : '',
+    ].filter(Boolean).join('_')
+    try {
+      await exportApi.downloadReviewList(props.type, filtered.map((it) => it.id), `${name}.csv`)
+    } catch (e) {
+      setExportError(apiError(e, 'Could not export. Please try again.'))
+    } finally {
+      setExportBusy(false)
+    }
+  }
+
   return (
-    <Modal title={`Pending & closed — ${label}`} subtitle="click a row to open it" onClose={props.onClose} maxWidth={820}>
+    <Modal
+      title={`Pending & closed — ${label}`}
+      subtitle="click a row to open it"
+      onClose={props.onClose}
+      maxWidth={820}
+      footer={
+        <>
+          <span style={{ marginRight: 'auto', alignSelf: 'center', fontSize: '0.74rem', color: 'var(--faint)' }}>
+            {filtered.length === 0
+              ? 'Nothing to export'
+              : `Exports the ${filtered.length} shown${props.type === 'receipt' ? ', with every settlement line' : props.type === 'expense' ? ', with every expense line' : ''}`}
+          </span>
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={exportBusy || filtered.length === 0}
+            style={{ ...primaryBtn(exportBusy || filtered.length === 0), minHeight: 38, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            {exportBusy ? 'Exporting…' : 'Export to Excel'}
+          </button>
+        </>
+      }
+    >
+      <ErrorBanner message={exportError} />
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 10 }}>
         {props.type === 'receipt' && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>

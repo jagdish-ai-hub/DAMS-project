@@ -13,7 +13,7 @@ Your home screen is the **Dashboard** — the group's money at a glance. Two con
 
 ## Claims
 
-Just under the headline numbers, the **Claims** card shows what you have claimed back from the manufacturer and how it has gone. It follows the same branch and period filters.
+Just under the headline numbers, the **Claims dashboard** card shows what you have claimed back from the manufacturer and how it has gone. It starts **closed** — click it to open. It follows the same branch and period filters.
 
 - **Total claimed** — for an expense claim, what was spent; for a warranty / AMC / CG claim, the job's invoice amount.
 - **Total received** — what has come back: the final amount the Finance Manager recorded when closing a claim, plus payments received so far on claims still open.

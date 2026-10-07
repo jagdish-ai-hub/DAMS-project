@@ -7,6 +7,113 @@
 
 ## Revision log
 
+- **rev 67 (2026-10-08)** — **Accountant "Pending & closed" window: Export to Excel.** Request: a button at
+  the window's bottom-right that downloads everything listed plus each transaction's settlement lines.
+  Confirmed choices: **CSV (no new library)**; **exactly the rows the filters show** — untouched filters =
+  the tile's own default. AGENT.md #5 updated first (an on-screen list export is allowed; still no ledger /
+  Tally feed). No migration.
+  - **Endpoint:** `POST /api/v1/export/review-list` `{type: receipt|expense|cash, ids}` (OWNER / FM /
+    ACCOUNTANT; ids in on-screen order, max 10,000; POST so a long list can't overflow the URL).
+    `ExportService.exportReviewListCsv` loads exactly those documents (`findByOrgIdAndIdIn`, new on the
+    three document repositories), keeps the caller's order, and drops ids outside the caller's branches or
+    in a state the window never lists (draft / queried / rejected). Party, category and amount come from
+    `ReviewService.toReceiptItems / toExpenseItems / toCashItems` (now public) so the file matches the row
+    on screen by construction.
+  - **CSV shape (UTF-8 BOM):** one row per settlement / expense line with the transaction's details
+    repeated; a transaction with no lines still gets one row; **Transaction Amount** only on a
+    transaction's first row, so the column sums to the window's total; closing **Total** row (count,
+    transaction total, line total). Status column uses the window's labels (Pending / Verified / Closed)
+    next to the raw workflow status; Submitted On is the IST date. Cash movements have no lines — one row each.
+  - **Frontend:** `DrilldownModal` gets a `Modal` footer — hint text left, **Export to Excel** right
+    (disabled when the list is empty); `exportApi.downloadReviewList` unwraps the server's JSON error from
+    the blob response. Help: `accountant/reviewing-the-queue.md`.
+  - **Known, not changed here:** the window's Date column and date filter read the first 10 characters of
+    `submittedAt`, which the API sends as UTC — an entry submitted 00:00–05:30 IST shows (and filters as)
+    the previous day, while the export's Submitted On is the IST date.
+  - Verified: backend `mvn -o test` 374 run / 0 failed (new `ExportServiceReviewListTest` ×3); frontend
+    `tsc`, `eslint`, `vitest` (30) clean; built bundle contains the footer button and the
+    `/api/v1/export/review-list` call. **Not yet run against the live API or seen rendered in a browser.**
+
+- **rev 66 (2026-10-06)** — **Finance page: "Claims dashboard" collapsed by default; Accountant queue: the
+  bulk bar sits right after the open entries.** (1) `ClaimsSummaryCard` is renamed **Claims dashboard**
+  (Owner dashboard and Finance page); on the Finance page it is a collapsible header, **closed until
+  clicked**, and its numbers are fetched only the first time it is opened (`collapsedByDefault`); the Owner
+  dashboard's card is collapsed the same way (it still follows the page's branch / period filters). (2) In the Accountant review queue the bulk bar (Clear / Export /
+  Verify (n) — Approve on the cash tab) was rendered after the "Closed entries" list, so it sat at the very
+  bottom below every closed row. It now renders directly after the open entries and before "Closed entries"
+  (still sticky, so it stays at the bottom of the screen while scrolling the open list). Frontend only; no
+  migration. Verified: `tsc`, `eslint`, `vitest` (30) clean; in the built bundle the bar's code sits
+  between the open list and the "Closed entries" section, and the new title / collapsed prop are present.
+  **Not yet seen rendered in a browser.**
+
+- **rev 65 (2026-10-06)** — **Masters: "This change conflicts with an existing record" on every edit
+  fixed; retired (deprecated / inactive) statuses leave the dropdowns for new work.** Two requests,
+  confirmed: (1) why the conflict error appeared when changing anything — even just a name; (2) drop
+  deprecated statuses from dropdowns but keep them visible on old records. AGENT.md updated first.
+  - **Cause of the conflict error (code + schema; not reproduced — Docker is unavailable locally and the
+    Neon logs showed nothing):** that exact text is the global handler for a *database constraint*
+    failure (`DataIntegrityViolationException` → 409), not the name-clash check ("'X' already exists in
+    this list"). Editing a **Receipt status** always re-sends its roles, and
+    `ReceiveStatusAccessService.replaceRoles` deleted every grant and re-inserted the same ones. The table
+    has `UNIQUE (status_id, role)`; the new rows use IDENTITY ids so Hibernate inserts them at persist time
+    while the derived `deleteBy…` only removes at flush — insert before delete → duplicate key → 409.
+    The mocked unit test (`replaceRoles_clearsTheOldGrantsBeforeWritingTheNewOnes`) could not see this.
+    Fix: `replaceRoles` now diffs — rows still wanted are left alone, removed ones are deleted and
+    **flushed** before any insert, only genuinely new roles are inserted. A rename now writes no grant rows.
+  - **Dropdown rule:** `selectableBy` (the list behind `/masters/receive-statuses/selectable`) now omits
+    deprecated as well as inactive statuses. Server: `JobCardService.requireActiveStatus` — reached only
+    when a status is newly set (job-card create, incl. via a receipt, or a patch that changes it) — now also
+    refuses a deprecated status; a job card already on one keeps it (an unchanged status is not re-checked).
+    Inactive was already refused there. `BusinessStatusSelect` takes `currentName`: when the record's own
+    value is not among the options it is added as "<name> (retired)" and nothing else retired is — wired into
+    the receipt form (incl. a linked existing job) and the review `RecordCard`. Expense statuses have no
+    deprecated flag and already show the current one (rev 58), unchanged.
+  - **Masters page:** deprecated rows move under a collapsed "Deprecated (n)" heading at the bottom; the
+    edit-modal checkbox text now says what it does.
+  - Live data at the time: demo org — **Close** (deprecated, still active, 4 job cards), Warranty (4) and CG
+    (0) (deprecated + inactive), AMC/WRNTY (inactive, 5 job cards); org 3 — Hold, AMC, CG, WIP, Warranty,
+    Close deprecated and active (0 job cards). After this, Close and org 3's six leave the dropdowns.
+  - Verified: `mvn test` 371 green (0 failures, 4 Docker-only skips) — `ReceiveStatusAccessServiceTest`
+    (same roles → no delete/insert; changed roles → delete, flush, then insert only the new one; no grants
+    yet → insert only; deprecated omitted from the selectable list), `JobCardServiceTest` +3 (deprecated
+    refused on create and on a status change; a job card already on one keeps it); frontend `tsc`,
+    `eslint`, `vitest` (30) clean; built bundle has the "(retired)" option, the collapsed "Deprecated (n)"
+    group and the new modal text, and the old text is gone. **The conflict error was not reproduced** (the
+    DB-level cause is from the code and the `UNIQUE (status_id, role)` constraint; Neon logs had nothing),
+    and nothing has been tried in a browser — after deploy, rename a Receipt status to confirm it saves.
+
+- **rev 64 (2026-10-06)** — **Receipt screen: "Link Job Card" is now a hidden, plainly worded
+  "Link an existing job".** The field sat at the top of the form, led its search hint and every
+  result with the Ooriba ID (DAMS-Receive-ID) — which a *new* receipt does not have yet (assigned on
+  submit) — and pushed the Job Card / DBM number to a second line, so it read as confusing. Chosen
+  (confirmed): keep the capability, hide it, move it. AGENT.md "Linking" updated first.
+  - `NewReceiptPage.tsx`: removed the top-of-form row; a small **"＋ Link an existing job (optional)"**
+    link now sits in the right column **just above the Documents section**. It opens the picker
+    (label "Existing job", hint "Search by customer, vehicle no, Job Card / DBM or invoice") and has
+    a Hide link; once a job is picked its customer / vehicle / DBM / invoice / category / status lock
+    as before. Not shown when editing a saved receipt.
+  - `PartyPickers.tsx` `JobCardSearch` gains `partyFirst` + `placeholder`: results lead with
+    Customer · Vehicle · DBM, the Ooriba ID / job-card reference and invoice are the small second line.
+    The **Expense** screen keeps the Ooriba-first picker unchanged.
+  - Not done: the picker does **not** open by itself when arriving from an expense's job card — there is
+    no such entry path today (the receipt page only reads `editDoc` and `customerId`); say if wanted.
+  Verified: `tsc`, `eslint`, `vitest` (30, incl. the merged maintenance tests) clean; built bundle has the
+  new link, hint and "Existing job", none of the old receipt wording, and the link text precedes the
+  Documents panel. **Not yet seen rendered in a browser.**
+
+- **rev 63 (2026-10-06)** — **Cashier home: the Queries / Approvals boxes now sit left and right from
+  1024px, not only 1280px.** Reported on a 14" laptop: the two message boxes (rev 57) dropped below the
+  search instead of beside it. Cause: the three-column layout was gated on Tailwind `xl:` (≥1280px) with
+  fixed minimum widths (200+600+200 + gaps), so any window narrower than 1280 CSS px — a 14" laptop at
+  125–150% Windows scaling is ~1000–1100px — got the stacked fallback. Fix in `CashierHomePage.tsx`: the
+  grid placement classes move from `xl:` to `lg:` and a `lg:` column set
+  `minmax(180px,230px) | minmax(0,1fr) | minmax(180px,230px)` sits inside the page column; the original
+  wide-screen layout (screen-edge break-out, `xl:`) is unchanged ≥1280px; below 1024px it still stacks.
+  Verified in the built stylesheet (`index-*.css`, parsed with postcss): the `lg:` rules are inside
+  `@media (min-width:1024px)`, the `xl:` rules inside `(min-width:1280px)` and defined after them so they
+  still win on wide screens. **Not yet seen rendered in a browser.** The Accountant / Finance review
+  queues already switch at 1024px and are unchanged.
+
 - **rev 62 (2026-10-06)** — **Claims summary: total claimed / received / rejected / still open.**
   Asked for "total amount claimed and total received" on the Owner dashboard and Finance page.
   Decisions (confirmed): show on **both**; count **expense and receipt claims together** (split by

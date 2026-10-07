@@ -1,6 +1,8 @@
 package com.dams.export.controller;
 
+import com.dams.export.dto.ReviewListExportRequest;
 import com.dams.export.service.ExportService;
+import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -9,6 +11,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -52,6 +56,17 @@ public class ExportController {
         byte[] csv = exportService.exportReceiptsCsvByIds(ids);
         return ResponseEntity.ok()
             .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"receipts-export-selected.csv\"")
+            .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
+            .body(csv);
+    }
+
+    @PostMapping("/review-list")
+    @Operation(summary = "Export the Accountant's Pending & closed window exactly as filtered — one row per line (rev 67)")
+    @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT')")
+    public ResponseEntity<byte[]> exportReviewList(@Valid @RequestBody ReviewListExportRequest request) {
+        byte[] csv = exportService.exportReviewListCsv(request.type(), request.ids());
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + request.type() + "-list-export.csv\"")
             .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
             .body(csv);
     }

@@ -10,34 +10,54 @@ import { card, inr } from '../shell/ui'
  *
  * Pass `period` to follow a parent's period control (Owner dashboard); leave it out and the card
  * shows its own Today / Month toggle (Finance Manager page).
+ * Pass `collapsedByDefault` (Finance Manager page) to make the card a collapsible header: closed
+ * until clicked, and its numbers are only fetched once it is opened.
  */
-export default function ClaimsSummaryCard(props: { branchId?: number; period?: DashboardPeriod }) {
+export default function ClaimsSummaryCard(props: { branchId?: number; period?: DashboardPeriod; collapsedByDefault?: boolean }) {
+  const collapsible = props.collapsedByDefault !== undefined
+  const [open, setOpen] = useState(!props.collapsedByDefault)
   const [ownPeriod, setOwnPeriod] = useState<DashboardPeriod>('mtd')
   const period = props.period ?? ownPeriod
   const [data, setData] = useState<ClaimsSummary | null>(null)
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
+    if (!open) return
     let live = true
     setFailed(false)
     dashboardApi.claims(period, props.branchId)
       .then(({ data }) => { if (live) setData(data) })
       .catch(() => { if (live) { setData(null); setFailed(true) } })
     return () => { live = false }
-  }, [period, props.branchId])
+  }, [open, period, props.branchId])
 
   const total = data?.total
 
   return (
     <section style={{ ...card, marginBottom: 18 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-        <h3 style={{ fontSize: '0.94rem', fontWeight: 700 }}>Claims</h3>
-        <span style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>
-          {period === 'today' ? 'raised today' : 'raised this month'}
-          {total ? ` · ${total.count} claim${total.count === 1 ? '' : 's'}, ${total.open} still open` : ''}
-        </span>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: open ? 12 : 0 }}>
+        {collapsible ? (
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'inline-flex', alignItems: 'baseline', gap: 8, color: 'inherit' }}
+          >
+            <span style={{ display: 'inline-block', fontSize: '0.7rem', transition: 'transform var(--dur) var(--ease)', transform: open ? 'rotate(90deg)' : 'none' }}>▶</span>
+            <h3 style={{ fontSize: '0.94rem', fontWeight: 700, margin: 0 }}>Claims dashboard</h3>
+          </button>
+        ) : (
+          <h3 style={{ fontSize: '0.94rem', fontWeight: 700 }}>Claims dashboard</h3>
+        )}
+        {open && (
+          <span style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>
+            {period === 'today' ? 'raised today' : 'raised this month'}
+            {total ? ` · ${total.count} claim${total.count === 1 ? '' : 's'}, ${total.open} still open` : ''}
+          </span>
+        )}
+        {!open && <span style={{ fontSize: '0.76rem', color: 'var(--faint)' }}>claimed · received · rejected · still open — click to open</span>}
         <span style={{ flex: 1 }} />
-        {props.period == null && (
+        {open && props.period == null && (
           <div style={{ display: 'flex', border: '1px solid var(--line)', borderRadius: 8, overflow: 'hidden' }}>
             {([['today', 'Today'], ['mtd', 'This month']] as const).map(([v, label]) => (
               <button key={v} type="button" onClick={() => setOwnPeriod(v)}
@@ -53,10 +73,10 @@ export default function ClaimsSummaryCard(props: { branchId?: number; period?: D
         )}
       </div>
 
-      {failed && <div style={{ fontSize: '0.82rem', color: 'var(--faint)' }}>Could not load the claims summary.</div>}
-      {!failed && !data && <div style={{ fontSize: '0.82rem', color: 'var(--faint)' }}>Loading…</div>}
+      {open && failed && <div style={{ fontSize: '0.82rem', color: 'var(--faint)' }}>Could not load the claims summary.</div>}
+      {open && !failed && !data && <div style={{ fontSize: '0.82rem', color: 'var(--faint)' }}>Loading…</div>}
 
-      {data && (
+      {open && data && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 150px), 1fr))', gap: 12 }}>
             <Figure label="Total claimed" value={data.total.claimed} tone="var(--navy2)" />

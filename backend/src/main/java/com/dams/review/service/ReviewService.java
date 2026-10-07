@@ -423,7 +423,8 @@ public class ReviewService {
         return cashDocumentService.get(id);
     }
 
-    private List<ReviewQueueItem> toCashItems(Long orgId, List<CashDocument> docs) {
+    /** Public so the on-screen list export (rev 67) shows the same party / category / amount as the queue row. */
+    public List<ReviewQueueItem> toCashItems(Long orgId, List<CashDocument> docs) {
         if (docs.isEmpty()) {
             return List.of();
         }
@@ -1103,7 +1104,8 @@ public class ReviewService {
             .orElseThrow(() -> DamsException.notFound("Expense document", id));
     }
 
-    private List<ReviewQueueItem> toReceiptItems(Long orgId, List<ReceiveDocument> docs) {
+    /** Public so the on-screen list export (rev 67) shows the same party / category / amount as the queue row. */
+    public List<ReviewQueueItem> toReceiptItems(Long orgId, List<ReceiveDocument> docs) {
         if (docs.isEmpty()) {
             return List.of();
         }
@@ -1137,7 +1139,8 @@ public class ReviewService {
         return out;
     }
 
-    private List<ReviewQueueItem> toExpenseItems(Long orgId, List<ExpenseDocument> docs) {
+    /** Public so the on-screen list export (rev 67) shows the same party / category / amount as the queue row. */
+    public List<ReviewQueueItem> toExpenseItems(Long orgId, List<ExpenseDocument> docs) {
         if (docs.isEmpty()) {
             return List.of();
         }

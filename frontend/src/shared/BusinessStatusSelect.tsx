@@ -3,12 +3,14 @@ import type { MasterRow } from '../api/masters'
 import { inputStyle } from '../shell/ui'
 
 /**
- * Job-card business status picker, shared by the Cashier's receipt form and the two
- * review queues. The options are whatever the server said this role may set — the list is
- * never filtered here, so the dropdown and the API can't disagree.
+ * Business status picker, shared by the Cashier's receipt form and the review queues. The
+ * options are whatever the server said this role may set — the list is never widened here, so
+ * the dropdown and the API can't disagree.
  *
- * Statuses that predate role mapping sit under a "Deprecated" group at the bottom: still
- * pickable for anyone mid-process on one, but out of the way of the live list.
+ * rev 65: a deprecated or inactive status is never offered for a new choice (the server leaves
+ * them out of the list). A record that already carries one still has to show it, so pass
+ * {@code currentName}: when {@code value} is not among the options, that one value is added,
+ * marked "(retired)", and nothing else retired is.
  */
 export function BusinessStatusSelect(props: {
   statuses: MasterRow[]
@@ -16,9 +18,12 @@ export function BusinessStatusSelect(props: {
   onChange: (id: number) => void
   disabled?: boolean
   style?: CSSProperties
+  /** The record's own current status name — shown even if that status has since been retired. */
+  currentName?: string | null
 }) {
-  const live = props.statuses.filter((s) => !s.deprecated)
-  const retired = props.statuses.filter((s) => s.deprecated)
+  // Defensive: if a caller hands over a deprecated row, only the record's own value may stay.
+  const options = props.statuses.filter((s) => !s.deprecated || s.id === props.value)
+  const inList = props.value === '' || options.some((s) => s.id === props.value)
 
   return (
     <select
@@ -27,12 +32,10 @@ export function BusinessStatusSelect(props: {
       onChange={(e) => props.onChange(Number(e.target.value))}
       style={props.style ?? inputStyle}
     >
-      {live.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-      {retired.length > 0 && (
-        <optgroup label="Deprecated">
-          {retired.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </optgroup>
+      {!inList && props.currentName && (
+        <option value={props.value}>{props.currentName} (retired)</option>
       )}
+      {options.map((s) => <option key={s.id} value={s.id}>{s.name}{s.deprecated ? ' (retired)' : ''}</option>)}
     </select>
   )
 }

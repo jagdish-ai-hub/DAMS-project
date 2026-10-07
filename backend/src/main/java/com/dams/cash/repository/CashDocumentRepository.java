@@ -18,6 +18,9 @@ public interface CashDocumentRepository extends JpaRepository<CashDocument, Long
 
     Optional<CashDocument> findByIdAndOrgId(Long id, Long orgId);
 
+    /** Export of an on-screen list (rev 67) — exactly these documents; the caller orders and branch-filters them. */
+    List<CashDocument> findByOrgIdAndIdIn(Long orgId, java.util.Collection<Long> ids);
+
     /** The branch's cash movements for one day, oldest first (the Cash page movements table). */
     List<CashDocument> findByOrgIdAndBranchIdAndTransactionDateOrderByIdAsc(Long orgId, Long branchId, LocalDate transactionDate);
 

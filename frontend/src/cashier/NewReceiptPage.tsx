@@ -67,6 +67,9 @@ export default function NewReceiptPage() {
   const [vehicleTouched, setVehicleTouched] = useState(false)
   // An existing job card this receipt is recorded against (rev 56) — e.g. one opened from an Expense.
   const [jcPick, setJcPick] = useState<JobCardSearchHit | null>(null)
+  const [linkOpen, setLinkOpen] = useState(false)   // the "Link an existing job" picker is collapsed until asked for
+  // The linked job card's own status name — it may be a retired one the Status list no longer offers (rev 65).
+  const [linkedStatusName, setLinkedStatusName] = useState<string | null>(null)
   const [dbmId, setDbmId] = useState('')
   const [invoiceNo, setInvoiceNo] = useState('')
   const [invoiceAmount, setInvoiceAmount] = useState('')
@@ -194,10 +197,11 @@ export default function NewReceiptPage() {
 
   async function pickJobCard(hit: JobCardSearchHit | null) {
     setJcPick(hit)
-    if (!hit) return
+    if (!hit) { setLinkedStatusName(null); return }
     setError('')
     try {
       const { data: j } = await jobCardsApi.get(hit.id)
+      setLinkedStatusName(j.businessStatusName)
       setCustomerId(j.customerId)
       setCustomerName(j.customerName ?? '')
       setVehicleId(j.vehicleId)
@@ -596,18 +600,6 @@ export default function NewReceiptPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-y-0 gap-x-8">
             {/* left column */}
             <div>
-              {!inEditMode && (
-                <Row label="Link Job Card">
-                  <div>
-                    <JobCardSearch selected={jcPick} customerId={customerId} onPick={pickJobCard} />
-                    {!jcPick && (
-                      <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: 4 }}>
-                        Optional — search an existing job card (e.g. one opened from an expense), or leave empty to open a new one.
-                      </div>
-                    )}
-                  </div>
-                </Row>
-              )}
               <Row label="Customer Name" req>
                 <CustomerCombobox
                   name={customerName}
@@ -666,6 +658,7 @@ export default function NewReceiptPage() {
                   value={businessStatusId}
                   onChange={setBusinessStatusId}
                   disabled={jcLinked}
+                  currentName={loadedDoc?.businessStatusName ?? linkedStatusName}
                 />
               </Row>
               <Row label="Customer Type">
@@ -697,6 +690,38 @@ export default function NewReceiptPage() {
               <Row label="DAMS-Receive-ID">
                 <input readOnly value={loadedDoc?.documentNo ?? 'assigned on submit'} style={{ ...inputStyle, background: 'var(--bg)', color: 'var(--muted)', fontFamily: 'Consolas, monospace' }} />
               </Row>
+
+              {/* rev 64 — linking an existing job card is the exception, so it stays out of the way: a small
+                  link just above Documents. Picked, it fills (and locks) the customer / vehicle / job fields. */}
+              {!inEditMode && !jcPick && !linkOpen && (
+                <button type="button" onClick={() => setLinkOpen(true)}
+                  style={{ background: 'none', border: 'none', padding: '6px 0 10px', color: 'var(--navy2)', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>
+                  ＋ Link an existing job (optional)
+                </button>
+              )}
+              {!inEditMode && (jcPick || linkOpen) && (
+                <Row label="Existing job">
+                  <div>
+                    <JobCardSearch
+                      selected={jcPick}
+                      customerId={customerId}
+                      onPick={pickJobCard}
+                      partyFirst
+                      placeholder="Search by customer, vehicle no, Job Card / DBM or invoice"
+                    />
+                    {!jcPick && (
+                      <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: 4 }}>
+                        Only to attach this receipt to a job that already exists (for example one opened from an expense).
+                        Leave it closed to open a new job.{' '}
+                        <button type="button" onClick={() => setLinkOpen(false)}
+                          style={{ background: 'none', border: 'none', padding: 0, color: 'var(--navy2)', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>
+                          Hide
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </Row>
+              )}
 
               {/* Documents live in the space under the ID field, in this column. */}
               <AttachmentsPanel

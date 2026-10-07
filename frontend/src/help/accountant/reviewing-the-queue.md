@@ -24,3 +24,11 @@ If the finance manager has a question about an entry you already verified, it co
 ## The overview
 
 With nothing selected, the right pane summarises the queue: how many entries are waiting, their total value, and a branch-by-branch breakdown. Click any row there to open it.
+
+Clicking a count box opens the **Pending & closed** window — a full list you can narrow by type, status, branch and date.
+
+## Exporting a list to Excel
+
+In the Pending & closed window, **Export to Excel** (bottom-right) downloads exactly the rows the window is showing, in the same order. Change the filters first and the file changes with them; if you don't touch them, you get what the box you clicked opened with.
+
+For example: you open *Pending*, pick branch PUN and 1–7 Oct, and see 3 receipts worth ₹45,000. The file has one row per payment line — receipt RCV-0012, paid ₹15,000 cash and ₹5,000 UPI, appears on two rows, with the customer, vehicle, job card and invoice repeated on each. The **Transaction Amount** column is filled only on each receipt's first row, so it adds up to ₹45,000 — the same total as the window — and a **Total** row at the bottom shows it.

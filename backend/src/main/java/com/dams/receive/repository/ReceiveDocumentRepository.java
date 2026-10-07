@@ -26,6 +26,9 @@ public interface ReceiveDocumentRepository extends JpaRepository<ReceiveDocument
 
     List<ReceiveDocument> findByOrgIdAndJobCardIdInOrderByCreatedAtDesc(Long orgId, List<Long> jobCardIds);
 
+    /** Export of an on-screen list (rev 67) — exactly these documents; the caller orders and branch-filters them. */
+    List<ReceiveDocument> findByOrgIdAndIdIn(Long orgId, java.util.Collection<Long> ids);
+
     /** My Entries — the caller's own documents, newest first. */
     List<ReceiveDocument> findByOrgIdAndCreatedByOrderByCreatedAtDesc(Long orgId, Long createdBy, Limit limit);
 

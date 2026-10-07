@@ -156,10 +156,16 @@ One "cause" = one document, containing many sub-transaction lines:
   accountant = assigned branches; owner/FM = all). Typing a customer or
   vehicle that does not exist creates it on save (vehicle deduped on the
   normalised number; a number already registered to a *different* customer is
-  rejected, never silently reused). **The job-card picker is labelled "Ooriba
-  ID" and is keyed on the receipt's DAMS-Receive-ID** (e.g. `OOR-AUG26-R-001`):
-  typing a receive ID finds its job card, and each result shows the receive ID
-  first (the job-card reference only when no numbered receipt exists yet).
+  rejected, never silently reused). **On the Expense screen the job-card picker
+  is labelled "Ooriba ID" and is keyed on the receipt's DAMS-Receive-ID** (e.g.
+  `OOR-AUG26-R-001`): typing a receive ID finds its job card, and each result shows
+  the receive ID first (the job-card reference only when no numbered receipt
+  exists yet). **On the Receipt screen (rev 64) it is different:** a new receipt
+  has no receive ID yet (it is assigned on submit), so the picker is hidden behind
+  a small **"Link an existing job"** link, placed just above the Documents
+  section, and searches by **customer, vehicle no, Job Card / DBM or invoice**
+  (a receive ID still matches). Results lead with Customer · Vehicle · DBM; the
+  Ooriba ID / job-card reference is the small second line.
   An expense/receipt may carry `customer_id`
   + `vehicle_id` even without a job card; if a job card is also given, its
   customer/vehicle must match.
@@ -464,11 +470,25 @@ flag the conflict and ask rather than silently working around it.
    records which roles may set it, so a role's dropdown shows only its own
    statuses. The mapping is Owner-editable data, not code — see plan.md
    rev 44 for the current split and the `deprecated` vs `active` distinction.
+   **Retired statuses (rev 65).** A status that is *deprecated* or *inactive* is
+   never offered in a dropdown for new work, and the server refuses to set it on a
+   job card that does not already have it. A record that already carries one
+   keeps it and still shows it (marked "(retired)") — nothing is blanked or
+   reassigned. In the Owner's Masters list, deprecated rows are grouped at the
+   bottom under a collapsed "Deprecated (n)" heading. (This replaces the earlier
+   "deprecated still works, shown last" rule.)
 4. **Org-wide Override Audit view** (Owner + FM): one screen listing every
    amount override across the organization — who, when, original → new
    value, reason, document/line ID — filterable by user, branch, and date.
 5. **No Tally export or ledger report in v1.** Tally references elsewhere
-   in this file are historical context only.
+   in this file are historical context only. **Allowed (rev 67): exporting a
+   list the user is already looking at.** The Accountant's "Pending & closed"
+   window has an **Export to Excel** button (bottom-right) that downloads
+   exactly the rows its filters show, in the same order, as an Excel-friendly
+   CSV — one row per settlement / expense line with the transaction's details
+   repeated, a transaction with no lines still gets one row, and the
+   transaction amount is written once per transaction so the column sums to
+   the window's total. It is a copy of the screen, not a ledger or Tally feed.
 6. **Post-approval reversal/correction: deferred beyond v1.** V1 relies on
    the maker-checker flow catching errors before approval.
 7. **Universal search for every role**, results always scoped by that

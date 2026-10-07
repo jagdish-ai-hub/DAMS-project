@@ -54,7 +54,9 @@ class ReceiveStatusAccessServiceTest {
     }
 
     @Test
-    void selectableBy_keepsDeprecatedStatusesSoStaffMidProcessAreNotStranded() {
+    void selectableBy_dropsDeprecatedStatuses_soNobodyPicksThemForNewWork() {
+        // rev 65: a deprecated status is still active and granted, but is never offered for a new choice.
+        // Records already on it keep showing it — the screen adds that one value itself.
         when(statusRepo.findByOrgIdOrderBySortOrderAscIdAsc(ORG)).thenReturn(List.of(
             status(1L, "Received", false, true),
             status(91L, "WIP", true, true)));
@@ -64,7 +66,7 @@ class ReceiveStatusAccessServiceTest {
 
         assertThat(service().selectableBy(ORG, Role.CASHIER))
             .extracting(ReceiveBusinessStatus::getName)
-            .containsExactly("Received", "WIP");
+            .containsExactly("Received");
     }
 
     @Test
@@ -109,10 +111,46 @@ class ReceiveStatusAccessServiceTest {
     }
 
     @Test
-    void replaceRoles_clearsTheOldGrantsBeforeWritingTheNewOnes() {
+    void replaceRoles_withTheSameRoles_writesNothing_soARenameCannotHitTheUniqueKey() {
+        // The Masters form re-sends the roles on every save, even a rename. Deleting and re-inserting the
+        // same (status, role) rows violated UNIQUE (status_id, role) -> "This change conflicts with an
+        // existing record". Nothing may be deleted or inserted when nothing changed.
+        ReceiveBusinessStatusRole cashier = grant(5L, Role.CASHIER);
+        ReceiveBusinessStatusRole accountant = grant(5L, Role.ACCOUNTANT);
+        when(roleRepo.findByOrgIdAndStatusId(ORG, 5L)).thenReturn(List.of(cashier, accountant));
+
+        service().replaceRoles(ORG, 5L, Set.of(Role.CASHIER, Role.ACCOUNTANT));
+
+        verify(roleRepo, never()).save(org.mockito.ArgumentMatchers.any(ReceiveBusinessStatusRole.class));
+        verify(roleRepo, never()).deleteAll(org.mockito.ArgumentMatchers.anyIterable());
+        verify(roleRepo, never()).deleteByOrgIdAndStatusId(ORG, 5L);
+    }
+
+    @Test
+    void replaceRoles_removesWhatWentAndAddsWhatIsNew_deletesFirst() {
+        ReceiveBusinessStatusRole cashier = grant(5L, Role.CASHIER);
+        ReceiveBusinessStatusRole accountant = grant(5L, Role.ACCOUNTANT);
+        when(roleRepo.findByOrgIdAndStatusId(ORG, 5L)).thenReturn(List.of(cashier, accountant));
+
+        service().replaceRoles(ORG, 5L, Set.of(Role.CASHIER, Role.FINANCE_MANAGER));
+
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(roleRepo);
+        order.verify(roleRepo).deleteAll(List.of(accountant));   // Accountant removed — Cashier row untouched
+        order.verify(roleRepo).flush();                          // deletes reach the DB before any insert
+        org.mockito.ArgumentCaptor<ReceiveBusinessStatusRole> saved =
+            org.mockito.ArgumentCaptor.forClass(ReceiveBusinessStatusRole.class);
+        order.verify(roleRepo).save(saved.capture());
+        assertThat(saved.getValue().getRole()).isEqualTo(Role.FINANCE_MANAGER);
+        verify(roleRepo, org.mockito.Mockito.times(1)).save(org.mockito.ArgumentMatchers.any(ReceiveBusinessStatusRole.class));
+    }
+
+    @Test
+    void replaceRoles_onAStatusWithNoGrantsYet_justInserts() {
+        when(roleRepo.findByOrgIdAndStatusId(ORG, 5L)).thenReturn(List.of());
+
         service().replaceRoles(ORG, 5L, Set.of(Role.FINANCE_MANAGER));
 
-        verify(roleRepo).deleteByOrgIdAndStatusId(ORG, 5L);
+        verify(roleRepo, never()).deleteAll(org.mockito.ArgumentMatchers.anyIterable());
         verify(roleRepo).save(org.mockito.ArgumentMatchers.any(ReceiveBusinessStatusRole.class));
     }
 

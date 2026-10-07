@@ -316,6 +316,12 @@ public class JobCardService {
         if (!s.isActive()) {
             throw DamsException.badRequest("Business status '" + s.getName() + "' is inactive");
         }
+        // rev 65: only reached when a status is being newly set (create, or a patch that changes it), so a
+        // job card already on a deprecated status keeps it — but no one can pick it for new work.
+        if (s.isDeprecated()) {
+            throw DamsException.badRequest("Business status '" + s.getName()
+                + "' is deprecated — it can't be set on new work (records already on it keep it)");
+        }
         return s;
     }
 

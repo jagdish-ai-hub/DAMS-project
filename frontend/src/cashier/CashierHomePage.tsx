@@ -132,21 +132,23 @@ function HomeSearch(props: {
     // Wide screens (rev 57): the grid breaks out of the 1200px page column to the same 20px edges as
     // the top bar. Queries hug the left edge, approvals the right edge, the search stays centred, and
     // both boxes start level with the search box (row 2) -- the heading sits alone in row 1.
-    // Narrow screens: heading, search, then the two boxes stacked underneath.
+    // From 1024px (a 14" laptop at 125-150% scaling) the boxes sit left and right of the search inside
+    // the page column; the break-out to the screen edges above is only for >=1280px.
+    // Below 1024px: heading, search, then the two boxes stacked underneath.
     <div
-      className="grid grid-cols-1 xl:grid-cols-[minmax(200px,260px)_minmax(600px,660px)_minmax(200px,260px)] xl:justify-between xl:mx-[calc(50%-50vw+20px)] gap-x-6 items-start"
+      className="grid grid-cols-1 lg:grid-cols-[minmax(180px,230px)_minmax(0,1fr)_minmax(180px,230px)] xl:grid-cols-[minmax(200px,260px)_minmax(600px,660px)_minmax(200px,260px)] xl:justify-between xl:mx-[calc(50%-50vw+20px)] gap-x-6 items-start"
       style={{ padding: '32px 0 24px' }}
     >
-    <div className="order-1 xl:col-start-2 xl:row-start-1" style={{ textAlign: 'center', marginBottom: 22 }}>
+    <div className="order-1 lg:col-start-2 lg:row-start-1" style={{ textAlign: 'center', marginBottom: 22 }}>
       <h1 style={{ fontSize: '1.5rem', color: 'var(--navy)', marginBottom: 6 }}>Find a customer</h1>
       <div style={{ fontSize: '0.9rem', color: 'var(--muted)' }}>
         Search by name, vehicle number, job card, or invoice — anything works
       </div>
     </div>
 
-    <div className="order-3 xl:order-none xl:col-start-1 xl:row-start-2 mt-6 xl:mt-0"><QueriesBox inbox={inbox} failed={inboxFailed} /></div>
+    <div className="order-3 lg:order-none lg:col-start-1 lg:row-start-2 mt-6 lg:mt-0"><QueriesBox inbox={inbox} failed={inboxFailed} /></div>
 
-    <div className="order-2 xl:order-none xl:col-start-2 xl:row-start-2" style={{ maxWidth: 720, width: '100%', margin: '0 auto' }}>
+    <div className="order-2 lg:order-none lg:col-start-2 lg:row-start-2" style={{ maxWidth: 720, width: '100%', margin: '0 auto' }}>
       <div style={{ position: 'relative', maxWidth: 640, margin: '0 auto' }}>
         <span style={{
           position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)',
@@ -201,7 +203,7 @@ function HomeSearch(props: {
         </>
       )}
     </div>
-    <div className="order-4 xl:order-none xl:col-start-3 xl:row-start-2 mt-6 xl:mt-0"><ApprovalsBox inbox={inbox} failed={inboxFailed} /></div>
+    <div className="order-4 lg:order-none lg:col-start-3 lg:row-start-2 mt-6 lg:mt-0"><ApprovalsBox inbox={inbox} failed={inboxFailed} /></div>
     </div>
   )
 }

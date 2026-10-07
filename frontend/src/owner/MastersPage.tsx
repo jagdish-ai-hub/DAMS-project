@@ -43,6 +43,11 @@ export default function MastersPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [modal, setModal] = useState<{ editing: MasterRow | null } | null>(null)
+  // rev 65: deprecated rows are grouped at the bottom, collapsed — live rows first.
+  const [showDeprecated, setShowDeprecated] = useState(false)
+
+  const retiredRows = rows.filter((r) => r.deprecated)
+  const shownRows = [...rows.filter((r) => !r.deprecated), ...(showDeprecated ? retiredRows : [])]
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -144,7 +149,7 @@ export default function MastersPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {shownRows.map((r) => (
                   <tr key={r.id}>
                     <td style={td}>
                       {r.name}
@@ -175,6 +180,21 @@ export default function MastersPage() {
                     </td>
                   </tr>
                 ))}
+                {retiredRows.length > 0 && (
+                  <tr>
+                    <td style={{ ...td, background: 'var(--bg)' }} colSpan={6}>
+                      <button
+                        type="button"
+                        onClick={() => setShowDeprecated((v) => !v)}
+                        aria-expanded={showDeprecated}
+                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700, color: 'var(--muted)' }}
+                      >
+                        {showDeprecated ? '▾' : '▸'} Deprecated ({retiredRows.length})
+                        <span style={{ fontWeight: 400 }}> — not offered for new work; still shown on records that already have them</span>
+                      </button>
+                    </td>
+                  </tr>
+                )}
                 {!loading && rows.length === 0 && (
                   <tr><td style={td} colSpan={6}>Nothing here yet.</td></tr>
                 )}
@@ -318,7 +338,7 @@ function MasterModal(props: {
             </Field>
             <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.85rem' }}>
               <input type="checkbox" checked={deprecated} onChange={(e) => setDeprecated(e.target.checked)} />
-              Deprecated — still works, but shown last and marked
+              Deprecated — hidden from dropdowns for new work; still shown on records that already have it
             </label>
           </>
         )}

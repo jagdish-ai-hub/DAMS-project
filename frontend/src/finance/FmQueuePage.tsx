@@ -173,7 +173,7 @@ export default function FmQueuePage() {
 
       <ExpenseRequestBanner requests={requests} onOpen={openRequest} />
       {type === 'receipt' && <AiClaimBanner />}
-      <ClaimsSummaryCard />
+      <ClaimsSummaryCard collapsedByDefault />
 
 
       <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] border border-[var(--line)] rounded-[var(--radius)] overflow-hidden bg-[var(--surface)] min-h-[68vh]">

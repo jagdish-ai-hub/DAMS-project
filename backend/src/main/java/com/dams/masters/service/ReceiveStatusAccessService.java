@@ -71,7 +71,9 @@ public class ReceiveStatusAccessService {
     }
 
     /**
-     * The active statuses {@code role} may choose from, in dropdown order.
+     * The statuses {@code role} may choose from for NEW work, in dropdown order: active and not
+     * deprecated (rev 65). A record that already carries a retired status still shows it — the
+     * screen adds that one value to its own dropdown — but nobody can newly pick it.
      * An Owner gets nothing back, which is correct — they never set a status.
      */
     @Transactional(readOnly = true)
@@ -79,7 +81,7 @@ public class ReceiveStatusAccessService {
         Map<Long, List<Role>> byStatus = rolesByStatusId(orgId);
         List<ReceiveBusinessStatus> allowed = new ArrayList<>();
         for (ReceiveBusinessStatus status : statusRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId)) {
-            if (!status.isActive()) {
+            if (!status.isActive() || status.isDeprecated()) {
                 continue;
             }
             List<Role> roles = byStatus.get(status.getId());
@@ -126,8 +128,27 @@ public class ReceiveStatusAccessService {
                     + "To retire it, deactivate it instead.");
         }
 
-        roleRepo.deleteByOrgIdAndStatusId(orgId, statusId);
+        // Change only what differs. Deleting every grant and re-inserting the same ones hits
+        // UNIQUE (status_id, role): the inserts run first (IDENTITY ids are assigned on persist) while
+        // the deletes wait for the flush, so even a rename, which re-sends the same roles, failed
+        // with "This change conflicts with an existing record".
+        List<ReceiveBusinessStatusRole> existing = roleRepo.findByOrgIdAndStatusId(orgId, statusId);
+        Set<Role> have = new LinkedHashSet<>();
+        List<ReceiveBusinessStatusRole> drop = new ArrayList<>();
+        for (ReceiveBusinessStatusRole grant : existing) {
+            if (cleaned.contains(grant.getRole()) && have.add(grant.getRole())) {
+                continue;   // still wanted — leave the row alone
+            }
+            drop.add(grant);
+        }
+        if (!drop.isEmpty()) {
+            roleRepo.deleteAll(drop);
+            roleRepo.flush();   // the deletes must reach the database before any insert
+        }
         for (Role role : cleaned) {
+            if (have.contains(role)) {
+                continue;
+            }
             ReceiveBusinessStatusRole grant = new ReceiveBusinessStatusRole();
             grant.setOrgId(orgId);
             grant.setStatusId(statusId);

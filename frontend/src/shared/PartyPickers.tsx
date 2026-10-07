@@ -216,6 +216,20 @@ const jobCardHitSub = (h: JobCardSearchHit) =>
     h.invoiceNo ? `Invoice ${h.invoiceNo}` : null,
   ].filter(Boolean).join(' · ') || undefined
 
+/**
+ * Receipt screen (rev 64): a new receipt has no Ooriba ID yet, so results lead with what the
+ * cashier actually knows — customer · vehicle · DBM — and the Ooriba ID / job-card reference
+ * is the small second line.
+ */
+const partyFirstLabel = (h: JobCardSearchHit) =>
+  [h.customerName ?? 'No customer yet', h.vehicleNo, h.dbmId ? `DBM ${h.dbmId}` : null].filter(Boolean).join(' · ')
+
+const partyFirstSub = (h: JobCardSearchHit) =>
+  [
+    h.receiveDocumentNos?.length ? `Ooriba ID ${h.receiveDocumentNos[0]}` : `Job card ${h.reference}`,
+    h.invoiceNo ? `Invoice ${h.invoiceNo}` : null,
+  ].filter(Boolean).join(' · ')
+
 export function JobCardSearch(props: {
   selected: JobCardSearchHit | null
   /** Narrow the search to one customer / vehicle when they are already chosen. */
@@ -225,14 +239,17 @@ export function JobCardSearch(props: {
   disabled?: boolean
   /** Renders a trailing "＋ New job card" row in the dropdown. */
   onNew?: () => void
+  /** Lead each result with customer · vehicle · DBM instead of the Ooriba ID (receipt screen, rev 64). */
+  partyFirst?: boolean
+  placeholder?: string
 }) {
   const [text, setText] = useState('')
   if (props.selected) {
     return (
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <div style={{ ...inputStyle, background: 'var(--bg)', flex: 1, fontWeight: 600 }}>
-          {jobCardHitLabel(props.selected)}
-          {props.selected.dbmId ? <span style={{ color: 'var(--muted)', fontWeight: 400 }}> · DBM {props.selected.dbmId}</span> : null}
+          {props.partyFirst ? partyFirstLabel(props.selected) : jobCardHitLabel(props.selected)}
+          {!props.partyFirst && props.selected.dbmId ? <span style={{ color: 'var(--muted)', fontWeight: 400 }}> · DBM {props.selected.dbmId}</span> : null}
         </div>
         {!props.disabled && (
           <button type="button" onClick={() => { props.onPick(null); setText('') }}
@@ -250,7 +267,7 @@ export function JobCardSearch(props: {
       onText={setText}
       disabled={props.disabled}
       refetchKey={`${props.customerId ?? ''}-${props.vehicleId ?? ''}`}
-      placeholder="Search by Ooriba ID (DAMS-Receive-ID), customer, vehicle no, DBM ID or invoice"
+      placeholder={props.placeholder ?? 'Search by Ooriba ID (DAMS-Receive-ID), customer, vehicle no, DBM ID or invoice'}
       load={async (q) => {
         const { data } = await jobCardsApi.search({
           q: q.trim() || undefined,
@@ -259,8 +276,8 @@ export function JobCardSearch(props: {
         })
         return data.map((h) => ({
           key: h.id,
-          label: jobCardHitLabel(h),
-          sub: jobCardHitSub(h),
+          label: props.partyFirst ? partyFirstLabel(h) : jobCardHitLabel(h),
+          sub: props.partyFirst ? partyFirstSub(h) : jobCardHitSub(h),
           pick: () => { props.onPick(h); setText('') },
         }))
       }}

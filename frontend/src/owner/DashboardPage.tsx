@@ -233,7 +233,7 @@ export default function DashboardPage() {
               sub={`${summary.kpis.pendingReview} pending review`} onClick={openCashBreakdown} />
           </div>
 
-          <ClaimsSummaryCard branchId={branchId === '' ? undefined : branchId} period={period} />
+          <ClaimsSummaryCard branchId={branchId === '' ? undefined : branchId} period={period} collapsedByDefault />
 
           <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4 mb-4">
             <div style={{ ...card }}>

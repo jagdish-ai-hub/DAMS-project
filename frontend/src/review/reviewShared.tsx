@@ -202,6 +202,7 @@ export function RecordCard(props: {
               <BusinessStatusSelect
                 statuses={props.statusOptions ?? []}
                 value={doc.businessStatusId}
+                currentName={doc.businessStatusName}
                 disabled={props.busy || savingStatus}
                 onChange={changeStatus}
                 style={{ ...inputStyle, width: 'auto', minWidth: 170, padding: '5px 9px', fontSize: '0.78rem' }}

@@ -299,6 +299,59 @@ class JobCardServiceTest {
         assertThat(existing.getBusinessStatusId()).isEqualTo(4L);
     }
 
+    // ---------------------------------------------------- deprecated statuses (rev 65)
+
+    @Test
+    void create_withADeprecatedStatus_isRejected() {
+        when(userRepo.findByIdAndOrganization_Id(CASHIER_ID, ORG)).thenReturn(Optional.of(cashierWithHomeBranch()));
+        ReceiveBusinessStatus deprecated = status(7L, "Close");
+        deprecated.setDeprecated(true);
+        when(statusRepo.findByIdAndOrgId(7L, ORG)).thenReturn(Optional.of(deprecated));
+
+        JobCardCreateRequest req = new JobCardCreateRequest();
+        req.setCustomerId(42L);
+        req.setCategoryId(3L);
+        req.setBusinessStatusId(7L);
+
+        assertThatThrownBy(() -> service.create(req))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("deprecated");
+        verify(jobCardRepo, never()).save(any());
+    }
+
+    @Test
+    void patch_toADeprecatedStatus_isRejected() {
+        JobCard existing = openJobCardOnStatus(4L);
+        when(jobCardRepo.findByIdAndOrgId(100L, ORG)).thenReturn(Optional.of(existing));
+        ReceiveBusinessStatus deprecated = status(7L, "Close");
+        deprecated.setDeprecated(true);
+        when(statusRepo.findByIdAndOrgId(7L, ORG)).thenReturn(Optional.of(deprecated));
+
+        JobCardPatchRequest patch = new JobCardPatchRequest();
+        patch.setBusinessStatusId(7L);
+
+        assertThatThrownBy(() -> service.patch(100L, patch))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("deprecated");
+        assertThat(existing.getBusinessStatusId()).isEqualTo(4L);
+    }
+
+    @Test
+    void patch_ofAJobCardAlreadyOnADeprecatedStatus_keepsItWhenTheStatusIsNotChanged() {
+        // The record keeps its retired status — only a NEW choice of one is refused.
+        JobCard existing = openJobCardOnStatus(7L);
+        when(jobCardRepo.findByIdAndOrgId(100L, ORG)).thenReturn(Optional.of(existing));
+
+        JobCardPatchRequest patch = new JobCardPatchRequest();
+        patch.setBusinessStatusId(7L);       // same value it already has
+        patch.setInvoiceNo("INV-9");
+
+        service.patch(100L, patch);
+
+        assertThat(existing.getBusinessStatusId()).isEqualTo(7L);
+        assertThat(existing.getInvoiceNo()).isEqualTo("INV-9");
+    }
+
     @Test
     void patch_statusChangeOnAClosedClaim_isRejectedForAnAccountant() {
         JobCard existing = openJobCardOnStatus(4L);

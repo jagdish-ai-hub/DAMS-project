@@ -31,6 +31,9 @@ public interface ExpenseDocumentRepository extends JpaRepository<ExpenseDocument
 
     List<ExpenseDocument> findByOrgIdAndDocumentNoContainingIgnoreCase(Long orgId, String fragment);
 
+    /** Export of an on-screen list (rev 67) — exactly these documents; the caller orders and branch-filters them. */
+    List<ExpenseDocument> findByOrgIdAndIdIn(Long orgId, Collection<Long> ids);
+
     /** Accountant review queue — documents in one workflow state within the caller's branches, oldest first. */
     List<ExpenseDocument> findByOrgIdAndWorkflowStatusAndBranchIdInOrderBySubmittedAtAscIdAsc(
         Long orgId, ExpenseWorkflowStatus workflowStatus, Collection<Long> branchIds);
