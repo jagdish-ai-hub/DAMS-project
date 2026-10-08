@@ -35,6 +35,12 @@ public class JobCardCreateRequest {
     @Size(max = 20, message = "Vehicle number must be at most 20 characters")
     private String vehicleNo;
 
+    /** Optional (rev 68): contact number given at this receipt, and the vehicle's chassis number. */
+    @Size(max = 32, message = "Contact number must be at most 32 characters")
+    private String contactPhone;
+    @Size(max = 40, message = "Chassis number must be at most 40 characters")
+    private String chassisNo;
+
     private Long branchId;
 
     @NotNull(message = "categoryId is required")

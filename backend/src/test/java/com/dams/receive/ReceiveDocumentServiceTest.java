@@ -360,6 +360,58 @@ class ReceiveDocumentServiceTest {
             .allSatisfy(d -> assertThat(d.getBranchId()).isEqualTo(BRANCH_ID));
     }
 
+    /** rev 68: Contact and Chassis typed on a brand-new receipt reach the job card that is created. */
+    @Test
+    void create_withNoExistingJobCard_carriesContactAndChassisOntoTheNewJobCard() {
+        long newJobCardId = 98L;
+        JobCardResponse createdJobCard = mock(JobCardResponse.class);
+        when(createdJobCard.id()).thenReturn(newJobCardId);
+        when(jobCardService.create(any())).thenReturn(createdJobCard);
+        JobCard newJobCard = jobCard(null);
+        ReflectionTestUtils.setField(newJobCard, "id", newJobCardId);
+        when(jobCardRepo.findByIdAndOrgId(newJobCardId, ORG)).thenReturn(Optional.of(newJobCard));
+        when(receiveDocumentRepo.findByOrgIdAndJobCardIdAndSettledFalseAndWorkflowStatusNot(
+            ORG, newJobCardId, WorkflowStatus.REJECTED)).thenReturn(Optional.empty());
+        when(claimCloseRepo.existsByOrgIdAndJobCardId(ORG, newJobCardId)).thenReturn(false);
+        when(paymentGuard.requireCanPost(eq(ORG), any(JobCard.class))).thenReturn(cashier());
+
+        CreateReceiptRequest req = new CreateReceiptRequest();
+        req.setCustomerName("Kaka Kalia");
+        req.setCategoryId(1L);
+        req.setBusinessStatusId(1L);
+        req.setContactPhone("98765 43210");
+        req.setChassisNo("mc2 abc123");
+
+        service.create(req);
+
+        ArgumentCaptor<JobCardCreateRequest> jcReq = ArgumentCaptor.forClass(JobCardCreateRequest.class);
+        verify(jobCardService).create(jcReq.capture());
+        assertThat(jcReq.getValue().getContactPhone()).isEqualTo("98765 43210");
+        assertThat(jcReq.getValue().getChassisNo()).isEqualTo("mc2 abc123"); // normalised by JobCardService
+    }
+
+    /** rev 68: linking an existing job card fills blank Contact / Chassis, and never overwrites them. */
+    @Test
+    void create_linkingAJobCard_fillsBlankContactAndChassis_butNeverOverwritesOnes_alreadyThere() {
+        JobCard existing = jobCard(null);
+        ReflectionTestUtils.setField(existing, "id", JOB_CARD_ID);
+        existing.setContactPhone("90000 11111");   // already recorded — must survive
+        existing.setChassisNo(null);               // blank — may be filled
+        when(jobCardRepo.findByIdAndOrgId(JOB_CARD_ID, ORG)).thenReturn(Optional.of(existing));
+        when(receiveDocumentRepo.findByOrgIdAndJobCardIdAndSettledFalseAndWorkflowStatusNot(
+            ORG, JOB_CARD_ID, WorkflowStatus.REJECTED)).thenReturn(Optional.empty());
+
+        CreateReceiptRequest req = new CreateReceiptRequest();
+        req.setJobCardId(JOB_CARD_ID);
+        req.setContactPhone("99999 22222");
+        req.setChassisNo(" mc2 xyz 789 ");
+
+        service.create(req);
+
+        assertThat(existing.getContactPhone()).isEqualTo("90000 11111");
+        assertThat(existing.getChassisNo()).isEqualTo("MC2XYZ789");
+    }
+
     @Test
     void create_whenPreviousDocumentRejected_opensNewDraft() {
         when(receiveDocumentRepo.findByOrgIdAndJobCardIdAndSettledFalseAndWorkflowStatusNot(ORG, JOB_CARD_ID, WorkflowStatus.REJECTED))

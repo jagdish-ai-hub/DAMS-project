@@ -28,6 +28,18 @@ public interface JobCardRepository extends JpaRepository<JobCard, Long> {
 
     long countByOrgIdAndCustomerId(Long orgId, Long customerId);
 
+    /**
+     * {@code [customerId, contactPhone]} for these customers' job cards that recorded a contact
+     * number, newest first — the first row per customer is their last saved number (rev 68).
+     */
+    @Query("""
+        select j.customerId, j.contactPhone from JobCard j
+        where j.orgId = :orgId and j.customerId in :customerIds and j.contactPhone is not null
+        order by j.createdAt desc, j.id desc
+        """)
+    List<Object[]> findContactPhonesNewestFirst(@Param("orgId") Long orgId,
+                                                @Param("customerIds") Collection<Long> customerIds);
+
     /** Universal search — match on the internal id (typed as a number), invoice_no or dbm_id. */
     @Query("""
         select j from JobCard j

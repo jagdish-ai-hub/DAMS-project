@@ -48,6 +48,13 @@ public class JobCardPatchRequest {
     @Size(max = 20, message = "Vehicle number must be at most 20 characters")
     private String vehicleNo;
 
+    /** Optional (rev 68). Send an empty string to clear; null leaves it unchanged. */
+    @Size(max = 32, message = "Contact number must be at most 32 characters")
+    private String contactPhone;
+
+    @Size(max = 40, message = "Chassis number must be at most 40 characters")
+    private String chassisNo;
+
     /** If true, clears the invoice amount on the job card (sets it to null). */
     private Boolean clearInvoiceAmount;
 }

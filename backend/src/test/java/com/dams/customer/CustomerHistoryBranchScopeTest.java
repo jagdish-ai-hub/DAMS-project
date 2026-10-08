@@ -3,6 +3,7 @@ package com.dams.customer;
 import com.dams.common.security.BranchScope;
 import com.dams.config.TenantContext;
 import com.dams.customer.dto.CustomerHistoryResponse;
+import com.dams.customer.dto.CustomerResponse;
 import com.dams.customer.entity.Customer;
 import com.dams.customer.dto.CustomerExpenseEntry;
 import com.dams.customer.repository.CustomerRepository;
@@ -40,6 +41,7 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
@@ -211,6 +213,34 @@ class CustomerHistoryBranchScopeTest {
         d.setBusinessStatusId(1L);
         d.setWorkflowStatus(ExpenseWorkflowStatus.SUBMITTED);
         return d;
+    }
+
+    /** rev 68: the picker pre-fills Contact from each customer's most recently saved receipt number. */
+    @Test
+    void search_returnsEachCustomersNewestSavedContact_andNullWhenNoneWasEverSaved() {
+        Customer a = customer(1L, "Acme Transport");
+        Customer b = customer(2L, "Beta Motors");
+        Customer c = customer(3L, "Cee Traders");
+        when(branchScope.allowedBranchIds()).thenReturn(Optional.empty());   // owner / FM: unrestricted
+        when(customerRepo.search(eq(ORG), eq("a"), any())).thenReturn(List.of(a, b, c));
+        // newest first, as the query orders them: customer 1 has two numbers saved, 3 has none
+        when(jobCardRepo.findContactPhonesNewestFirst(ORG, List.of(1L, 2L, 3L))).thenReturn(List.of(
+            new Object[] {1L, "98765 43210"},
+            new Object[] {2L, "88888 00000"},
+            new Object[] {1L, "90000 11111"}));
+
+        List<CustomerResponse> found = service.search("a");
+
+        assertThat(found).extracting(CustomerResponse::lastContactPhone)
+            .containsExactly("98765 43210", "88888 00000", null);
+    }
+
+    private static Customer customer(long id, String name) {
+        Customer c = new Customer();
+        ReflectionTestUtils.setField(c, "id", id);
+        c.setOrgId(ORG);
+        c.setName(name);
+        return c;
     }
 
     private static JobCard jobCard(long id, long branchId) {

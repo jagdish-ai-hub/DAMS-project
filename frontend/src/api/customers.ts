@@ -11,6 +11,8 @@ export interface Customer {
   phone: string | null
   vehicles: VehicleRef[]
   createdAt: string
+  /** The last contact number saved on one of their receipts (rev 68) — prefills the Contact box. */
+  lastContactPhone?: string | null
 }
 
 export interface CustomerRequest {

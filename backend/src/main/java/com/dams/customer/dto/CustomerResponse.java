@@ -14,11 +14,17 @@ public record CustomerResponse(
     String name,
     String phone,
     List<VehicleRef> vehicles,
-    Instant createdAt
+    Instant createdAt,
+    String lastContactPhone   // last contact number saved on one of their receipts; null if none (rev 68)
 ) {
     public record VehicleRef(Long id, String vehicleNo) {}
 
     public static CustomerResponse of(Customer c, List<VehicleRef> vehicles) {
-        return new CustomerResponse(c.getId(), c.getName(), c.getPhone(), vehicles, c.getCreatedAt());
+        return of(c, vehicles, null);
+    }
+
+    public static CustomerResponse of(Customer c, List<VehicleRef> vehicles, String lastContactPhone) {
+        return new CustomerResponse(c.getId(), c.getName(), c.getPhone(), vehicles, c.getCreatedAt(),
+            lastContactPhone);
     }
 }

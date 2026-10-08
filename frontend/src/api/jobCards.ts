@@ -12,6 +12,8 @@ export interface JobCard {
   customerPhone: string | null
   vehicleId: number | null
   vehicleNo: string | null
+  contactPhone: string | null
+  chassisNo: string | null
   dbmId: string | null
   invoiceNo: string | null
   invoiceAmount: number | null
@@ -89,6 +91,9 @@ export interface JobCardPatchRequest {
   invoiceAmount?: number
   clearInvoiceAmount?: boolean
   vehicleNo?: string
+  /** Empty string clears; undefined leaves it unchanged (rev 68). */
+  contactPhone?: string
+  chassisNo?: string
   dbmId?: string
   b2b?: boolean
   gstNo?: string
