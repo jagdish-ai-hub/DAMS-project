@@ -54,6 +54,23 @@ public class JobCard {
     @Column(name = "vehicle_id")
     private Long vehicleId;
 
+    /** Contact number given at this receipt (rev 68). Optional, per job card — never copied onto the customer. */
+    @Column(name = "contact_phone", length = 32)
+    private String contactPhone;
+
+    /** Vehicle chassis number (rev 68). Optional, uppercase, no spaces. */
+    @Column(name = "chassis_no", length = 40)
+    private String chassisNo;
+
+    /** Chassis numbers are compared and shown uppercase with no spaces; blank means "not given". */
+    public static String normaliseChassis(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String n = raw.replaceAll("\\s+", "").toUpperCase();
+        return n.isEmpty() ? null : n;
+    }
+
     /** Eicher's external job-card number. Nullable, manual, never used as a key. */
     @Column(name = "dbm_id", length = 40)
     private String dbmId;

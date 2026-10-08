@@ -27,6 +27,8 @@ public record ReceiveDocumentResponse(
     String customerName,
     String customerPhone,
     String vehicleNo,
+    String contactPhone,             // optional, given at this receipt (rev 68)
+    String chassisNo,                // optional (rev 68)
 
     String dbmId,
     String invoiceNo,

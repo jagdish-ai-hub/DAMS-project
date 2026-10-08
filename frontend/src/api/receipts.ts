@@ -53,6 +53,9 @@ export interface ReceiveDocument {
   customerName: string | null
   customerPhone: string | null
   vehicleNo: string | null
+  /** Optional details recorded at this receipt (rev 68). */
+  contactPhone: string | null
+  chassisNo: string | null
   dbmId: string | null
   invoiceNo: string | null
   invoiceAmount: number | null
@@ -99,6 +102,9 @@ export interface CreateReceiptRequest {
   customerPhone?: string
   vehicleId?: number
   vehicleNo?: string
+  /** Optional (rev 68): contact given at this receipt, and the vehicle's chassis number. */
+  contactPhone?: string
+  chassisNo?: string
   dbmId?: string
   invoiceNo?: string
   invoiceAmount?: number

@@ -151,6 +151,8 @@ public class JobCardService {
         jc.setVehicleId(vehicle != null ? vehicle.getId() : null);
         jc.setVehicleNoText(party.unlinkedVehicleNo());
         jc.setDbmId(blankToNull(request.getDbmId()));
+        jc.setContactPhone(blankToNull(request.getContactPhone()));
+        jc.setChassisNo(JobCard.normaliseChassis(request.getChassisNo()));
         jc.setInvoiceNo(blankToNull(request.getInvoiceNo()));
         jc.setInvoiceAmount(request.getInvoiceAmount());
         boolean b2b = Boolean.TRUE.equals(request.getB2b());
@@ -189,6 +191,12 @@ public class JobCardService {
         }
         if (request.getDbmId() != null) {
             jc.setDbmId(blankToNull(request.getDbmId()));
+        }
+        if (request.getContactPhone() != null) {
+            jc.setContactPhone(blankToNull(request.getContactPhone()));
+        }
+        if (request.getChassisNo() != null) {
+            jc.setChassisNo(JobCard.normaliseChassis(request.getChassisNo()));
         }
         if (request.getB2b() != null) {
             jc.setB2b(request.getB2b());
@@ -396,6 +404,8 @@ public class JobCardService {
             customer != null ? customer.getPhone() : null,
             jc.getVehicleId(),
             vehicle != null ? vehicle.getVehicleNo() : jc.getVehicleNoText(),
+            jc.getContactPhone(),
+            jc.getChassisNo(),
             jc.getDbmId(),
             jc.getInvoiceNo(),
             jc.getInvoiceAmount(),

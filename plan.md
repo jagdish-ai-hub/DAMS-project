@@ -7,6 +7,35 @@
 
 ## Revision log
 
+- **rev 68 (2026-10-10)** — **Optional Contact and Chassis # on a receipt.** Request: add a contact number and
+  a chassis number to the receipt, after the name, and show them on the Accountant and Finance Manager pages
+  next to the vehicle number; pre-fill contact from the last saved number. AGENT.md "Linking" updated first.
+  **V39** adds nullable `job_card.contact_phone` (32) and `job_card.chassis_no` (40); no backfill, so older
+  receipts show "—". Stored on the **job card** (per receipt), deliberately not on the customer or vehicle
+  masters: a typed contact can never overwrite a saved customer phone, and the customer/vehicle matching code
+  (`PartyResolver`) is untouched. Chassis is normalised uppercase / no spaces (`JobCard.normaliseChassis`).
+  Flow: `CreateReceiptRequest` and `JobCardCreate/PatchRequest` carry both (patch: `""` clears, null leaves);
+  `JobCardResponse` and `ReceiveDocumentResponse` return them. A receipt that **links an existing job card**
+  only fills a blank one, never overwrites (`ReceiveDocumentService.create`), and the form shows an already
+  recorded value read-only so a paste is never silently ignored. A brand-new customer typed with a contact
+  also gets it as their saved phone; an existing customer's phone is never rewritten.
+  **Prefill:** `CustomerResponse.lastContactPhone` = the newest contact saved on any of that customer's job
+  cards (`JobCardRepository.findContactPhonesNewestFirst`), falling back to the customer's own phone. The form
+  fills Contact on picking a customer (or a vehicle's owner, or "New receipt for this customer"), and
+  **clears it again if the customer changes** — until the cashier types their own number, which then sticks.
+  A number prefilled for one customer must never ride along to the next (the same class of bug as the
+  stale-customer report).
+  UI: `NewReceiptPage` — Contact directly under Customer Name, Chassis # directly under Vehicle #;
+  `RecordCard` (shared by the Accountant and Finance Manager) shows both beside Vehicle #. Not changed:
+  printed receipt, Cashier Home, Expenses. Left alone as asked: the "Credit" bucket label and the
+  customer/vehicle conflict handling.
+  Verified: `mvn test` 379 green (5 new: inline create carries both, linking fills blanks only, search returns
+  the newest saved contact per customer, chassis normaliser); `tsc`/`eslint`/`vitest` clean (40 passing, 10
+  new — and mutation-checked: breaking the prefill, or letting a stale number stick, fails them); production
+  build contains the fields; in real Chromium against the built app picking a customer filled Contact, the
+  chassis upper-cased as typed, and the Accountant card showed both. **Not verified:** the V39 migration on the
+  live database — check after deploy that both columns exist.
+
 - **rev 67 (2026-10-08)** — **Accountant "Pending & closed" window: Export to Excel.** Request: a button at
   the window's bottom-right that downloads everything listed plus each transaction's settlement lines.
   Confirmed choices: **CSV (no new library)**; **exactly the rows the filters show** — untouched filters =

@@ -65,6 +65,15 @@ export default function NewReceiptPage() {
   const [vehicleNo, setVehicleNo] = useState('')
   const [vehicleId, setVehicleId] = useState<number | null>(null)
   const [vehicleTouched, setVehicleTouched] = useState(false)
+  // Optional details (rev 68). Contact follows the picked customer's last saved number until the
+  // cashier types their own, so a number prefilled for one customer never rides along to another.
+  const [contactPhone, setContactPhone] = useState('')
+  const [contactTouched, setContactTouched] = useState(false)
+  const [chassisNo, setChassisNo] = useState('')
+  // What the linked job card already has on record — shown read-only, because the server only
+  // ever fills a blank one and would silently ignore an edit.
+  const [jcContact, setJcContact] = useState<string | null>(null)
+  const [jcChassis, setJcChassis] = useState<string | null>(null)
   // An existing job card this receipt is recorded against (rev 56) — e.g. one opened from an Expense.
   const [jcPick, setJcPick] = useState<JobCardSearchHit | null>(null)
   const [linkOpen, setLinkOpen] = useState(false)   // the "Link an existing job" picker is collapsed until asked for
@@ -125,6 +134,7 @@ export default function NewReceiptPage() {
         .then(({ data }) => {
           setCustomerName(data.name)
           setVehicleNo(data.vehicles[0]?.vehicleNo ?? '')
+          setContactPhone(data.lastContactPhone ?? data.phone ?? '')
           setNotice(`New receipt for ${data.name} — customer pre-filled from their record.`)
         })
         .catch(() => {})
@@ -140,6 +150,9 @@ export default function NewReceiptPage() {
         setCustomerId(data.customerId)
         setCustomerName(data.customerName ?? '')
         setVehicleNo(data.vehicleNo ?? '')
+        setContactPhone(data.contactPhone ?? '')
+        setChassisNo(data.chassisNo ?? '')
+        setContactTouched(true)   // the saved value is the cashier's own — never overwrite it with a prefill
         setDbmId(data.dbmId ?? '')
         setInvoiceNo(data.invoiceNo ?? '')
         setInvoiceAmount(data.invoiceAmount != null ? String(data.invoiceAmount) : '')
@@ -194,10 +207,12 @@ export default function NewReceiptPage() {
 
   /** With an existing job card linked, its own category / status / invoice / claim fields are the truth. */
   const jcLinked = jcPick != null
+  const contactLocked = jcLinked && !!jcContact
+  const chassisLocked = jcLinked && !!jcChassis
 
   async function pickJobCard(hit: JobCardSearchHit | null) {
     setJcPick(hit)
-    if (!hit) { setLinkedStatusName(null); return }
+    if (!hit) { setLinkedStatusName(null); setJcContact(null); setJcChassis(null); return }
     setError('')
     try {
       const { data: j } = await jobCardsApi.get(hit.id)
@@ -206,6 +221,11 @@ export default function NewReceiptPage() {
       setCustomerName(j.customerName ?? '')
       setVehicleId(j.vehicleId)
       setVehicleNo(j.vehicleNo ?? '')
+      setContactPhone(j.contactPhone ?? '')
+      setChassisNo(j.chassisNo ?? '')
+      setJcContact(j.contactPhone)
+      setJcChassis(j.chassisNo)
+      setContactTouched(true)
       setDbmId(j.dbmId ?? '')
       setInvoiceNo(j.invoiceNo ?? '')
       setInvoiceAmount(j.invoiceAmount != null ? String(j.invoiceAmount) : '')
@@ -282,6 +302,10 @@ export default function NewReceiptPage() {
       jobCardId: jcPick?.id,
       customerId: customerId ?? undefined,
       customerName: customerId ? undefined : customerName.trim(),
+      // A brand-new customer also gets this as their saved phone; an existing customer's is never rewritten.
+      customerPhone: customerId ? undefined : contactPhone.trim() || undefined,
+      contactPhone: contactPhone.trim() || undefined,
+      chassisNo: chassisNo.trim() || undefined,
       vehicleId: vehicleId ?? undefined,
       vehicleNo: vehicleId == null ? vehicleNo.trim() || undefined : undefined,
       dbmId: dbmId.trim() || undefined,
@@ -445,6 +469,8 @@ export default function NewReceiptPage() {
       invoiceAmount: invoiceAmount ? Number(invoiceAmount) : undefined,
       clearInvoiceAmount: invoiceAmount ? false : true,
       vehicleNo: vehicleNo.trim(),
+      contactPhone: contactPhone.trim(),
+      chassisNo: chassisNo.trim(),
       dbmId: dbmId.trim(),
       b2b,
       gstNo: b2b ? gstNo.trim() : '',
@@ -605,11 +631,30 @@ export default function NewReceiptPage() {
                   name={customerName}
                   customerId={customerId}
                   locked={(customerId != null && inEditMode) || jcPick?.customerId != null}
-                  onChange={(name, id) => {
+                  onChange={(name, id, picked) => {
                     setCustomerName(name)
                     if (id !== customerId) { setVehicleId(null); if (id != null) setVehicleNo('') }
                     setCustomerId(id)
+                    // A pick fills their last saved contact; a typed new name clears it — never a stale number.
+                    if (!contactTouched && !contactLocked) {
+                      setContactPhone(picked ? (picked.lastContactPhone ?? picked.phone ?? '') : '')
+                    }
                   }}
+                />
+              </Row>
+              <Row label="Contact">
+                <input
+                  aria-label="Contact number"
+                  type="tel"
+                  inputMode="tel"
+                  maxLength={32}
+                  autoComplete="off"
+                  value={contactPhone}
+                  disabled={contactLocked}
+                  title={contactLocked ? 'Already recorded on the linked job card' : undefined}
+                  placeholder="Optional — phone number"
+                  onChange={(e) => { setContactPhone(e.target.value); setContactTouched(true) }}
+                  style={inputStyle}
                 />
               </Row>
               <Row label="Vehicle #">
@@ -620,7 +665,28 @@ export default function NewReceiptPage() {
                   locked={jcPick?.vehicleId != null}
                   suppressHint={inEditMode && !vehicleTouched}
                   onChange={(no, id) => { setVehicleNo(no); setVehicleId(id); setVehicleTouched(true) }}
-                  onOwnerFound={(v) => { setCustomerId(v.customerId); setCustomerName(v.customerName ?? '') }}
+                  onOwnerFound={(v) => {
+                    setCustomerId(v.customerId)
+                    setCustomerName(v.customerName ?? '')
+                    if (!contactTouched && !contactLocked) {
+                      customersApi.get(v.customerId)
+                        .then(({ data }) => setContactPhone(data.lastContactPhone ?? data.phone ?? ''))
+                        .catch(() => {})
+                    }
+                  }}
+                />
+              </Row>
+              <Row label="Chassis #">
+                <input
+                  aria-label="Chassis number"
+                  maxLength={40}
+                  autoComplete="off"
+                  value={chassisNo}
+                  disabled={chassisLocked}
+                  title={chassisLocked ? 'Already recorded on the linked job card' : undefined}
+                  placeholder="Optional"
+                  onChange={(e) => setChassisNo(e.target.value.toUpperCase())}
+                  style={inputStyle}
                 />
               </Row>
               <Row label="Job Card / DBM">

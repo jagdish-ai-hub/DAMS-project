@@ -44,6 +44,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -136,9 +137,23 @@ public class CustomerService {
         Map<Long, List<CustomerResponse.VehicleRef>> vehiclesByCustomer = vehiclesFor(orgId,
             customers.stream().map(Customer::getId).toList());
 
+        Map<Long, String> lastContact = lastContactPhones(orgId, customers.stream().map(Customer::getId).toList());
         return customers.stream()
-            .map(c -> CustomerResponse.of(c, vehiclesByCustomer.getOrDefault(c.getId(), List.of())))
+            .map(c -> CustomerResponse.of(c, vehiclesByCustomer.getOrDefault(c.getId(), List.of()),
+                lastContact.get(c.getId())))
             .toList();
+    }
+
+    /** Each customer's most recently saved receipt contact number (rev 68) — prefills the Contact box. */
+    private Map<Long, String> lastContactPhones(Long orgId, List<Long> customerIds) {
+        Map<Long, String> out = new HashMap<>();
+        if (customerIds.isEmpty()) {
+            return out;
+        }
+        for (Object[] row : jobCardRepo.findContactPhonesNewestFirst(orgId, customerIds)) {
+            out.putIfAbsent((Long) row[0], (String) row[1]);   // newest first: first one seen wins
+        }
+        return out;
     }
 
     /** One customer's vehicles, filtered as the user types (rev 56) -- drives the vehicle dropdown. */
@@ -156,7 +171,8 @@ public class CustomerService {
     public CustomerResponse get(Long id) {
         Customer c = load(id);
         return CustomerResponse.of(c, vehiclesFor(c.getOrgId(), List.of(c.getId()))
-            .getOrDefault(c.getId(), List.of()));
+            .getOrDefault(c.getId(), List.of()),
+            lastContactPhones(c.getOrgId(), List.of(c.getId())).get(c.getId()));
     }
 
     @Transactional

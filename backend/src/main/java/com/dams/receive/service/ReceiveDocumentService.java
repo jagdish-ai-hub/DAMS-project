@@ -217,6 +217,20 @@ public class ReceiveDocumentService {
                 request.getCustomerName(), request.getCustomerPhone());
         }
 
+        // Linking an existing job card (rev 68): a contact / chassis typed on this receipt fills the
+        // card's blank ones but never overwrites what is already recorded — editing those is the
+        // job-card edit's job, and a stray paste here must not rewrite an earlier receipt's detail.
+        if (request.hasJobCardId()) {
+            String contact = blankToNull(request.getContactPhone());
+            if (contact != null && jobCard.getContactPhone() == null) {
+                jobCard.setContactPhone(contact);
+            }
+            String chassis = JobCard.normaliseChassis(request.getChassisNo());
+            if (chassis != null && jobCard.getChassisNo() == null) {
+                jobCard.setChassisNo(chassis);
+            }
+        }
+
         AppUser me = paymentGuard.requireCanPost(orgId, jobCard);
 
         if (claimCloseRepo.existsByOrgIdAndJobCardId(orgId, jobCard.getId())) {
@@ -435,6 +449,8 @@ public class ReceiveDocumentService {
         jc.setCustomerId(r.getCustomerId());
         jc.setCustomerName(r.getCustomerName());
         jc.setCustomerPhone(r.getCustomerPhone());
+        jc.setContactPhone(r.getContactPhone());
+        jc.setChassisNo(r.getChassisNo());
         jc.setVehicleId(r.getVehicleId());
         jc.setVehicleNo(r.getVehicleNo());
         jc.setDbmId(r.getDbmId());
@@ -654,6 +670,8 @@ public class ReceiveDocumentService {
             customer != null ? customer.getName() : null,
             customer != null ? customer.getPhone() : null,
             vehicle != null ? vehicle.getVehicleNo() : null,
+            jc.getContactPhone(),
+            jc.getChassisNo(),
             jc.getDbmId(),
             jc.getInvoiceNo(),
             jc.getInvoiceAmount(),

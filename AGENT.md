@@ -149,6 +149,15 @@ One "cause" = one document, containing many sub-transaction lines:
 - **Vehicle number**: normalized (uppercase, no spaces), natural key for
   the Vehicle master table. A vehicle belongs to exactly one customer; a
   customer may have many vehicles.
+- **Contact and Chassis # (rev 68)**: two **optional** details on a Receipt,
+  stored on its **job card** — never copied onto the customer or vehicle
+  master, so typing one can never overwrite what is saved there. Contact is
+  a phone number as given at that receipt; the form pre-fills it from the
+  customer's last saved number until the cashier types their own. Chassis #
+  is stored uppercase with no spaces. Both show on the Accountant and
+  Finance Manager review card next to the vehicle number ("—" when never
+  recorded). Linking an existing job card only fills a blank one, never
+  overwrites it.
 - **Linking (rev 56)**: on the Receipt, Expense and Job-Card-create screens
   the customer, vehicle and job card are **picked from a branch-scoped
   search, not retyped** (same `BranchScope` rule as universal search:

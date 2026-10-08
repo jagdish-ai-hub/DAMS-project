@@ -215,6 +215,8 @@ export function RecordCard(props: {
           {/* Ooriba ID = a DAMS-Receive-ID: a receipt's own, or the receipt(s) an expense is linked to. */}
           <Kv k="Ooriba ID" v={(expense ? doc.receiveDocumentNos?.join(', ') : doc.documentNo) || '—'} />
           <Kv k="Vehicle #" v={doc.vehicleNo ?? '—'} />
+          {!expense && <Kv k="Chassis #" v={doc.chassisNo ?? '—'} />}
+          {!expense && <Kv k="Contact" v={doc.contactPhone ?? '—'} />}
           <Kv k={expense ? 'Job ID / PO / SO' : 'Job card / DBM'} v={doc.dbmId ?? '—'} />
           <Kv k="Branch" v={doc.branchCode ?? '—'} />
           {expense ? (

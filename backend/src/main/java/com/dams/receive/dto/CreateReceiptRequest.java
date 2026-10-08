@@ -33,6 +33,9 @@ public class CreateReceiptRequest {
     private Long customerId;
     @Size(max = 160) private String customerName;
     @Size(max = 32) private String customerPhone;
+    /** Optional (rev 68): contact number given at this receipt, and the vehicle's chassis number. */
+    @Size(max = 32) private String contactPhone;
+    @Size(max = 40) private String chassisNo;
     private Long vehicleId;
     @Size(max = 20) private String vehicleNo;
     @Size(max = 40) private String dbmId;
