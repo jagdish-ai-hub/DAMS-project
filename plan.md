@@ -7,6 +7,15 @@
 
 ## Revision log
 
+- **rev 69 (2026-10-09)** — **Accountant "Credit" bucket = the Credit status.** Bug report: receipt for Manoj
+  (₹3,000 cash + ₹4,000 bank, status Received) appeared under Credit. Cause: the bucket was "non-claim and not
+  all-cash", so any bank/UPI/mixed receipt landed there. Decision (user): Credit holds only receipts whose
+  business status is "Credit"; it clears when the status is changed to Received (Accountant) or the Cashier adds
+  settlement lines and flips it. AGENT.md updated first. `ReviewQueueItem.isCredit` added (receipts; false
+  elsewhere); frontend `inBucket('credit')` = `!isClaim && isCredit`. `isCashEligible` and every approve rule
+  unchanged. Known consequence: a Received receipt that is part/all non-cash is in neither Cash nor Credit and
+  shows under All only. Backend `ReviewServiceTest` +1, frontend `accountant/creditBucket.test.tsx` (3), both
+  mutation-checked.
 - **rev 68 (2026-10-10)** — **Optional Contact and Chassis # on a receipt.** Request: add a contact number and
   a chassis number to the receipt, after the name, and show them on the Accountant and Finance Manager pages
   next to the vehicle number; pre-fill contact from the last saved number. AGENT.md "Linking" updated first.

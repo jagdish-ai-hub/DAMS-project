@@ -24,6 +24,9 @@ export interface ReviewQueueItem {
   /** Receipts only — the direct-approve rule: no claim, status isn't "Credit", every
    * settlement line is cash-mode. Powers the Cash/Credit/Claim Transaction split. */
   isCashEligible: boolean
+  /** Receipts only (rev 69) — the job card's business status is "Credit". The Credit bucket;
+   * it clears as soon as the status is changed (or the Cashier flips it to Received). */
+  isCredit: boolean
   /** Expenses only (rev 53) — FM pre-approved it and the total is still within it: the
    * Accountant may close it without a second FM approval. */
   preApproved: boolean

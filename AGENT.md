@@ -46,6 +46,14 @@ accountants, plus the owner's live window into branch operations.
   `claim_type_id`), its business status isn't "Credit", and every
   settlement line is cash-mode. Everything else still requires FM approval
   as usual. See plan.md rev 46.
+  **Accountant queue buckets (rev 69):** the Receipts queue splits into
+  *Cash* (the direct-approve rule above — the only bucket with bulk
+  approve), *Credit* (business status is "Credit", not a claim) and *Claim
+  Transaction* (has a claim type). "Credit" means exactly the Credit status
+  — a Received receipt paid part cash / part bank is **not** Credit — so a
+  receipt leaves Credit the moment its status is changed (by the Accountant,
+  or by the Cashier after adding settlement lines). Receipts in none of the
+  three show under All only. See plan.md rev 69.
   **FM-queried entries land back here, not with the Cashier (rev 49):**
   when the FM queries a VERIFIED entry, it returns to the Accountant's own
   queue (not the Cashier's My Entries) as `FM_QUERIED`, with the same

@@ -87,7 +87,7 @@ class ExportServiceReviewListTest {
             List<ReceiveDocument> docs = i.getArgument(1);
             return docs.stream().map(d -> new ReviewQueueItem("receipt", d.getId(), d.getDocumentNo(), d.getBranchId(),
                 "PUN", "Customer " + d.getId(), "Service", screenAmount.get(d.getId()), false, false,
-                Instant.parse("2026-10-03T20:00:00Z"), d.getWorkflowStatus().name(), false, true, false, null)).toList();
+                Instant.parse("2026-10-03T20:00:00Z"), d.getWorkflowStatus().name(), false, true, false, false, null)).toList();
         });
     }
 

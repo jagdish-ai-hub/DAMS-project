@@ -1123,6 +1123,38 @@ class ReviewServiceTest {
         assertThat(result.get(0).isCashEligible()).isFalse();
     }
 
+    /**
+     * rev 69: the Credit bucket is the business status "Credit" and nothing else. A Received
+     * receipt paid part cash / part bank is not cash-eligible, but it is NOT credit; the same
+     * receipt marked Credit is. Changing the status moves it out again.
+     */
+    @Test
+    void receiptQueue_isCreditFollowsTheCreditStatus_notTheSettlementModes() {
+        when(branchScope.allowedBranchIds()).thenReturn(Optional.of(java.util.Set.of(BRANCH)));
+        ReceiveDocument submitted = receiveDoc(WorkflowStatus.SUBMITTED);
+        when(receiveDocumentRepo.findByOrgIdAndWorkflowStatusInAndBranchIdInOrderBySubmittedAtAscIdAsc(
+            eq(ORG), eq(java.util.List.of(WorkflowStatus.SUBMITTED, WorkflowStatus.FM_QUERIED)), eq(java.util.Set.of(BRANCH))))
+            .thenReturn(java.util.List.of(submitted));
+        SettlementLine bank = settlementLine(2, new BigDecimal("4000"));
+        bank.setSettlementModeId(2L);   // not a cash-mode
+        when(settlementLineRepo.findByOrgIdAndReceiveDocumentIdInOrderByLineNoAsc(ORG, java.util.List.of(R_ID)))
+            .thenReturn(java.util.List.of(settlementLine(1, new BigDecimal("3000")), bank));
+        when(settlementModeRepo.findByOrgIdAndCashTrue(ORG)).thenReturn(java.util.List.of(cashMode()));
+        when(receiveBusinessStatusRepo.findByOrgIdAndNameIgnoreCase(ORG, "Credit")).thenReturn(Optional.of(creditStatus()));
+
+        JobCard received = plainJobCard();                  // status 6, "Received"
+        when(jobCardRepo.findByOrgIdAndIdIn(ORG, java.util.List.of(11L))).thenReturn(java.util.List.of(received));
+        var asReceived = service.receiptQueue();
+        assertThat(asReceived.get(0).isCashEligible()).isFalse();
+        assertThat(asReceived.get(0).isCredit()).isFalse();
+
+        JobCard credit = plainJobCard();
+        credit.setBusinessStatusId(99L);                    // the "Credit" status
+        when(jobCardRepo.findByOrgIdAndIdIn(ORG, java.util.List.of(11L))).thenReturn(java.util.List.of(credit));
+        var asCredit = service.receiptQueue();
+        assertThat(asCredit.get(0).isCredit()).isTrue();
+    }
+
     @Test
     void verifiedReceiptQueue_returnsDocsWithTheirRealWorkflowStatus() {
         when(branchScope.allowedBranchIds()).thenReturn(Optional.of(java.util.Set.of(BRANCH)));
