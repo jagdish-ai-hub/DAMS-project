@@ -69,8 +69,9 @@ export interface ActivityItem {
 
 /** One receipt or expense line behind a KPI — the reconciliation breakdown row shape. */
 export interface MoneyMovementItem {
-  /** cash-in / cash-out / opening only appear in the Cash in hand breakdown (rev 71). */
-  kind: 'receipt' | 'expense' | 'cash-in' | 'cash-out' | 'opening'
+  /** cash-in / cash-out / opening only appear in the Cash in hand breakdown (rev 71); claim-adjustment only
+   * in the Collections breakdown (rev 73) — a closed claim counted at its final amount. */
+  kind: 'receipt' | 'expense' | 'cash-in' | 'cash-out' | 'opening' | 'claim-adjustment'
   /** null on the opening row — there is no document behind it. */
   documentId: number | null
   documentNo: string | null

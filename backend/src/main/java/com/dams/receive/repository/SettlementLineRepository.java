@@ -299,4 +299,19 @@ public interface SettlementLineRepository extends JpaRepository<SettlementLine, 
                                             @Param("from") java.time.LocalDate from,
                                             @Param("to") java.time.LocalDate to,
                                             @Param("branchId") Long branchId);
+
+    /**
+     * {@code [jobCardId, Σ amount]} over APPROVED receive documents only — exactly what the Owner
+     * dashboard's Collections counts for a job card, so a closed claim's "final amount adjustment"
+     * (final − this) lands Collections on the final amount (rev 73).
+     */
+    @Query("""
+        select d.jobCardId, coalesce(sum(l.amount), 0)
+        from SettlementLine l, ReceiveDocument d
+        where l.receiveDocumentId = d.id
+          and d.orgId = :orgId
+          and d.workflowStatus = com.dams.receive.entity.WorkflowStatus.APPROVED
+        group by d.jobCardId
+        """)
+    List<Object[]> sumApprovedByJobCard(@Param("orgId") Long orgId);
 }

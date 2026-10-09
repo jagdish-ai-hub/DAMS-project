@@ -108,6 +108,30 @@ describe('Owner dashboard (rev 71)', () => {
     await waitFor(() => expect(api.pendingWork).toHaveBeenLastCalledWith(3))
   })
 
+  it('a closed claim counted at its final amount shows as one clickable, signed row that opens the receipt (rev 73)', async () => {
+    const user = userEvent.setup()
+    api.collectionsBreakdown.mockResolvedValue({ data: [
+      { kind: 'receipt', documentId: 8, documentNo: 'OOJ-SEP26-R-008', workflowStatus: 'APPROVED', date: '2026-10-09', createdAt: '', branchCode: 'OOJ', party: 'Acme', description: 'OOJ-JC-24', modeName: 'Cash', amount: 16500 },
+      { kind: 'claim-adjustment', documentId: 8, documentNo: 'OOJ-SEP26-R-008', workflowStatus: 'APPROVED', date: '2026-10-09', createdAt: '', branchCode: 'OOJ', party: 'Acme', description: 'Claim closed at ₹15,000 · payment lines ₹16,500', modeName: 'Claim final amount adjustment', amount: -1500 },
+    ] } as never)
+    renderPage()
+    await user.click(await screen.findByText(/Collections ⓘ|Collections/, { selector: 'div' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Claim closed at ₹15,000 · payment lines ₹16,500')).toBeInTheDocument()
+    expect(within(dialog).getByText('−₹1,500')).toBeInTheDocument()
+    expect(within(dialog).getByText('₹15,000')).toBeInTheDocument()          // 16,500 − 1,500 = the card
+    await user.click(within(dialog).getByText('Claim closed at ₹15,000 · payment lines ₹16,500'))
+    expect(navigate).toHaveBeenCalledWith('/app/new-receipt?editDoc=8')
+  })
+
+  it('says so when a closed-claim adjustment is negative, since a chart slice cannot be', async () => {
+    api.summary.mockResolvedValue({ data: { ...summary, byMode: [
+      { name: 'Cash', amount: 16500 }, { name: 'Claim final amount adjustment', amount: -1500 },
+    ] } } as never)
+    renderPage()
+    expect(await screen.findByText(/Collections also include Claim final amount adjustment −₹1,500/)).toBeInTheDocument()
+  })
+
   it('Cash in hand opens the running breakdown: opening + movements, outflows negative, total = the card', async () => {
     const user = userEvent.setup()
     renderPage()

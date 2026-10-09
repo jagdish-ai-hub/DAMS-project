@@ -9,6 +9,7 @@ import com.dams.cash.service.DrawerService;
 import com.dams.config.TenantContext;
 import com.dams.customer.repository.CustomerRepository;
 import com.dams.dashboard.dto.DashboardSummary;
+import com.dams.dashboard.service.ClaimAdjustmentService;
 import com.dams.dashboard.service.DashboardService;
 import com.dams.expense.repository.ExpenseDocumentRepository;
 import com.dams.expense.repository.ExpenseLineRepository;
@@ -76,6 +77,7 @@ class DashboardServiceTest {
     @Mock private PendingAmountCalculator pendingAmountCalculator;
     @Mock private AuditEventRepository auditEventRepo;
     @Mock private AppUserRepository userRepo;
+    @Mock private ClaimAdjustmentService claimAdjustments;
 
     private DashboardService service;
 
@@ -84,7 +86,7 @@ class DashboardServiceTest {
         service = new DashboardService(settlementLineRepo, expenseLineRepo, receiveDocumentRepo, expenseDocumentRepo,
             cashDocumentRepo, settlementModeRepo, expenseCategoryRepo, expenseModeRepo, claimTypeRepo, receiverRepo, branchRepo,
             cashDayCloseRepo, drawerService, jobCardRepo, customerRepo, vehicleRepo, claimCloseRepo,
-            pendingAmountCalculator, auditEventRepo, userRepo, new ObjectMapper());
+            pendingAmountCalculator, auditEventRepo, userRepo, new ObjectMapper(), claimAdjustments);
         TenantContext.setOrgId(ORG);
 
         lenient().when(branchRepo.findByOrgIdOrderByCodeAsc(ORG)).thenReturn(List.of(branch(3L, "OOR"), branch(2L, "OOB")));
@@ -102,6 +104,8 @@ class DashboardServiceTest {
         // Batched drawer roll-up: each branch's computed position (was one position() call per branch).
         lenient().when(drawerService.runningPositions(eq(ORG), any(), any()))
             .thenReturn(java.util.Map.of(2L, running("4000"), 3L, running("4000")));
+        lenient().when(claimAdjustments.between(eq(ORG), any(), any())).thenReturn(List.of());
+        lenient().when(receiveDocumentRepo.findDraftOnlyJobCardIds(ORG)).thenReturn(List.of());
         lenient().when(receiveDocumentRepo.countPendingReviewByBranch(ORG)).thenReturn(List.of());
         lenient().when(expenseDocumentRepo.countPendingReviewByBranch(ORG)).thenReturn(List.of());
         lenient().when(cashDocumentRepo.countPendingReviewByBranch(ORG)).thenReturn(List.of());
@@ -158,6 +162,80 @@ class DashboardServiceTest {
         assertThat(s.kpis().cashInHand()).isEqualByComparingTo("182430");
         assertThat(s.branchComparison()).extracting(r -> r.cashInHand().intValue())
             .containsExactlyInAnyOrder(99250, 83180);
+    }
+
+    private static ClaimAdjustmentService.Adjustment adjustment(Long branchId, LocalDate date, String diff) {
+        BigDecimal d = new BigDecimal(diff);
+        return new ClaimAdjustmentService.Adjustment(95L, branchId, 21L, date, date.atStartOfDay(java.time.ZoneOffset.UTC).toInstant(),
+            new BigDecimal("5200"), new BigDecimal("5200").subtract(d), d, 500L, "OOR-SEP26-R-036");
+    }
+
+    /** rev 73: a closed claim counts at the FM's final amount — the difference rides on its close day. */
+    @Test
+    void summary_closedClaimAdjustment_movesCollections_trend_branchTable_andModeSplit() {
+        LocalDate today = com.dams.common.time.OrgTime.today();
+        when(settlementLineRepo.dashboardCollections(eq(ORG), any(), any(), isNull())).thenReturn(new BigDecimal("10000"));
+        when(claimAdjustments.between(eq(ORG), any(), any())).thenReturn(List.of(
+            adjustment(3L, today, "4200"),                 // closed higher than the lines
+            adjustment(3L, today.minusDays(1), "-1500"),   // closed lower
+            adjustment(2L, today, "-200")));
+
+        DashboardSummary s = service.summary(null, "mtd");
+
+        assertThat(s.kpis().collections()).isEqualByComparingTo("12500");     // 10000 + 4200 − 1500 − 200
+        assertThat(s.kpis().net()).isEqualByComparingTo("12500");
+        assertThat(s.trend().get(s.trend().size() - 1).collections()).isEqualByComparingTo("4000");   // 4200 − 200 today
+        assertThat(s.byMode()).anyMatch(m -> m.name().equals(DashboardService.CLAIM_ADJUSTMENT_LABEL)
+            && m.amount().compareTo(new BigDecimal("2500")) == 0);
+        assertThat(s.branchComparison()).filteredOn(r -> r.branchId() == 3L)
+            .allSatisfy(r -> assertThat(r.collections()).isEqualByComparingTo("2700"));
+        // it is not cash — the drawer figure is whatever DrawerService says, untouched
+        assertThat(s.kpis().cashInHand()).isEqualByComparingTo("8000");
+    }
+
+    @Test
+    void summary_closedClaimAdjustment_respectsTheBranchFilter_andIsAbsentWhenZero() {
+        LocalDate today = com.dams.common.time.OrgTime.today();
+        when(settlementLineRepo.dashboardCollections(eq(ORG), any(), any(), eq(3L))).thenReturn(new BigDecimal("1000"));
+        when(branchRepo.findByIdAndOrgId(3L, ORG)).thenReturn(java.util.Optional.of(branch(3L, "OOR")));
+        when(claimAdjustments.between(eq(ORG), any(), any())).thenReturn(List.of(
+            adjustment(3L, today, "300"), adjustment(2L, today, "9999")));
+
+        DashboardSummary s = service.summary(3L, "mtd");
+
+        assertThat(s.kpis().collections()).isEqualByComparingTo("1300");       // OOB's claim is not counted
+
+        when(claimAdjustments.between(eq(ORG), any(), any())).thenReturn(List.of());
+        assertThat(service.summary(3L, "mtd").byMode()).noneMatch(m -> m.name().equals(DashboardService.CLAIM_ADJUSTMENT_LABEL));
+    }
+
+    private com.dams.jobcard.entity.JobCard jobCard(long id, String invoice) {
+        com.dams.jobcard.entity.JobCard jc = new com.dams.jobcard.entity.JobCard();
+        ReflectionTestUtils.setField(jc, "id", id);
+        jc.setOrgId(ORG);
+        jc.setBranchId(3L);
+        jc.setCustomerId(21L);
+        jc.setInvoiceAmount(new BigDecimal(invoice));
+        return jc;
+    }
+
+    /** rev 73: a blank draft is not a receivable; a rejected one still is; so is a draft that already has money on it. */
+    @Test
+    void outstanding_leavesOutBlankDrafts_butKeepsEverythingElseOwed() {
+        when(jobCardRepo.findByOrgId(ORG)).thenReturn(List.of(
+            jobCard(28L, "5200"),     // only a blank draft  -> dropped
+            jobCard(26L, "33000"),    // receipt was rejected -> stays
+            jobCard(30L, "8000"),     // draft that already carries payment lines -> stays
+            jobCard(31L, "4000")));   // an ordinary part-paid job -> stays
+        when(receiveDocumentRepo.findDraftOnlyJobCardIds(ORG)).thenReturn(List.of(28L, 30L));
+        when(settlementLineRepo.sumAmountByJobCard(ORG)).thenReturn(List.of(
+            new Object[]{30L, new BigDecimal("1000")}, new Object[]{31L, new BigDecimal("1500")}));
+
+        var items = service.outstanding(null);
+
+        assertThat(items).extracting(i -> i.amount().intValue()).containsExactlyInAnyOrder(33000, 7000, 2500);
+        assertThat(items).extracting(com.dams.dashboard.dto.OutstandingItem::amount)
+            .doesNotContain(new BigDecimal("5200"));
     }
 
     @Test

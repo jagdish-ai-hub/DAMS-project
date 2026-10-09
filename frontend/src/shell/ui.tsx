@@ -6,7 +6,10 @@ import { useExitGhost } from './motion'
 
 /** ₹ with Indian digit grouping, rounded to whole rupees — matches the mockups. */
 export function inr(n: number | null | undefined): string {
-  return '₹' + Math.round(n || 0).toLocaleString('en-IN')
+  const v = Math.round(n || 0)
+  // The sign goes in front of the rupee mark: "−₹1,500", not "₹-1,500" (a month's Collections can dip
+  // below zero when a claim closes lower than the payments already counted).
+  return (v < 0 ? '−' : '') + '₹' + Math.abs(v).toLocaleString('en-IN')
 }
 
 /*

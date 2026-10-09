@@ -7,6 +7,13 @@
 
 ## Revision log
 
+- **rev 73 (2026-10-09)** — **Dashboard items C and D, decided by the owner.** (C) Collections for a closed receipt
+  claim uses the Finance Manager's final amount: the difference between it and the approved payment lines is a
+  labelled "Claim final amount adjustment" dated on the close day (job card's branch), carried through the KPI,
+  trend, branch table, mode split and drill-down; not cash, so the drawer / Cash in hand are untouched. Live
+  data: 9 closed claims differ (e.g. JC-95 lines ₹1,000 vs final ₹5,200; JC-24/36/48 ₹16,500 vs ₹15,000).
+  (D) Outstanding drops job cards that only have blank DRAFT receipts (3 live: JC-28/40/52, ₹15,600); the two with
+  rejected receipts (JC-26, JC-82, ₹93,000) stay. AGENT.md updated first.
 - **rev 72 (2026-10-09)** — **Documents and GST on the review screens.** Bug reports (live receipts OOR-OCT26-R-011 /
   R-012): (1) a queried receipt could not take a new attachment; (2) the Accountant could not see an uploaded
   document; (3) nor the Finance Manager; (4) GST details not shown. Causes, checked in the live DB: R-011 was

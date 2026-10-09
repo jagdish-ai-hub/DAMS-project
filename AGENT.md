@@ -298,6 +298,21 @@ has `org_id = null`.
    not stuck. (4) **Recent activity** also lists overrides, payments added,
    status / category / claim-type changes, transfers to claim, approval
    requests, pre-approvals and cash re-opens.
+   **Closed claims in Collections (rev 73).** Collections follows the Finance
+   Manager's decision on a closed claim: for each closed receipt claim, the
+   money counted is the **final amount recovered**, not the Cashier's payment
+   lines. The payment lines still count on their own dates; the difference
+   (final amount − approved lines) is added as one labelled **Claim final amount
+   adjustment** on the day the claim was closed, in the same branch — so a claim
+   closed lower than entered reduces Collections, one closed higher raises it. It
+   shows in the Collections trend, branch table, mode split and drill-down (where
+   it is a clickable row that opens the receipt), so the card always equals its
+   rows, and it agrees with the Claims card. It is **not cash**: Cash in hand,
+   the drawer and Cash In/Out never change. Open (unclosed) claims are unchanged.
+   **Outstanding (rev 73):** a job card whose only receipts are **blank drafts**
+   (nothing submitted, no payment lines) is not a receivable and is left out.
+   Job cards whose receipt was rejected stay listed until the Owner says
+   otherwise — a rejected entry may still be owed money.
    **A reviewer may change an expense's business status (rev 58).** The
    Accountant (own branches), Finance Manager and Owner can change it from the
    review screen while the expense is SUBMITTED, VERIFIED, APPROVED or

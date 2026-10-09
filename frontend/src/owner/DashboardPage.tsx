@@ -71,6 +71,8 @@ export default function DashboardPage() {
 
   const donut = useMemo(() => (summary?.byMode ?? []).filter((m) => m.amount > 0), [summary])
   const donutTotal = donut.reduce((a, m) => a + m.amount, 0)
+  // rev 73: a closed claim below what was entered is a negative slice — it cannot be drawn, so say so.
+  const negativeSlices = useMemo(() => (summary?.byMode ?? []).filter((m) => m.amount < 0), [summary])
   const maxCat = Math.max(1, ...(summary?.byCategory ?? []).map((c) => c.amount))
   const scopeLabel = branchId === '' ? 'All branches' : (branches.find((x) => x.id === branchId)?.code ?? 'Branch')
 
@@ -112,7 +114,8 @@ export default function DashboardPage() {
   function openBreakdownRow(row: BreakdownRow) {
     if (row.documentId == null) return
     setBreakdown(null)
-    const path = row.kind === 'expense' ? '/app/new-expense' : row.kind === 'receipt' ? '/app/new-receipt' : '/app/cash'
+    const path = row.kind === 'expense' ? '/app/new-expense'
+      : row.kind === 'receipt' || row.kind === 'claim-adjustment' ? '/app/new-receipt' : '/app/cash'
     navigate(`${path}?editDoc=${row.documentId}`)
   }
 
@@ -247,6 +250,11 @@ export default function DashboardPage() {
 
             <div style={{ ...card }}>
               <h3 style={{ fontSize: '0.94rem', fontWeight: 700, marginBottom: 10 }}>Collections by mode</h3>
+              {negativeSlices.length > 0 && (
+                <p style={{ color: 'var(--muted)', fontSize: '0.76rem', margin: '0 0 8px' }}>
+                  Collections also include {negativeSlices.map((m) => `${m.name} −${inr(-m.amount)}`).join(', ')} — shown in the card, not in the chart.
+                </p>
+              )}
               {donut.length === 0 ? (
                 <p style={{ color: 'var(--faint)', fontSize: '0.84rem' }}>No approved collections in this period.</p>
               ) : (

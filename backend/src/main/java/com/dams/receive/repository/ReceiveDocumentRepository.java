@@ -104,4 +104,16 @@ public interface ReceiveDocumentRepository extends JpaRepository<ReceiveDocument
     List<ReceiveDocument> findForPendingWork(@Param("orgId") Long orgId,
                                              @Param("statuses") Collection<WorkflowStatus> statuses,
                                              @Param("branchId") Long branchId);
+
+    /**
+     * Job cards whose receive documents are ALL still drafts (never submitted) — the Owner
+     * dashboard leaves the blank ones out of Outstanding (rev 73).
+     */
+    @Query("""
+        select d.jobCardId from ReceiveDocument d
+        where d.orgId = :orgId
+        group by d.jobCardId
+        having sum(case when d.workflowStatus <> com.dams.receive.entity.WorkflowStatus.DRAFT then 1 else 0 end) = 0
+        """)
+    List<Long> findDraftOnlyJobCardIds(@Param("orgId") Long orgId);
 }

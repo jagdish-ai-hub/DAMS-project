@@ -120,6 +120,46 @@ class DashboardAccuracyDbTest {
             .doesNotContain("REJECTED", "CLOSED");
     }
 
+    /** rev 73 — a closed claim counts at the FM's final amount; the drill-down rows add up to the card. */
+    @Test
+    void closedClaim_countsAtItsFinalAmount_andTheDrillDownSumsToTheCard() {
+        // a seeded APPROVED receipt, closed as a claim ₹100 below what its approved lines add up to
+        long jobCardId = jdbc.queryForObject("select job_card_id from receive_document where workflow_status = 'APPROVED' order by id limit 1", Long.class);
+        BigDecimal lines = jdbc.queryForObject("select coalesce(sum(l.amount),0) from settlement_line l join receive_document d on d.id = l.receive_document_id"
+            + " where d.job_card_id = ? and d.workflow_status = 'APPROVED'", BigDecimal.class, jobCardId);
+        jdbc.update("insert into claim_close (org_id, job_card_id, final_amount, overridden, closed_by, closed_at) values (1, ?, ?, false, 1, now())",
+            jobCardId, lines.subtract(new BigDecimal("100")));
+
+        var kpis = dashboard.summary(null, "today").kpis();
+        BigDecimal rows = dashboard.collectionsBreakdown(null, "today").stream()
+            .map(MoneyMovementItem::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        assertThat(rows).isEqualByComparingTo(kpis.collections());
+        assertThat(dashboard.collectionsBreakdown(null, "today")).filteredOn(r -> r.kind().equals("claim-adjustment"))
+            .singleElement().satisfies(r -> assertThat(r.amount()).isEqualByComparingTo("-100"));
+        assertThat(dashboard.summary(null, "today").byMode())
+            .anyMatch(m -> m.name().equals(DashboardService.CLAIM_ADJUSTMENT_LABEL) && m.amount().compareTo(new BigDecimal("-100")) == 0);
+    }
+
+    /** rev 73 — Outstanding drops a job card whose only receipt is a blank draft, and nothing else. */
+    @Test
+    void outstanding_dropsABlankDraftOnly() {
+        int before = dashboard.outstanding(null).size();
+        // a copy of an existing job card, owing ₹5,200, with a draft receipt carrying no lines
+        long copy = jdbc.queryForObject("insert into job_card (org_id, branch_id, customer_id, vehicle_id, dbm_id, invoice_no, invoice_amount,"
+            + " category_id, business_status_id, is_b2b) select org_id, branch_id, customer_id, vehicle_id, 'T-D-1', 'T-INV-1', 5200,"
+            + " category_id, business_status_id, false from job_card where org_id = 1 order by id limit 1 returning id", Long.class);
+        jdbc.update("insert into receive_document (org_id, branch_id, job_card_id, workflow_status, settled, created_by)"
+            + " select org_id, branch_id, id, 'DRAFT', false, 1 from job_card where id = ?", copy);
+
+        assertThat(dashboard.outstanding(null)).hasSize(before);          // the blank draft is not listed
+
+        // once a payment line exists on that draft it IS a part-paid job again
+        jdbc.update("insert into settlement_line (org_id, receive_document_id, line_no, line_id, transaction_date, settlement_mode_id, amount, created_by)"
+            + " select 1, d.id, 1, 'T-L1', current_date, (select min(id) from settlement_mode where org_id = 1), 1000, 1 from receive_document d where d.job_card_id = ?", copy);
+        assertThat(dashboard.outstanding(null)).hasSize(before + 1);
+    }
+
     @Test
     void awaitingApprovalAndActivityQueries_runAgainstTheRealSchema() {
         var s = dashboard.summary(null, "mtd");

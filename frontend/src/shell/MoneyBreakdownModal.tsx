@@ -7,7 +7,7 @@ export interface BreakdownRow {
   id: string
   /** null on the "opening" row of the Cash in hand breakdown — nothing to open. */
   documentId: number | null
-  kind: 'receipt' | 'expense' | 'cash-in' | 'cash-out' | 'opening'
+  kind: 'receipt' | 'expense' | 'cash-in' | 'cash-out' | 'opening' | 'claim-adjustment'
   date: string
   documentNo: string | null
   status: string
