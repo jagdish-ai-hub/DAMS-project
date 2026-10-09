@@ -5,6 +5,7 @@ import { customersApi } from '../api/customers'
 import { jobCardsApi, type JobCard, type JobCardSearchHit } from '../api/jobCards'
 import { BusinessStatusSelect } from '../shared/BusinessStatusSelect'
 import { CustomerCombobox, JobCardSearch, VehicleCombobox } from '../shared/PartyPickers'
+import { useVehicleOwnerCheck } from '../shared/VehicleOwnerCheck'
 import {
   expensesApi,
   type CreateExpenseRequest,
@@ -331,6 +332,27 @@ export default function NewExpensePage() {
     return null
   }
 
+  const { check: checkOwner, dialog: ownerDialog } = useVehicleOwnerCheck()
+
+  /**
+   * rev 70 — at save/submit only: if the typed vehicle number is on record under a different
+   * customer, ask which is right instead of letting the server switch silently. Returns the body
+   * fields to override, or null when the cashier cancelled.
+   */
+  async function resolveOwner(): Promise<Partial<CreateExpenseRequest> | null> {
+    if (jcPick?.customerId != null) return {} // the linked job card already fixes the customer
+    const out = await checkOwner({ customerId, customerName, vehicleId, vehicleNo })
+    if (out === 'cancel') return null
+    if (out == null) return {}
+    setCustomerId(out.customerId)
+    setCustomerName(out.customerName)
+    setVehicleId(out.vehicleId)
+    return {
+      customerId: out.customerId, newCustomerName: undefined, customerName: out.customerName,
+      vehicleId: out.vehicleId, newVehicleNo: undefined, vehicleNo: undefined,
+    }
+  }
+
   function buildBody(submit: boolean): CreateExpenseRequest {
     return {
       jobCardId: jcPick?.id,
@@ -363,7 +385,9 @@ export default function NewExpensePage() {
     setBusy(true)
     setError('')
     try {
-      const { data } = await expensesApi.create(buildBody(submit))
+      const owner = await resolveOwner()
+      if (!owner) return
+      const { data } = await expensesApi.create({ ...buildBody(submit), ...owner })
       if (submit) {
         finish(true, data)
       } else {
@@ -407,7 +431,9 @@ export default function NewExpensePage() {
     setBusy(true)
     setError('')
     try {
-      const { data } = await expensesApi.create(buildBody(false))
+      const owner = await resolveOwner()
+      if (!owner) return null
+      const { data } = await expensesApi.create({ ...buildBody(false), ...owner })
       setLoadedDoc(data)
       if (data.lines.length) {
         setLines(
@@ -573,7 +599,9 @@ export default function NewExpensePage() {
     setBusy(true)
     setError('')
     try {
-      const { data } = await expensesApi.create(buildBody(false))
+      const owner = await resolveOwner()
+      if (!owner) return
+      const { data } = await expensesApi.create({ ...buildBody(false), ...owner })
       try {
         await expensesApi.requestApproval(data.id)
       } catch (e) {
@@ -1054,6 +1082,7 @@ export default function NewExpensePage() {
           </div>
         </div>
       </section>
+      {ownerDialog}
     </div>
   )
 }

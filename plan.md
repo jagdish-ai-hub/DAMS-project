@@ -7,6 +7,15 @@
 
 ## Revision log
 
+- **rev 70 (2026-10-09)** — **Vehicle owner vs typed customer: ask, never switch silently.** Bug report: after a
+  completed entry a different customer name was pasted, yet the new entry saved under the previous name. Cause:
+  `PartyResolver` adopted a known vehicle's owner whenever a customer *name* was typed without an id, ignoring the
+  typed name (the previous entry's vehicle number was still in the form). AGENT.md "Linking" updated first.
+  Frontend: on Save Draft / Submit / Send for Review (Receipt and Expense, new documents), if the typed vehicle
+  number belongs to another customer, a dialog with two option boxes — "XYZ is correct" / "Update the name to BCD"
+  (rename via the existing `PATCH /customers/{id}`, phone preserved) — and a Proceed button. No check while typing.
+  Server: `PartyResolver` now rejects a typed name that differs from the vehicle owner's (409) on both the
+  typed-number and picked-vehicle paths; same name (case/space-insensitive) or no name is unchanged. No migration.
 - **rev 69 (2026-10-09)** — **Accountant "Credit" bucket = the Credit status.** Bug report: receipt for Manoj
   (₹3,000 cash + ₹4,000 bank, status Received) appeared under Credit. Cause: the bucket was "non-claim and not
   all-cash", so any bank/UPI/mixed receipt landed there. Decision (user): Credit holds only receipts whose

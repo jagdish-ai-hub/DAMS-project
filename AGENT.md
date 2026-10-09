@@ -183,6 +183,17 @@ One "cause" = one document, containing many sub-transaction lines:
   section, and searches by **customer, vehicle no, Job Card / DBM or invoice**
   (a receive ID still matches). Results lead with Customer · Vehicle · DBM; the
   Ooriba ID / job-card reference is the small second line.
+  **Vehicle on record under a different name (rev 70):** when the cashier
+  saves or submits a Receipt or Expense whose typed vehicle number already
+  belongs to a customer other than the one entered, the app never switches
+  customer silently. A dialog shows "vehicle ABC is on record under XYZ, but
+  you entered BCD" with two option boxes — *XYZ is correct* (save under the
+  record's customer) or *Update the name to BCD* (renames that customer, for
+  all their records) — and proceeds on the one selected. Only a typed new
+  name can be a rename; a *picked* different customer offers only the first.
+  The check runs at save/submit only, never while typing. The server enforces
+  the same rule: a typed name that differs from the vehicle owner's is
+  rejected (409), not ignored.
   An expense/receipt may carry `customer_id`
   + `vehicle_id` even without a job card; if a job card is also given, its
   customer/vehicle must match.

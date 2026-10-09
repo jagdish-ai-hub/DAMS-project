@@ -7,6 +7,7 @@ import { receiptsApi, type CreateReceiptRequest, type DocumentHistoryEntry, type
 import { card, ErrorBanner, inr, primaryBtn, ghostBtn, inputStyle, Spinner, istToday } from '../shell/ui'
 import { BusinessStatusSelect } from '../shared/BusinessStatusSelect'
 import { CustomerCombobox, JobCardSearch, VehicleCombobox } from '../shared/PartyPickers'
+import { useVehicleOwnerCheck } from '../shared/VehicleOwnerCheck'
 import AttachmentsPanel, { type LineTarget } from './AttachmentsPanel'
 import { Printer, QrCode } from 'lucide-react'
 import PrintReceiptModal from './PrintReceiptModal'
@@ -295,6 +296,27 @@ export default function NewReceiptPage() {
     return null
   }
 
+  const { check: checkOwner, dialog: ownerDialog } = useVehicleOwnerCheck()
+
+  /**
+   * rev 70 — at save/submit only: if the typed vehicle number is on record under a different
+   * customer, ask which is right instead of letting the server switch silently. Returns the body
+   * fields to override, or null when the cashier cancelled.
+   */
+  async function resolveOwner(): Promise<Partial<CreateReceiptRequest> | null> {
+    if (jcPick?.customerId != null) return {} // the linked job card already fixes the customer
+    const out = await checkOwner({ customerId, customerName, vehicleId, vehicleNo })
+    if (out === 'cancel') return null
+    if (out == null) return {}
+    setCustomerId(out.customerId)
+    setCustomerName(out.customerName)
+    setVehicleId(out.vehicleId)
+    return {
+      customerId: out.customerId, customerName: undefined, customerPhone: undefined,
+      vehicleId: out.vehicleId, vehicleNo: undefined,
+    }
+  }
+
   function buildBody(submit: boolean): CreateReceiptRequest {
     return {
       // Linking an existing job card: the customer is only sent when that card has none yet
@@ -330,7 +352,9 @@ export default function NewReceiptPage() {
     setBusy(true)
     setError('')
     try {
-      const { data } = await receiptsApi.create(buildBody(submit))
+      const owner = await resolveOwner()
+      if (!owner) return
+      const { data } = await receiptsApi.create({ ...buildBody(submit), ...owner })
       if (submit) {
         finish(true, data)
       } else {
@@ -373,7 +397,9 @@ export default function NewReceiptPage() {
     setBusy(true)
     setError('')
     try {
-      const { data } = await receiptsApi.create(buildBody(false))
+      const owner = await resolveOwner()
+      if (!owner) return null
+      const { data } = await receiptsApi.create({ ...buildBody(false), ...owner })
       setLoadedDoc(data)
       if (data.lines.length) {
         setLines(
@@ -954,6 +980,7 @@ export default function NewReceiptPage() {
         </div>
       </section>
 
+      {ownerDialog}
       {showPrintModal && loadedDoc && (
         <PrintReceiptModal doc={loadedDoc} onClose={() => setShowPrintModal(false)} />
       )}
