@@ -153,7 +153,7 @@ class AiAssistantServiceTest {
     private DashboardSummary summary() {
         return new DashboardSummary("ALL", "mtd",
             new DashboardKpis(new BigDecimal("50000"), new BigDecimal("20000"),
-                new BigDecimal("30000"), new BigDecimal("10000"), 3L),
+                new BigDecimal("30000"), new BigDecimal("10000"), 3L, BigDecimal.ZERO, BigDecimal.ZERO),
             List.of(), List.<NamedAmount>of(), List.<NamedAmount>of(),
             List.<BranchComparisonRow>of());
     }

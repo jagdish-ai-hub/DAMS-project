@@ -7,6 +7,16 @@
 
 ## Revision log
 
+- **rev 71 (2026-10-09)** — **Owner dashboard brought in line with the current workflows.** Audit against the live
+  DB found: Cash in hand = last close + *today's* movement only (OOJ/OOB last closed 30 Aug, so weeks of cash were
+  ignored); approved-only KPIs hid ₹9.26 L awaiting approval with no hint; "pending review" sat under Cash in hand;
+  the activity feed skipped ~23% of events (payments added, overrides, status changes…). Built: running cash
+  position (new `DrawerService.runningPositions` + `GET /dashboard/cash-breakdown`, signed rows summing to the
+  card), "awaiting approval" sub-line on Collections / Expenses (`DashboardKpis.collectionsAwaiting/expensesAwaiting`),
+  wider activity feed, and the new **Stuck with whom** card (`GET /dashboard/pending-work`, `PendingWorkService`) with a
+  details modal. AGENT.md updated first. **Not done, awaiting the owner's rule:** (C) closed claims in Collections
+  at the FM final amount instead of the cashier's lines; (D) Outstanding excluding draft-only / no-live-receipt
+  job cards. The Cash page's one-day drawer formula is unchanged.
 - **rev 70 (2026-10-09)** — **Vehicle owner vs typed customer: ask, never switch silently.** Bug report: after a
   completed entry a different customer name was pasted, yet the new entry saved under the previous name. Cause:
   `PartyResolver` adopted a known vehicle's owner whenever a customer *name* was typed without an id, ignoring the

@@ -275,6 +275,29 @@ has `org_id = null`.
    far. An expense closed by the Accountant before claim closing existed (no
    recorded final amount) is left out. The Expenses KPI is unchanged — it
    counts what was actually spent.
+   **Owner dashboard accuracy (rev 71).** (1) **Cash in hand is a running
+   position:** the branch's last closing count (or its configured opening),
+   plus every cash receipt / Cash In, minus every cash expense / Cash Out
+   dated after that close up to today — days that were never closed are
+   included, not skipped. The Cash page keeps its one-day formula. Clicking
+   the card lists those movements (opening and expenses/Cash Out signed) and
+   its total equals the card. (2) **Collections and Expenses stay
+   approved-only**, and each card now also shows what is **awaiting approval**
+   for the same period (submitted, verified or queried, never drafts or
+   rejected). The "pending review" count no longer sits under Cash in hand.
+   (3) **Stuck with whom:** a card with three tiles — Cashier, Accountant,
+   Finance Manager — each showing how many entries are waiting on that person
+   and their value; clicking a tile lists the entries (document, branch,
+   party, stage, amount, days waiting) and a row opens the document. *Cashier*
+   = queried / sent back (drafts not yet submitted are shown beside it, not in
+   its count). *Accountant* = submitted, FM-queried, and expenses verified or
+   approved that only the Accountant closes. *Finance Manager* = verified
+   receipts and cash movements, expenses that need FM approval (over limit or a
+   status that requires it), claim expenses awaiting Close Claim, and
+   pre-approval requests. Approved receipts, closed and rejected entries are
+   not stuck. (4) **Recent activity** also lists overrides, payments added,
+   status / category / claim-type changes, transfers to claim, approval
+   requests, pre-approvals and cash re-opens.
    **A reviewer may change an expense's business status (rev 58).** The
    Accountant (own branches), Finance Manager and Owner can change it from the
    review screen while the expense is SUBMITTED, VERIFIED, APPROVED or

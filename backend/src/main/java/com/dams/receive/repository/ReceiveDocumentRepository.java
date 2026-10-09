@@ -92,4 +92,16 @@ public interface ReceiveDocumentRepository extends JpaRepository<ReceiveDocument
 
     /** Super Admin org-purge only. */
     long deleteByOrgId(Long orgId);
+
+    /** Documents in any of {@code statuses}, optionally one branch — the Owner dashboard's "stuck with whom" card (rev 71). */
+    @Query("""
+        select d from ReceiveDocument d
+        where d.orgId = :orgId
+          and d.workflowStatus in :statuses
+          and (:branchId is null or d.branchId = :branchId)
+        order by d.submittedAt asc nulls last, d.createdAt asc, d.id asc
+        """)
+    List<ReceiveDocument> findForPendingWork(@Param("orgId") Long orgId,
+                                             @Param("statuses") Collection<WorkflowStatus> statuses,
+                                             @Param("branchId") Long branchId);
 }

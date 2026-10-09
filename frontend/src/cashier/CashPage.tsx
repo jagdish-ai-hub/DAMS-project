@@ -63,6 +63,7 @@ export default function CashPage() {
   }
 
   function openBreakdownRow(row: BreakdownRow) {
+    if (row.documentId == null) return
     setBreakdown(null)
     const path = row.kind === 'expense' ? '/app/new-expense' : row.kind === 'receipt' ? '/app/new-receipt' : '/app/cash'
     navigate(`${path}?editDoc=${row.documentId}`)

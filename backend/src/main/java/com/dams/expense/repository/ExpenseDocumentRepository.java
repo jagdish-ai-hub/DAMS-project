@@ -124,4 +124,16 @@ public interface ExpenseDocumentRepository extends JpaRepository<ExpenseDocument
     /** The FM's pending pre-approval requests (rev 53), oldest first. */
     List<ExpenseDocument> findByOrgIdAndPreApprovalStatusOrderByApprovalRequestedAtAscIdAsc(
         Long orgId, com.dams.expense.entity.PreApprovalStatus preApprovalStatus);
+
+    /** Documents in any of {@code statuses}, optionally one branch — the Owner dashboard's "stuck with whom" card (rev 71). */
+    @Query("""
+        select d from ExpenseDocument d
+        where d.orgId = :orgId
+          and d.workflowStatus in :statuses
+          and (:branchId is null or d.branchId = :branchId)
+        order by d.submittedAt asc nulls last, d.createdAt asc, d.id asc
+        """)
+    List<ExpenseDocument> findForPendingWork(@Param("orgId") Long orgId,
+                                             @Param("statuses") Collection<ExpenseWorkflowStatus> statuses,
+                                             @Param("branchId") Long branchId);
 }

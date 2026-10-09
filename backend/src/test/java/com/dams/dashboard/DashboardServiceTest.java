@@ -100,8 +100,8 @@ class DashboardServiceTest {
             .thenReturn(java.util.Optional.empty());
         lenient().when(cashDayCloseRepo.findByOrgIdOrderByCloseDateDesc(ORG)).thenReturn(List.of());
         // Batched drawer roll-up: each branch's computed position (was one position() call per branch).
-        lenient().when(drawerService.computedPositions(eq(ORG), any(), any()))
-            .thenReturn(java.util.Map.of(2L, new BigDecimal("4000"), 3L, new BigDecimal("4000")));
+        lenient().when(drawerService.runningPositions(eq(ORG), any(), any()))
+            .thenReturn(java.util.Map.of(2L, running("4000"), 3L, running("4000")));
         lenient().when(receiveDocumentRepo.countPendingReviewByBranch(ORG)).thenReturn(List.of());
         lenient().when(expenseDocumentRepo.countPendingReviewByBranch(ORG)).thenReturn(List.of());
         lenient().when(cashDocumentRepo.countPendingReviewByBranch(ORG)).thenReturn(List.of());
@@ -128,6 +128,36 @@ class DashboardServiceTest {
         // two branches, each drawer 4000 → 8000, and no cash_document ever touched collections/expenses
         assertThat(s.kpis().cashInHand()).isEqualByComparingTo("8000");
         assertThat(s.kpis().pendingReview()).isEqualTo(3L);
+    }
+
+    /** rev 71: the approved-only headline is accompanied by what is still awaiting approval. */
+    @Test
+    void summary_kpis_carryTheAwaitingApprovalAmountsBesideTheApprovedOnes() {
+        when(settlementLineRepo.dashboardCollections(eq(ORG), any(), any(), isNull())).thenReturn(new BigDecimal("95376"));
+        when(expenseLineRepo.dashboardExpenses(eq(ORG), any(), any(), isNull())).thenReturn(BigDecimal.ZERO);
+        when(settlementLineRepo.dashboardCollectionsAwaiting(eq(ORG), any(), any(), isNull())).thenReturn(new BigDecimal("925813"));
+        when(expenseLineRepo.dashboardExpensesAwaiting(eq(ORG), any(), any(), isNull())).thenReturn(new BigDecimal("8570"));
+
+        DashboardSummary s = service.summary(null, "mtd");
+
+        assertThat(s.kpis().collections()).isEqualByComparingTo("95376");
+        assertThat(s.kpis().collectionsAwaiting()).isEqualByComparingTo("925813");
+        assertThat(s.kpis().expensesAwaiting()).isEqualByComparingTo("8570");
+        // the awaiting money never leaks into the approved-only headline or Net
+        assertThat(s.kpis().net()).isEqualByComparingTo("95376");
+    }
+
+    /** rev 71: cash in hand is the RUNNING position — days that were never closed are not skipped. */
+    @Test
+    void summary_cashInHand_isTheRunningPosition() {
+        when(drawerService.runningPositions(eq(ORG), any(), any()))
+            .thenReturn(java.util.Map.of(2L, running("99250"), 3L, running("83180")));
+
+        DashboardSummary s = service.summary(null, "mtd");
+
+        assertThat(s.kpis().cashInHand()).isEqualByComparingTo("182430");
+        assertThat(s.branchComparison()).extracting(r -> r.cashInHand().intValue())
+            .containsExactlyInAnyOrder(99250, 83180);
     }
 
     @Test
@@ -160,5 +190,10 @@ class DashboardServiceTest {
         b.setCode(code);
         b.setName(code + " branch");
         return b;
+    }
+
+    private static DrawerService.RunningPosition running(String position) {
+        BigDecimal p = new BigDecimal(position);
+        return new DrawerService.RunningPosition(null, BigDecimal.ZERO, false, null, p, p);
     }
 }

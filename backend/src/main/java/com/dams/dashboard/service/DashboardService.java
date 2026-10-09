@@ -72,9 +72,17 @@ import java.util.stream.Collectors;
 public class DashboardService {
 
     private static final int TREND_DAYS = 14;
+    /**
+     * Everything an Owner would want to see happen to money — including (rev 71) payments added,
+     * overrides, status / category / claim-type changes, transfers to claim, approval requests,
+     * pre-approvals and cash re-opens. Role switches and customer-attach bookkeeping are left out.
+     */
     private static final List<EventType> ACTIVITY_TYPES = List.of(
         EventType.SUBMITTED, EventType.VERIFIED, EventType.APPROVED,
-        EventType.QUERIED, EventType.REJECTED, EventType.CLOSED, EventType.SETTLED, EventType.CREATED);
+        EventType.QUERIED, EventType.REJECTED, EventType.CLOSED, EventType.SETTLED, EventType.CREATED,
+        EventType.LINE_ADDED, EventType.OVERRIDE, EventType.STATUS_CHANGED, EventType.CATEGORY_CHANGED,
+        EventType.CLAIM_TYPE_CHANGED, EventType.TRANSFERRED_TO_CLAIM, EventType.APPROVAL_REQUESTED,
+        EventType.PRE_APPROVED, EventType.CASH_REOPENED);
 
     private final SettlementLineRepository settlementLineRepo;
     private final ExpenseLineRepository expenseLineRepo;
@@ -156,7 +164,8 @@ public class DashboardService {
         // so the dashboard is a fixed handful of queries rather than ~8 per branch.
         List<Branch> branches = branchRepo.findByOrgIdOrderByCodeAsc(orgId);
         List<Long> branchIds = branches.stream().map(Branch::getId).toList();
-        Map<Long, BigDecimal> positions = drawerService.computedPositions(orgId, branchIds, today);
+        Map<Long, BigDecimal> positions = new HashMap<>();
+        drawerService.runningPositions(orgId, branchIds, today).forEach((id, p) -> positions.put(id, p.position()));
         Map<Long, Long> pendingByBranch = mergeCounts(
             receiveDocumentRepo.countPendingReviewByBranch(orgId),
             expenseDocumentRepo.countPendingReviewByBranch(orgId),
@@ -172,8 +181,11 @@ public class DashboardService {
             ? pendingByBranch.getOrDefault(scoped.getId(), 0L)
             : pendingByBranch.values().stream().mapToLong(Long::longValue).sum();
 
+        BigDecimal collectionsAwaiting = nz(settlementLineRepo.dashboardCollectionsAwaiting(orgId, from, today, branchId));
+        BigDecimal expensesAwaiting = nz(expenseLineRepo.dashboardExpensesAwaiting(orgId, from, today, branchId));
+
         DashboardKpis kpis = new DashboardKpis(collections, expenses,
-            collections.subtract(expenses), cashInHand, pendingReview);
+            collections.subtract(expenses), cashInHand, pendingReview, collectionsAwaiting, expensesAwaiting);
 
         return new DashboardSummary(
             scoped != null ? scoped.getCode() : "ALL",
@@ -338,6 +350,28 @@ public class DashboardService {
             m.put(mode.getId(), mode.getName());
         }
         return m;
+    }
+
+    // ==================================================================== cash breakdown
+
+    /**
+     * The movements behind the Cash in hand KPI (rev 71): per branch, the opening / last counted
+     * amount and every cash movement since, expenses and Cash Out as negative amounts — so the
+     * rows sum to exactly the card. Same running rule as {@link DrawerService#runningPositions}.
+     */
+    @Transactional(readOnly = true)
+    public List<MoneyMovementItem> cashBreakdown(Long branchId) {
+        Long orgId = TenantContext.requireOrgId();
+        resolveBranch(orgId, branchId);
+        LocalDate today = OrgTime.today();
+        List<MoneyMovementItem> out = new ArrayList<>();
+        for (Branch b : branchRepo.findByOrgIdOrderByCodeAsc(orgId)) {
+            if (branchId != null && !branchId.equals(b.getId())) {
+                continue;
+            }
+            out.addAll(drawerService.runningBreakdown(orgId, b.getId(), b.getCode(), today));
+        }
+        return out;
     }
 
     // ==================================================================== outstanding
@@ -539,6 +573,7 @@ public class DashboardService {
             case "ExpenseDocument" -> "expense";
             case "CashDocument" -> "cash movement";
             case "JobCard" -> "job card";
+            case "CashDayClose" -> "cash close";
             default -> entityType;
         };
     }
@@ -563,6 +598,15 @@ public class DashboardService {
             case REJECTED -> "Rejected";
             case CLOSED -> "Closed";
             case SETTLED -> "Settled";
+            case LINE_ADDED -> "Added a payment to";
+            case OVERRIDE -> "Overrode an amount on";
+            case STATUS_CHANGED -> "Changed the status of";
+            case CATEGORY_CHANGED -> "Changed the category of";
+            case CLAIM_TYPE_CHANGED -> "Changed the claim type of";
+            case TRANSFERRED_TO_CLAIM -> "Moved to claim:";
+            case APPROVAL_REQUESTED -> "Asked for approval on";
+            case PRE_APPROVED -> "Pre-approved";
+            case CASH_REOPENED -> "Re-opened the";
             default -> type.name();
         };
     }

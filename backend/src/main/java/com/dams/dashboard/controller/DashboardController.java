@@ -5,7 +5,9 @@ import com.dams.dashboard.dto.ClaimsSummary;
 import com.dams.dashboard.dto.DashboardSummary;
 import com.dams.dashboard.dto.MoneyMovementItem;
 import com.dams.dashboard.dto.OutstandingItem;
+import com.dams.dashboard.dto.PendingWork;
 import com.dams.dashboard.service.ClaimsSummaryService;
+import com.dams.dashboard.service.PendingWorkService;
 import com.dams.dashboard.service.DashboardService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -32,10 +34,13 @@ public class DashboardController {
 
     private final DashboardService dashboardService;
     private final ClaimsSummaryService claimsSummaryService;
+    private final PendingWorkService pendingWorkService;
 
-    public DashboardController(DashboardService dashboardService, ClaimsSummaryService claimsSummaryService) {
+    public DashboardController(DashboardService dashboardService, ClaimsSummaryService claimsSummaryService,
+                               PendingWorkService pendingWorkService) {
         this.dashboardService = dashboardService;
         this.claimsSummaryService = claimsSummaryService;
+        this.pendingWorkService = pendingWorkService;
     }
 
     @GetMapping("/summary")
@@ -70,6 +75,18 @@ public class DashboardController {
     public List<MoneyMovementItem> expensesBreakdown(@RequestParam(required = false) Long branchId,
                                                       @RequestParam(required = false, defaultValue = "mtd") String period) {
         return dashboardService.expensesBreakdown(branchId, period);
+    }
+
+    @GetMapping("/cash-breakdown")
+    @Operation(summary = "Movements behind the Cash in hand KPI — opening plus everything since the last close (rev 71)")
+    public List<MoneyMovementItem> cashBreakdown(@RequestParam(required = false) Long branchId) {
+        return dashboardService.cashBreakdown(branchId);
+    }
+
+    @GetMapping("/pending-work")
+    @Operation(summary = "Entries waiting on the Cashier / Accountant / Finance Manager, with details (rev 71)")
+    public PendingWork pendingWork(@RequestParam(required = false) Long branchId) {
+        return pendingWorkService.summary(branchId);
     }
 
     @GetMapping("/activity")
