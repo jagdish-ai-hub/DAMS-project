@@ -201,8 +201,10 @@ export default function NewReceiptPage() {
     })),
     [loadedDoc, modes],
   )
+  // rev 72: frozen only once approved or rejected. "Settled" (fully paid) is still in review, and a
+  // queried receipt must be able to take the bill it was queried for.
   const attachFrozen = loadedDoc != null
-    && (loadedDoc.settled || loadedDoc.workflowStatus === 'APPROVED' || loadedDoc.workflowStatus === 'REJECTED')
+    && (loadedDoc.workflowStatus === 'APPROVED' || loadedDoc.workflowStatus === 'REJECTED')
 
   const modeById = (id: number | '') => modes.find((m) => m.id === id)
 

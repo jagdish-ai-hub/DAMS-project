@@ -1,7 +1,10 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { RecordCard, type AnyDoc } from './reviewShared'
+
+// not about documents — keep the card's Documents section out of this test's way
+vi.mock('../cashier/AttachmentsPanel', () => ({ default: () => null }))
 
 /** A receipt as the Accountant / Finance Manager see it — only what the card reads. */
 function receipt(over: Record<string, unknown> = {}): AnyDoc {

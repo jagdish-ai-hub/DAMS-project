@@ -5,6 +5,9 @@ import type { ExpenseDocument, ExpenseLine } from '../api/expenses'
 import type { CashDocument } from '../api/cash'
 import type { MasterRow } from '../api/masters'
 import { BusinessStatusSelect } from '../shared/BusinessStatusSelect'
+import AttachmentsPanel, { type LineTarget } from '../cashier/AttachmentsPanel'
+import { receiptsApi } from '../api/receipts'
+import { expensesApi } from '../api/expenses'
 import { card, Badge, ghostBtn, primaryBtn, inputStyle, inr, fmtDate, fmtDateTime } from '../shell/ui'
 import { actorLabel, ROLE_LABEL } from '../auth/roleLabels'
 import type { AuthUser, Role } from '../auth/AuthContext'
@@ -120,6 +123,13 @@ export function Kv({ k, v }: { k: string; v: string }) {
   )
 }
 
+/** Mirrors the server: a receipt is frozen once approved or rejected; an expense once approved, closed or rejected. */
+function docFrozen(doc: AnyDoc): boolean {
+  return isExpense(doc)
+    ? doc.workflowStatus === 'APPROVED' || doc.workflowStatus === 'CLOSED' || doc.workflowStatus === 'REJECTED'
+    : doc.workflowStatus === 'APPROVED' || doc.workflowStatus === 'REJECTED'
+}
+
 const lcell = { padding: '8px 6px', borderTop: '1px solid var(--line)', fontSize: '0.82rem', verticalAlign: 'top' as const }
 
 /**
@@ -143,6 +153,8 @@ export function RecordCard(props: {
   statusOptions?: MasterRow[]
   onStatusChange?: (statusId: number) => Promise<void>
   onOverrideInvoice?: (amount: number, reason: string) => Promise<void>
+  /** The Accountant may add documents (and notes) from here (rev 72); everyone else only views them. */
+  canUploadDocs?: boolean
 }) {
   const { doc } = props
   const expense = isExpense(doc)
@@ -217,6 +229,9 @@ export function RecordCard(props: {
           <Kv k="Vehicle #" v={doc.vehicleNo ?? '—'} />
           {!expense && <Kv k="Chassis #" v={doc.chassisNo ?? '—'} />}
           {!expense && <Kv k="Contact" v={doc.contactPhone ?? '—'} />}
+          {/* rev 72: every role sees the customer type; the GST number is the B2B customer's, blank for B2C. */}
+          {!expense && <Kv k="Customer type" v={doc.b2b ? 'B2B' : 'B2C'} />}
+          {!expense && <Kv k="GST #" v={doc.b2b ? (doc.gstNo ?? '') : ''} />}
           <Kv k={expense ? 'Job ID / PO / SO' : 'Job card / DBM'} v={doc.dbmId ?? '—'} />
           <Kv k="Branch" v={doc.branchCode ?? '—'} />
           {expense ? (
@@ -355,6 +370,22 @@ export function RecordCard(props: {
             </div>
           )}
         </div>
+      </div>
+
+      <div style={{ ...card, marginBottom: 14 }} aria-label="Documents">
+        <AttachmentsPanel
+          docId={doc.id}
+          noun={expense ? 'expense' : 'receipt'}
+          frozen={docFrozen(doc)}
+          readOnly={!props.canUploadDocs}
+          allowRemove={false}
+          lineTargets={lines.map<LineTarget>((l) => ({
+            lineNo: l.lineNo,
+            label: `Line ${l.lineNo} · ${'subCategoryName' in l ? l.subCategoryName : l.settlementModeName} ${inr(l.amount)}`,
+          }))}
+          api={expense ? expensesApi : receiptsApi}
+          ensureDraft={async () => doc.id}
+        />
       </div>
 
       <div style={{ ...card, marginBottom: 14 }}>

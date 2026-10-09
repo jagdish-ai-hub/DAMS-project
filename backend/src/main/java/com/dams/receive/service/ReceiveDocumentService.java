@@ -602,11 +602,8 @@ public class ReceiveDocumentService {
         auditService.recordSystemEvent(ENTITY, doc.getId(), doc.getBranchId(), EventType.SETTLED,
             orderedDetail("pendingAmount", BigDecimal.ZERO, "invoiceAmount", jobCard.getInvoiceAmount()));
 
-        List<Long> lineIds = settlementLineRepo
-            .findByOrgIdAndReceiveDocumentIdOrderByLineNoAsc(orgId, doc.getId())
-            .stream().map(SettlementLine::getId).toList();
-        attachmentService.freezeReceiveDocument(orgId, doc.getId(), lineIds);
-
+        // rev 72: settling does NOT freeze the document's files any more — it is still under
+        // review, and a query for a missing bill must be answerable. They freeze on approval.
         log.info("ReceiveDocument auto-settled at pending 0: orgId={} docId={} documentNo={}",
             orgId, doc.getId(), doc.getDocumentNo());
     }

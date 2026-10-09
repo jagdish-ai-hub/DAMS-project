@@ -36,9 +36,11 @@ import java.util.Set;
  * this class owns the {@code attachment} rows and the rules around them:
  *
  *   - only PDF / image, max {@value #MAX_BYTES} bytes;
- *   - no uploads once the owning document is "done" — a receive document that is settled or
- *     rejected, or an expense document that is closed or rejected;
- *   - frozen attachments (set when a document is settled / approved / closed) cannot be deleted.
+ *   - no uploads once the owning document is "done" — a receive document that is approved or
+ *     rejected, or an expense document that is approved, closed or rejected (rev 72: a receipt
+ *     that is merely fully paid — "settled" — is still in review and stays open, so a queried
+ *     receipt can always take the document it was queried for);
+ *   - frozen attachments (set when a document is approved / closed) cannot be deleted.
  */
 @Service
 public class AttachmentService {
@@ -167,8 +169,8 @@ public class AttachmentService {
     }
 
     /**
-     * Freeze every attachment on a receive document and its lines. Called when the document
-     * settles (Stage 4) and, later, on approve / claim-close.
+     * Freeze every attachment on a receive document and its lines. Called on approve and on
+     * claim-close — not when the document merely settles (rev 72).
      */
     @Transactional
     public void freezeReceiveDocument(Long orgId, Long receiveDocumentId, List<Long> settlementLineIds) {
@@ -234,10 +236,11 @@ public class AttachmentService {
     }
 
     private static OwningDoc receiveOwner(ReceiveDocument doc) {
-        // Frozen once approved or closed (settled is the receipt's closed state).
-        // VERIFIED stays open: the FM's approval is still pending.
-        boolean frozen = doc.isSettled()
-            || doc.getWorkflowStatus() == WorkflowStatus.APPROVED
+        // Frozen once approved (a claim close needs every document approved, so that is covered
+        // too) or rejected. "Settled" (fully paid) is NOT frozen: the document is still under
+        // review, and a query for a missing bill must be answerable. VERIFIED stays open as well:
+        // the FM's approval is still pending.
+        boolean frozen = doc.getWorkflowStatus() == WorkflowStatus.APPROVED
             || doc.getWorkflowStatus() == WorkflowStatus.REJECTED;
         return new OwningDoc(frozen, doc.getBranchId(),
             doc.getDocumentNo() != null ? doc.getDocumentNo() : "#" + doc.getId());

@@ -473,7 +473,7 @@ class ReceiveDocumentServiceTest {
     }
 
     @Test
-    void document_autoSettles_withASystemEvent_whenPendingReachesZero() {
+    void document_autoSettles_withASystemEvent_whenPendingReachesZero_withoutFreezingItsFiles() {
         ReceiveDocument open = openDoc();
         when(receiveDocumentRepo.findByIdAndOrgId(500L, ORG)).thenReturn(Optional.of(open));
         when(pendingAmountCalculator.forJobCard(any(JobCard.class))).thenReturn(BigDecimal.ZERO);
@@ -484,7 +484,9 @@ class ReceiveDocumentServiceTest {
 
         assertThat(open.isSettled()).isTrue();
         verify(auditService).recordSystemEvent(eq("ReceiveDocument"), eq(500L), any(), eq(EventType.SETTLED), any());
-        verify(attachmentService).freezeReceiveDocument(eq(ORG), eq(500L), any());
+        // rev 72: fully paid is not "done" — the document is still in review, so its files stay open
+        // (they freeze on approval). Freezing here is what stopped a queried receipt taking a bill.
+        verify(attachmentService, never()).freezeReceiveDocument(any(), any(), any());
     }
 
     @Test

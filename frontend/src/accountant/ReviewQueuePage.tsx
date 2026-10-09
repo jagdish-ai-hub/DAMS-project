@@ -1149,6 +1149,7 @@ function RecordDetail(props: {
           <RecordCard
             doc={doc as AnyDoc}
             canOverride={canReview || canResendToFm}
+            canUploadDocs
             busy={busy}
             onError={setError}
             onOverride={(lineNo, amount, reason) =>

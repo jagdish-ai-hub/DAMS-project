@@ -373,6 +373,22 @@ from Postgres by object key + org_id, served via short-lived signed URLs —
 never public links. Shown via a **"View Receipts" button that opens on
 click — not inline thumbnails.** Frozen (no replace/delete) once the
 parent document is Approved or Closed.
+**What "frozen" means (rev 72):** a receipt is frozen only when it is
+**Approved** or **Rejected** (an expense: Approved, Closed or Rejected). A
+receipt that is fully paid ("settled") is **not** frozen while it is still in
+review — when the Accountant or Finance Manager queries it, the Cashier must be
+able to add (and replace a wrong) document. Files are therefore frozen at
+approval / claim-close, never merely because a receipt became fully paid.
+**Who can see and add documents on a review card (rev 72):** the Accountant,
+Finance Manager and Owner review card has a **Documents** section listing every
+file attached to the receipt or expense — whole-document and per-line — each
+opening in the same viewer the Cashier uses. The **Accountant can also upload**
+(in their own branches, while the record is not frozen) and add a note to a
+file — e.g. when the Finance Manager sent it back for a missing bill — but
+cannot remove the Cashier's files. Finance Manager and Owner are view-only.
+**GST on the review card (rev 72):** every receipt shows its customer type
+(B2B / B2C); the **GST #** shows the number for a B2B customer and is blank for
+B2C.
 
 ## Tech stack (fixed — do not substitute)
 - Backend: Java 21, Spring Boot 3.x, Maven. Spring Web, Spring Data JPA,

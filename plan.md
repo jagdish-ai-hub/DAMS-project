@@ -7,6 +7,16 @@
 
 ## Revision log
 
+- **rev 72 (2026-10-09)** — **Documents and GST on the review screens.** Bug reports (live receipts OOR-OCT26-R-011 /
+  R-012): (1) a queried receipt could not take a new attachment; (2) the Accountant could not see an uploaded
+  document; (3) nor the Finance Manager; (4) GST details not shown. Causes, checked in the live DB: R-011 was
+  `settled` (fully paid) while QUERIED and both `AttachmentService.receiveOwner` and the form's `attachFrozen`
+  treated *settled* as frozen; R-012's file was frozen the moment it settled, so the Cashier could not replace
+  it once queried; and the shared `RecordCard` (Accountant, FM, Owner) had no documents section or GST line.
+  Fix: receipts freeze only at APPROVED / REJECTED (what AGENT.md already said); settling no longer freezes
+  files; V40 un-freezes files wrongly frozen on receipts that were never approved; `RecordCard` gets a Documents
+  section (view for all; the Accountant can also upload and add notes, not remove) and Customer type + GST #
+  rows (number for B2B, blank for B2C). Owner decisions: Accountant may upload; GST blank for B2C.
 - **rev 71 (2026-10-09)** — **Owner dashboard brought in line with the current workflows.** Audit against the live
   DB found: Cash in hand = last close + *today's* movement only (OOJ/OOB last closed 30 Aug, so weeks of cash were
   ignored); approved-only KPIs hid ₹9.26 L awaiting approval with no hint; "pending review" sat under Cash in hand;

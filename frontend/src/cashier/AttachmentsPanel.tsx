@@ -39,8 +39,14 @@ export default function AttachmentsPanel(props: {
   api: AttachmentApi
   /** Save the form as a draft, return the new id (or null if it could not be saved). */
   ensureDraft: () => Promise<number | null>
+  /** View only — no upload, no remove, no note editing (the Finance Manager / Owner review card, rev 72). */
+  readOnly?: boolean
+  /** Show Remove on unfrozen files. The Accountant may add files and notes but not remove the Cashier's (rev 72). */
+  allowRemove?: boolean
 }) {
   const { docId, api, lineTargets, noun, frozen } = props
+  const readOnly = props.readOnly === true
+  const allowRemove = props.allowRemove !== false
   const [loaded, setLoaded] = useState<Loaded[] | null>(docId == null ? [] : null)
   const [staged, setStaged] = useState<Staged[]>([])
   const [busy, setBusy] = useState(false)
@@ -182,13 +188,13 @@ export default function AttachmentsPanel(props: {
       <div style={{ marginBottom: 8 }}>
         <h4 style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--navy)' }}>Documents</h4>
         <span style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>
-          scanned voucher / bill / proof — PDF or image, up to {MAX_MB} MB each
+          {readOnly ? `bills and proofs attached to this ${noun}` : `scanned voucher / bill / proof — PDF or image, up to ${MAX_MB} MB each`}
         </span>
       </div>
 
       <ErrorBanner message={error} />
 
-      {frozen ? (
+      {readOnly ? null : frozen ? (
         <div style={{ fontSize: '0.8rem', color: 'var(--faint)' }}>
           This {noun} is closed — its documents are frozen and can’t be changed.
         </div>
@@ -312,7 +318,7 @@ export default function AttachmentsPanel(props: {
                 <span style={{ fontSize: '0.72rem', color: 'var(--faint)', whiteSpace: 'nowrap' }}>{fmtSize(a.sizeBytes)}</span>
                 <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
                   <button type="button" onClick={() => view(a)} style={{ ...ghostBtn, minHeight: 36 }} aria-label={`View attachment ${a.filename}`}>View</button>
-                  {!frozen && !a.frozen && (
+                  {!readOnly && allowRemove && !frozen && !a.frozen && (
                     <button
                       type="button"
                       onClick={() => remove(a.id)}
@@ -352,13 +358,15 @@ export default function AttachmentsPanel(props: {
                       “{a.comment}”
                     </span>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => setEditingComment({ id: a.id, text: a.comment ?? '' })}
-                    style={{ border: 'none', background: 'none', color: 'var(--navy2)', fontSize: '0.74rem', fontWeight: 600, cursor: 'pointer', padding: 0 }}
-                  >
-                    {a.comment ? 'Edit note' : '+ Add note'}
-                  </button>
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingComment({ id: a.id, text: a.comment ?? '' })}
+                      style={{ border: 'none', background: 'none', color: 'var(--navy2)', fontSize: '0.74rem', fontWeight: 600, cursor: 'pointer', padding: 0 }}
+                    >
+                      {a.comment ? 'Edit note' : '+ Add note'}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
