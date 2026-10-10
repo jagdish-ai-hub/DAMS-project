@@ -46,6 +46,14 @@ accountants, plus the owner's live window into branch operations.
   `claim_type_id`), its business status isn't "Credit", and every
   settlement line is cash-mode. Everything else still requires FM approval
   as usual. See plan.md rev 46.
+  **Accountant queue buckets (rev 69):** the Receipts queue splits into
+  *Cash* (the direct-approve rule above — the only bucket with bulk
+  approve), *Credit* (business status is "Credit", not a claim) and *Claim
+  Transaction* (has a claim type). "Credit" means exactly the Credit status
+  — a Received receipt paid part cash / part bank is **not** Credit — so a
+  receipt leaves Credit the moment its status is changed (by the Accountant,
+  or by the Cashier after adding settlement lines). Receipts in none of the
+  three show under All only. See plan.md rev 69.
   **FM-queried entries land back here, not with the Cashier (rev 49):**
   when the FM queries a VERIFIED entry, it returns to the Accountant's own
   queue (not the Cashier's My Entries) as `FM_QUERIED`, with the same
@@ -175,6 +183,17 @@ One "cause" = one document, containing many sub-transaction lines:
   section, and searches by **customer, vehicle no, Job Card / DBM or invoice**
   (a receive ID still matches). Results lead with Customer · Vehicle · DBM; the
   Ooriba ID / job-card reference is the small second line.
+  **Vehicle on record under a different name (rev 70):** when the cashier
+  saves or submits a Receipt or Expense whose typed vehicle number already
+  belongs to a customer other than the one entered, the app never switches
+  customer silently. A dialog shows "vehicle ABC is on record under XYZ, but
+  you entered BCD" with two option boxes — *XYZ is correct* (save under the
+  record's customer) or *Update the name to BCD* (renames that customer, for
+  all their records) — and proceeds on the one selected. Only a typed new
+  name can be a rename; a *picked* different customer offers only the first.
+  The check runs at save/submit only, never while typing. The server enforces
+  the same rule: a typed name that differs from the vehicle owner's is
+  rejected (409), not ignored.
   An expense/receipt may carry `customer_id`
   + `vehicle_id` even without a job card; if a job card is also given, its
   customer/vehicle must match.
@@ -256,6 +275,44 @@ has `org_id = null`.
    far. An expense closed by the Accountant before claim closing existed (no
    recorded final amount) is left out. The Expenses KPI is unchanged — it
    counts what was actually spent.
+   **Owner dashboard accuracy (rev 71).** (1) **Cash in hand is a running
+   position:** the branch's last closing count (or its configured opening),
+   plus every cash receipt / Cash In, minus every cash expense / Cash Out
+   dated after that close up to today — days that were never closed are
+   included, not skipped. The Cash page keeps its one-day formula. Clicking
+   the card lists those movements (opening and expenses/Cash Out signed) and
+   its total equals the card. (2) **Collections and Expenses stay
+   approved-only**, and each card now also shows what is **awaiting approval**
+   for the same period (submitted, verified or queried, never drafts or
+   rejected). The "pending review" count no longer sits under Cash in hand.
+   (3) **Stuck with whom:** a card with three tiles — Cashier, Accountant,
+   Finance Manager — each showing how many entries are waiting on that person
+   and their value; clicking a tile lists the entries (document, branch,
+   party, stage, amount, days waiting) and a row opens the document. *Cashier*
+   = queried / sent back (drafts not yet submitted are shown beside it, not in
+   its count). *Accountant* = submitted, FM-queried, and expenses verified or
+   approved that only the Accountant closes. *Finance Manager* = verified
+   receipts and cash movements, expenses that need FM approval (over limit or a
+   status that requires it), claim expenses awaiting Close Claim, and
+   pre-approval requests. Approved receipts, closed and rejected entries are
+   not stuck. (4) **Recent activity** also lists overrides, payments added,
+   status / category / claim-type changes, transfers to claim, approval
+   requests, pre-approvals and cash re-opens.
+   **Closed claims in Collections (rev 73).** Collections follows the Finance
+   Manager's decision on a closed claim: for each closed receipt claim, the
+   money counted is the **final amount recovered**, not the Cashier's payment
+   lines. The payment lines still count on their own dates; the difference
+   (final amount − approved lines) is added as one labelled **Claim final amount
+   adjustment** on the day the claim was closed, in the same branch — so a claim
+   closed lower than entered reduces Collections, one closed higher raises it. It
+   shows in the Collections trend, branch table, mode split and drill-down (where
+   it is a clickable row that opens the receipt), so the card always equals its
+   rows, and it agrees with the Claims card. It is **not cash**: Cash in hand,
+   the drawer and Cash In/Out never change. Open (unclosed) claims are unchanged.
+   **Outstanding (rev 73):** a job card whose only receipts are **blank drafts**
+   (nothing submitted, no payment lines) is not a receivable and is left out.
+   Job cards whose receipt was rejected stay listed until the Owner says
+   otherwise — a rejected entry may still be owed money.
    **A reviewer may change an expense's business status (rev 58).** The
    Accountant (own branches), Finance Manager and Owner can change it from the
    review screen while the expense is SUBMITTED, VERIFIED, APPROVED or
@@ -331,6 +388,22 @@ from Postgres by object key + org_id, served via short-lived signed URLs —
 never public links. Shown via a **"View Receipts" button that opens on
 click — not inline thumbnails.** Frozen (no replace/delete) once the
 parent document is Approved or Closed.
+**What "frozen" means (rev 72):** a receipt is frozen only when it is
+**Approved** or **Rejected** (an expense: Approved, Closed or Rejected). A
+receipt that is fully paid ("settled") is **not** frozen while it is still in
+review — when the Accountant or Finance Manager queries it, the Cashier must be
+able to add (and replace a wrong) document. Files are therefore frozen at
+approval / claim-close, never merely because a receipt became fully paid.
+**Who can see and add documents on a review card (rev 72):** the Accountant,
+Finance Manager and Owner review card has a **Documents** section listing every
+file attached to the receipt or expense — whole-document and per-line — each
+opening in the same viewer the Cashier uses. The **Accountant can also upload**
+(in their own branches, while the record is not frozen) and add a note to a
+file — e.g. when the Finance Manager sent it back for a missing bill — but
+cannot remove the Cashier's files. Finance Manager and Owner are view-only.
+**GST on the review card (rev 72):** every receipt shows its customer type
+(B2B / B2C); the **GST #** shows the number for a B2B customer and is blank for
+B2C.
 
 ## Tech stack (fixed — do not substitute)
 - Backend: Java 21, Spring Boot 3.x, Maven. Spring Web, Spring Data JPA,

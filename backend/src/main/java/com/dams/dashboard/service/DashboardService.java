@@ -72,9 +72,17 @@ import java.util.stream.Collectors;
 public class DashboardService {
 
     private static final int TREND_DAYS = 14;
+    /**
+     * Everything an Owner would want to see happen to money — including (rev 71) payments added,
+     * overrides, status / category / claim-type changes, transfers to claim, approval requests,
+     * pre-approvals and cash re-opens. Role switches and customer-attach bookkeeping are left out.
+     */
     private static final List<EventType> ACTIVITY_TYPES = List.of(
         EventType.SUBMITTED, EventType.VERIFIED, EventType.APPROVED,
-        EventType.QUERIED, EventType.REJECTED, EventType.CLOSED, EventType.SETTLED, EventType.CREATED);
+        EventType.QUERIED, EventType.REJECTED, EventType.CLOSED, EventType.SETTLED, EventType.CREATED,
+        EventType.LINE_ADDED, EventType.OVERRIDE, EventType.STATUS_CHANGED, EventType.CATEGORY_CHANGED,
+        EventType.CLAIM_TYPE_CHANGED, EventType.TRANSFERRED_TO_CLAIM, EventType.APPROVAL_REQUESTED,
+        EventType.PRE_APPROVED, EventType.CASH_REOPENED);
 
     private final SettlementLineRepository settlementLineRepo;
     private final ExpenseLineRepository expenseLineRepo;
@@ -97,6 +105,7 @@ public class DashboardService {
     private final AuditEventRepository auditEventRepo;
     private final AppUserRepository userRepo;
     private final ObjectMapper objectMapper;
+    private final ClaimAdjustmentService claimAdjustments;
 
     public DashboardService(SettlementLineRepository settlementLineRepo,
                             ExpenseLineRepository expenseLineRepo,
@@ -118,7 +127,8 @@ public class DashboardService {
                             PendingAmountCalculator pendingAmountCalculator,
                             AuditEventRepository auditEventRepo,
                             AppUserRepository userRepo,
-                            ObjectMapper objectMapper) {
+                            ObjectMapper objectMapper,
+                            ClaimAdjustmentService claimAdjustments) {
         this.settlementLineRepo = settlementLineRepo;
         this.expenseLineRepo = expenseLineRepo;
         this.receiveDocumentRepo = receiveDocumentRepo;
@@ -140,6 +150,7 @@ public class DashboardService {
         this.auditEventRepo = auditEventRepo;
         this.userRepo = userRepo;
         this.objectMapper = objectMapper;
+        this.claimAdjustments = claimAdjustments;
     }
 
     // ==================================================================== summary
@@ -156,14 +167,20 @@ public class DashboardService {
         // so the dashboard is a fixed handful of queries rather than ~8 per branch.
         List<Branch> branches = branchRepo.findByOrgIdOrderByCodeAsc(orgId);
         List<Long> branchIds = branches.stream().map(Branch::getId).toList();
-        Map<Long, BigDecimal> positions = drawerService.computedPositions(orgId, branchIds, today);
+        Map<Long, BigDecimal> positions = new HashMap<>();
+        drawerService.runningPositions(orgId, branchIds, today).forEach((id, p) -> positions.put(id, p.position()));
         Map<Long, Long> pendingByBranch = mergeCounts(
             receiveDocumentRepo.countPendingReviewByBranch(orgId),
             expenseDocumentRepo.countPendingReviewByBranch(orgId),
             cashDocumentRepo.countPendingReviewByBranch(orgId));
         Map<Long, ClaimAndVariance> lastCloseByBranch = latestCloseByBranch(orgId);
 
-        BigDecimal collections = nz(settlementLineRepo.dashboardCollections(orgId, from, today, branchId));
+        // rev 73: a closed claim counts at the Finance Manager's final amount — one labelled adjustment per
+        // claim on its close day. One fetch covers both the period and the 14-day trend window.
+        List<ClaimAdjustmentService.Adjustment> adjustments =
+            claimAdjustments.between(orgId, from.isBefore(trendFrom) ? from : trendFrom, today);
+        BigDecimal collections = nz(settlementLineRepo.dashboardCollections(orgId, from, today, branchId))
+            .add(adjustmentSum(adjustments, from, today, branchId));
         BigDecimal expenses = nz(expenseLineRepo.dashboardExpenses(orgId, from, today, branchId));
         BigDecimal cashInHand = scoped != null
             ? positions.getOrDefault(scoped.getId(), BigDecimal.ZERO)
@@ -172,21 +189,32 @@ public class DashboardService {
             ? pendingByBranch.getOrDefault(scoped.getId(), 0L)
             : pendingByBranch.values().stream().mapToLong(Long::longValue).sum();
 
+        BigDecimal collectionsAwaiting = nz(settlementLineRepo.dashboardCollectionsAwaiting(orgId, from, today, branchId));
+        BigDecimal expensesAwaiting = nz(expenseLineRepo.dashboardExpensesAwaiting(orgId, from, today, branchId));
+
         DashboardKpis kpis = new DashboardKpis(collections, expenses,
-            collections.subtract(expenses), cashInHand, pendingReview);
+            collections.subtract(expenses), cashInHand, pendingReview, collectionsAwaiting, expensesAwaiting);
 
         return new DashboardSummary(
             scoped != null ? scoped.getCode() : "ALL",
             "today".equals(period) ? "today" : "mtd",
             kpis,
-            trend(orgId, branchId, trendFrom, today),
-            named(settlementLineRepo.dashboardCollectionsByMode(orgId, from, today, branchId), settlementModeNames(orgId)),
+            trend(orgId, branchId, trendFrom, today, adjustments),
+            withAdjustment(named(settlementLineRepo.dashboardCollectionsByMode(orgId, from, today, branchId), settlementModeNames(orgId)),
+                adjustmentSum(adjustments, from, today, branchId)),
             named(expenseLineRepo.dashboardExpensesByCategory(orgId, from, today, branchId), expenseCategoryNames(orgId)),
-            branchComparison(orgId, from, today, branchId, branches, positions, pendingByBranch, lastCloseByBranch));
+            branchComparison(orgId, from, today, branchId, branches, positions, pendingByBranch, lastCloseByBranch,
+                adjustments));
     }
 
-    private List<TrendPoint> trend(Long orgId, Long branchId, LocalDate from, LocalDate to) {
+    private List<TrendPoint> trend(Long orgId, Long branchId, LocalDate from, LocalDate to,
+                                   List<ClaimAdjustmentService.Adjustment> adjustments) {
         Map<LocalDate, BigDecimal> col = dayMap(settlementLineRepo.dashboardCollectionsByDay(orgId, from, to, branchId));
+        for (ClaimAdjustmentService.Adjustment a : adjustments) {
+            if (inWindow(a, from, to, branchId)) {
+                col.merge(a.date(), a.amount(), BigDecimal::add);
+            }
+        }
         Map<LocalDate, BigDecimal> exp = dayMap(expenseLineRepo.dashboardExpensesByDay(orgId, from, to, branchId));
         List<TrendPoint> out = new ArrayList<>();
         for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
@@ -199,8 +227,14 @@ public class DashboardService {
                                                        List<Branch> branches,
                                                        Map<Long, BigDecimal> positions,
                                                        Map<Long, Long> pendingByBranch,
-                                                       Map<Long, ClaimAndVariance> lastCloseByBranch) {
+                                                       Map<Long, ClaimAndVariance> lastCloseByBranch,
+                                                       List<ClaimAdjustmentService.Adjustment> adjustments) {
         Map<Long, BigDecimal> colByBranch = idAmountMap(settlementLineRepo.dashboardCollectionsByBranch(orgId, from, to));
+        for (ClaimAdjustmentService.Adjustment a : adjustments) {
+            if (inWindow(a, from, to, null)) {
+                colByBranch.merge(a.branchId(), a.amount(), BigDecimal::add);
+            }
+        }
         Map<Long, BigDecimal> expByBranch = idAmountMap(expenseLineRepo.dashboardExpensesByBranch(orgId, from, to));
 
         List<BranchComparisonRow> rows = new ArrayList<>();
@@ -219,6 +253,30 @@ public class DashboardService {
         }
         return rows;
     }
+
+    private static boolean inWindow(ClaimAdjustmentService.Adjustment a, LocalDate from, LocalDate to, Long branchId) {
+        return !a.date().isBefore(from) && !a.date().isAfter(to)
+            && (branchId == null || branchId.equals(a.branchId()));
+    }
+
+    private static BigDecimal adjustmentSum(List<ClaimAdjustmentService.Adjustment> adjustments,
+                                            LocalDate from, LocalDate to, Long branchId) {
+        return adjustments.stream().filter(a -> inWindow(a, from, to, branchId))
+            .map(ClaimAdjustmentService.Adjustment::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /** The "Collections by mode" split plus, when non-zero, the closed-claim adjustment as its own named slice. */
+    private static List<NamedAmount> withAdjustment(List<NamedAmount> byMode, BigDecimal adjustment) {
+        if (adjustment.signum() == 0) {
+            return byMode;
+        }
+        List<NamedAmount> out = new ArrayList<>(byMode);
+        out.add(new NamedAmount(CLAIM_ADJUSTMENT_LABEL, adjustment));
+        return out;
+    }
+
+    /** Label of the closed-claim adjustment — in the mode split and on the drill-down rows. */
+    public static final String CLAIM_ADJUSTMENT_LABEL = "Claim final amount adjustment";
 
     private record ClaimAndVariance(LocalDate date, BigDecimal variance) {}
 
@@ -278,6 +336,20 @@ public class DashboardService {
                 modeNames.getOrDefault(l.getSettlementModeId(), "—"),
                 l.getAmount()));
         }
+
+        // rev 73: the closed-claim adjustments — one signed, clickable row per claim, so the rows
+        // add up to the card. They carry the claim's branch and customer.
+        List<ClaimAdjustmentService.Adjustment> adjustments = claimAdjustments.between(orgId, from, today).stream()
+            .filter(a -> branchId == null || branchId.equals(a.branchId())).toList();
+        Map<Long, String> adjCustomers = customerNamesFor(orgId, adjustments.stream().map(ClaimAdjustmentService.Adjustment::customerId)
+            .filter(java.util.Objects::nonNull).toList());
+        for (ClaimAdjustmentService.Adjustment a : adjustments) {
+            out.add(new MoneyMovementItem("claim-adjustment", a.documentId(), a.documentNo(), "APPROVED",
+                a.date(), a.closedAt(), branchCodes.getOrDefault(a.branchId(), "?"),
+                a.customerId() == null ? "—" : adjCustomers.getOrDefault(a.customerId(), "—"),
+                a.describe(), CLAIM_ADJUSTMENT_LABEL, a.amount()));
+        }
+        out.sort(Comparator.comparing(MoneyMovementItem::date).reversed());
         return out;
     }
 
@@ -340,6 +412,28 @@ public class DashboardService {
         return m;
     }
 
+    // ==================================================================== cash breakdown
+
+    /**
+     * The movements behind the Cash in hand KPI (rev 71): per branch, the opening / last counted
+     * amount and every cash movement since, expenses and Cash Out as negative amounts — so the
+     * rows sum to exactly the card. Same running rule as {@link DrawerService#runningPositions}.
+     */
+    @Transactional(readOnly = true)
+    public List<MoneyMovementItem> cashBreakdown(Long branchId) {
+        Long orgId = TenantContext.requireOrgId();
+        resolveBranch(orgId, branchId);
+        LocalDate today = OrgTime.today();
+        List<MoneyMovementItem> out = new ArrayList<>();
+        for (Branch b : branchRepo.findByOrgIdOrderByCodeAsc(orgId)) {
+            if (branchId != null && !branchId.equals(b.getId())) {
+                continue;
+            }
+            out.addAll(drawerService.runningBreakdown(orgId, b.getId(), b.getCode(), today));
+        }
+        return out;
+    }
+
     // ==================================================================== outstanding
 
     @Transactional(readOnly = true)
@@ -353,6 +447,9 @@ public class DashboardService {
         Map<Long, JobCard> jobCardsById = jobCards.stream()
             .collect(Collectors.toMap(JobCard::getId, j -> j, (a, b) -> a));
         java.util.Set<Long> closedJcIds = new java.util.HashSet<>(claimCloseRepo.findJobCardIdsByOrgId(orgId));
+        // rev 73: a job card whose only receipts are blank drafts (nothing submitted, no payment lines)
+        // is not a receivable yet.
+        java.util.Set<Long> draftOnlyJcIds = new java.util.HashSet<>(receiveDocumentRepo.findDraftOnlyJobCardIds(orgId));
         Map<Long, BigDecimal> receivedByJc = idAmountMap(settlementLineRepo.sumAmountByJobCard(orgId));
         Map<Long, String> branchCodes = branchCodeMap(orgId);
         Map<Long, ClaimType> claimTypesById = claimTypeRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId)
@@ -375,6 +472,9 @@ public class DashboardService {
                 continue;
             }
             if (jc.getClaimTypeId() != null) {
+                continue;
+            }
+            if (draftOnlyJcIds.contains(jc.getId()) && receivedByJc.getOrDefault(jc.getId(), BigDecimal.ZERO).signum() == 0) {
                 continue;
             }
             BigDecimal pending = pendingFor(jc, receivedByJc);
@@ -539,6 +639,7 @@ public class DashboardService {
             case "ExpenseDocument" -> "expense";
             case "CashDocument" -> "cash movement";
             case "JobCard" -> "job card";
+            case "CashDayClose" -> "cash close";
             default -> entityType;
         };
     }
@@ -563,6 +664,15 @@ public class DashboardService {
             case REJECTED -> "Rejected";
             case CLOSED -> "Closed";
             case SETTLED -> "Settled";
+            case LINE_ADDED -> "Added a payment to";
+            case OVERRIDE -> "Overrode an amount on";
+            case STATUS_CHANGED -> "Changed the status of";
+            case CATEGORY_CHANGED -> "Changed the category of";
+            case CLAIM_TYPE_CHANGED -> "Changed the claim type of";
+            case TRANSFERRED_TO_CLAIM -> "Moved to claim:";
+            case APPROVAL_REQUESTED -> "Asked for approval on";
+            case PRE_APPROVED -> "Pre-approved";
+            case CASH_REOPENED -> "Re-opened the";
             default -> type.name();
         };
     }

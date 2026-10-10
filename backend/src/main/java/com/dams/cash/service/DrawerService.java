@@ -142,110 +142,210 @@ public class DrawerService {
      */
     @Transactional(readOnly = true)
     public DrawerLines lineBreakdown(Long orgId, Long branchId, LocalDate date, String branchCode) {
-        List<Long> cashSettlementModeIds = settlementModeRepo.findByOrgIdAndCashTrue(orgId)
-            .stream().map(SettlementMode::getId).toList();
-        List<Long> cashExpenseModeIds = expenseModeRepo.findByOrgIdAndCashTrue(orgId)
-            .stream().map(ExpenseMode::getId).toList();
+        List<Long> cashSettlementModeIds = cashSettlementModeIds(orgId);
+        List<Long> cashExpenseModeIds = cashExpenseModeIds(orgId);
 
-        List<MoneyMovementItem> receiptLines = new ArrayList<>();
-        if (!cashSettlementModeIds.isEmpty()) {
-            List<Object[]> rows = settlementLineRepo.findCashModeForBranchDate(orgId, branchId, date, cashSettlementModeIds);
-            Map<Long, String> modeNames = settlementModeRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId).stream()
-                .collect(java.util.stream.Collectors.toMap(SettlementMode::getId, SettlementMode::getName));
-            Map<Long, String> customerNames = customerRepo.findByOrgIdAndIdInOrderByNameAsc(orgId, rows.stream()
-                    .map(r -> ((JobCard) r[2]).getCustomerId()).distinct().toList())
-                .stream().collect(java.util.stream.Collectors.toMap(Customer::getId, Customer::getName));
-            for (Object[] r : rows) {
-                SettlementLine l = (SettlementLine) r[0];
-                ReceiveDocument d = (ReceiveDocument) r[1];
-                JobCard jc = (JobCard) r[2];
-                receiptLines.add(new MoneyMovementItem("receipt", d.getId(), d.getDocumentNo(), d.getWorkflowStatus().name(),
-                    l.getTransactionDate(), l.getCreatedAt(), branchCode,
-                    jc.getCustomerId() == null ? "—" : customerNames.getOrDefault(jc.getCustomerId(), "—"),
-                    branchCode + "-JC-" + jc.getId(),
-                    modeNames.getOrDefault(l.getSettlementModeId(), "—"),
-                    l.getAmount()));
-            }
-        }
-
-        List<MoneyMovementItem> expenseLines = new ArrayList<>();
-        if (!cashExpenseModeIds.isEmpty()) {
-            List<Object[]> rows = expenseLineRepo.findCashModeForBranchDate(orgId, branchId, date, cashExpenseModeIds);
-            Map<Long, String> modeNames = expenseModeRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId).stream()
-                .collect(java.util.stream.Collectors.toMap(ExpenseMode::getId, ExpenseMode::getName));
-            Map<Long, String> categoryNames = expenseCategoryRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId).stream()
-                .collect(java.util.stream.Collectors.toMap(ExpenseCategory::getId, ExpenseCategory::getName));
-            Map<Long, String> receiverNames = receiverRepo.findByOrgIdAndIdIn(orgId, rows.stream()
-                    .map(r -> ((ExpenseDocument) r[1]).getReceiverId()).distinct().toList())
-                .stream().collect(java.util.stream.Collectors.toMap(Receiver::getId, Receiver::getName));
-            for (Object[] r : rows) {
-                ExpenseLine l = (ExpenseLine) r[0];
-                ExpenseDocument d = (ExpenseDocument) r[1];
-                expenseLines.add(new MoneyMovementItem("expense", d.getId(), d.getDocumentNo(), d.getWorkflowStatus().name(),
-                    l.getTransactionDate(), l.getCreatedAt(), branchCode,
-                    receiverNames.getOrDefault(d.getReceiverId(), "—"),
-                    categoryNames.getOrDefault(d.getExpenseCategoryId(), "—"),
-                    modeNames.getOrDefault(l.getExpenseModeId(), "—"),
-                    l.getAmount()));
-            }
-        }
+        List<MoneyMovementItem> receiptLines = cashSettlementModeIds.isEmpty() ? List.of()
+            : receiptItems(orgId, settlementLineRepo.findCashModeForBranchDate(orgId, branchId, date, cashSettlementModeIds), branchCode);
+        List<MoneyMovementItem> expenseLines = cashExpenseModeIds.isEmpty() ? List.of()
+            : expenseItems(orgId, expenseLineRepo.findCashModeForBranchDate(orgId, branchId, date, cashExpenseModeIds), branchCode);
         return new DrawerLines(receiptLines, expenseLines);
     }
 
-    /**
-     * {@code computedPosition} for many branches on one date, in a fixed handful of queries
-     * instead of ~8 per branch. Same formula as {@link #position}; used by the Owner dashboard
-     * roll-up (cash in hand + the branch-comparison table), never for the Cash page itself.
-     */
-    @Transactional(readOnly = true)
-    public Map<Long, BigDecimal> computedPositions(Long orgId, Collection<Long> branchIds, LocalDate date) {
-        Map<Long, BigDecimal> out = new HashMap<>();
-        if (branchIds == null || branchIds.isEmpty()) {
+    private List<Long> cashSettlementModeIds(Long orgId) {
+        return settlementModeRepo.findByOrgIdAndCashTrue(orgId).stream().map(SettlementMode::getId).toList();
+    }
+
+    private List<Long> cashExpenseModeIds(Long orgId) {
+        return expenseModeRepo.findByOrgIdAndCashTrue(orgId).stream().map(ExpenseMode::getId).toList();
+    }
+
+    /** {@code [line, document, jobCard]} rows → display items. */
+    private List<MoneyMovementItem> receiptItems(Long orgId, List<Object[]> rows, String branchCode) {
+        List<MoneyMovementItem> out = new ArrayList<>();
+        if (rows.isEmpty()) {
             return out;
         }
-
-        // opening: the most recent close strictly before the date wins (rows come newest-first,
-        // so the first one seen per branch is that branch's opening); otherwise the one-time
-        // configured opening if it is effective on/before the date; otherwise zero.
-        Map<Long, BigDecimal> opening = new HashMap<>();
-        for (CashDayClose c : cashDayCloseRepo.findByOrgIdAndCloseDateLessThanOrderByCloseDateDesc(orgId, date)) {
-            opening.putIfAbsent(c.getBranchId(), c.getCountedAmount());
-        }
-        for (BranchCashOpening o : branchCashOpeningRepo.findByOrgId(orgId)) {
-            if (!opening.containsKey(o.getBranchId()) && !o.getOpeningDate().isAfter(date)) {
-                opening.put(o.getBranchId(), o.getAmount());
-            }
-        }
-
-        List<Long> cashSettlementModeIds = settlementModeRepo.findByOrgIdAndCashTrue(orgId)
-            .stream().map(SettlementMode::getId).toList();
-        List<Long> cashExpenseModeIds = expenseModeRepo.findByOrgIdAndCashTrue(orgId)
-            .stream().map(ExpenseMode::getId).toList();
-
-        Map<Long, BigDecimal> cashReceipts = cashSettlementModeIds.isEmpty() ? Map.of()
-            : pairs(settlementLineRepo.sumCashModeByBranchForDate(orgId, date, cashSettlementModeIds));
-        Map<Long, BigDecimal> cashExpenses = cashExpenseModeIds.isEmpty() ? Map.of()
-            : pairs(expenseLineRepo.sumCashModeByBranchForDate(orgId, date, cashExpenseModeIds));
-        Map<Long, BigDecimal> cashIn = pairs(cashDocumentRepo.sumByBranchForDateAndDirection(orgId, date, CashDirection.IN));
-        Map<Long, BigDecimal> cashOut = pairs(cashDocumentRepo.sumByBranchForDateAndDirection(orgId, date, CashDirection.OUT));
-
-        for (Long branchId : branchIds) {
-            BigDecimal position = opening.getOrDefault(branchId, BigDecimal.ZERO)
-                .add(cashReceipts.getOrDefault(branchId, BigDecimal.ZERO))
-                .add(cashIn.getOrDefault(branchId, BigDecimal.ZERO))
-                .subtract(cashExpenses.getOrDefault(branchId, BigDecimal.ZERO))
-                .subtract(cashOut.getOrDefault(branchId, BigDecimal.ZERO));
-            out.put(branchId, position);
+        Map<Long, String> modeNames = settlementModeRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId).stream()
+            .collect(java.util.stream.Collectors.toMap(SettlementMode::getId, SettlementMode::getName));
+        Map<Long, String> customerNames = customerRepo.findByOrgIdAndIdInOrderByNameAsc(orgId, rows.stream()
+                .map(r -> ((JobCard) r[2]).getCustomerId()).distinct().toList())
+            .stream().collect(java.util.stream.Collectors.toMap(Customer::getId, Customer::getName));
+        for (Object[] r : rows) {
+            SettlementLine l = (SettlementLine) r[0];
+            ReceiveDocument d = (ReceiveDocument) r[1];
+            JobCard jc = (JobCard) r[2];
+            out.add(new MoneyMovementItem("receipt", d.getId(), d.getDocumentNo(), d.getWorkflowStatus().name(),
+                l.getTransactionDate(), l.getCreatedAt(), branchCode,
+                jc.getCustomerId() == null ? "—" : customerNames.getOrDefault(jc.getCustomerId(), "—"),
+                branchCode + "-JC-" + jc.getId(),
+                modeNames.getOrDefault(l.getSettlementModeId(), "—"),
+                l.getAmount()));
         }
         return out;
     }
 
-    private static Map<Long, BigDecimal> pairs(List<Object[]> rows) {
-        Map<Long, BigDecimal> m = new HashMap<>();
+    /** {@code [line, document]} rows → display items (amounts positive). */
+    private List<MoneyMovementItem> expenseItems(Long orgId, List<Object[]> rows, String branchCode) {
+        List<MoneyMovementItem> out = new ArrayList<>();
+        if (rows.isEmpty()) {
+            return out;
+        }
+        Map<Long, String> modeNames = expenseModeRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId).stream()
+            .collect(java.util.stream.Collectors.toMap(ExpenseMode::getId, ExpenseMode::getName));
+        Map<Long, String> categoryNames = expenseCategoryRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId).stream()
+            .collect(java.util.stream.Collectors.toMap(ExpenseCategory::getId, ExpenseCategory::getName));
+        Map<Long, String> receiverNames = receiverRepo.findByOrgIdAndIdIn(orgId, rows.stream()
+                .map(r -> ((ExpenseDocument) r[1]).getReceiverId()).distinct().toList())
+            .stream().collect(java.util.stream.Collectors.toMap(Receiver::getId, Receiver::getName));
         for (Object[] r : rows) {
-            m.put(((Number) r[0]).longValue(), (BigDecimal) r[1]);
+            ExpenseLine l = (ExpenseLine) r[0];
+            ExpenseDocument d = (ExpenseDocument) r[1];
+            out.add(new MoneyMovementItem("expense", d.getId(), d.getDocumentNo(), d.getWorkflowStatus().name(),
+                l.getTransactionDate(), l.getCreatedAt(), branchCode,
+                receiverNames.getOrDefault(d.getReceiverId(), "—"),
+                categoryNames.getOrDefault(d.getExpenseCategoryId(), "—"),
+                modeNames.getOrDefault(l.getExpenseModeId(), "—"),
+                l.getAmount()));
+        }
+        return out;
+    }
+
+    /**
+     * A branch's running drawer position (Owner dashboard, rev 71). {@code from} is the first date
+     * whose movement is included — the day after the last close, the configured opening's own
+     * date, or {@code null} when the branch has neither (everything on record counts).
+     */
+    public record RunningPosition(LocalDate countedOn, BigDecimal opening, boolean openingSet,
+                                  LocalDate from, BigDecimal movement, BigDecimal position) {
+    }
+
+    /**
+     * Cash in hand as of {@code date}, per branch: the last closing count strictly before the
+     * date (else the configured opening, else zero) PLUS every cash receipt / Cash In, minus every
+     * cash expense / Cash Out dated after that close up to and including {@code date}. Unlike
+     * the one-day {@link #position} it does not skip days that were never closed. Same
+     * non-DRAFT / non-REJECTED rule as the drawer. A handful of queries for any number of branches.
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, RunningPosition> runningPositions(Long orgId, Collection<Long> branchIds, LocalDate date) {
+        Map<Long, RunningPosition> out = new HashMap<>();
+        if (branchIds == null || branchIds.isEmpty()) {
+            return out;
+        }
+        Map<Long, CashDayClose> lastClose = new HashMap<>();
+        for (CashDayClose c : cashDayCloseRepo.findByOrgIdAndCloseDateLessThanOrderByCloseDateDesc(orgId, date)) {
+            lastClose.putIfAbsent(c.getBranchId(), c);   // newest first → first seen wins
+        }
+        Map<Long, BranchCashOpening> configured = new HashMap<>();
+        for (BranchCashOpening o : branchCashOpeningRepo.findByOrgId(orgId)) {
+            configured.put(o.getBranchId(), o);
+        }
+
+        List<Long> cashSettlementModeIds = cashSettlementModeIds(orgId);
+        List<Long> cashExpenseModeIds = cashExpenseModeIds(orgId);
+        Map<Long, Map<LocalDate, BigDecimal>> receipts = cashSettlementModeIds.isEmpty() ? Map.of()
+            : perDay(settlementLineRepo.sumCashModeByBranchAndDateUpTo(orgId, date, cashSettlementModeIds));
+        Map<Long, Map<LocalDate, BigDecimal>> expenses = cashExpenseModeIds.isEmpty() ? Map.of()
+            : perDay(expenseLineRepo.sumCashModeByBranchAndDateUpTo(orgId, date, cashExpenseModeIds));
+        Map<Long, Map<LocalDate, BigDecimal>> cashIn = perDay(cashDocumentRepo.sumByBranchAndDateUpTo(orgId, date, CashDirection.IN));
+        Map<Long, Map<LocalDate, BigDecimal>> cashOut = perDay(cashDocumentRepo.sumByBranchAndDateUpTo(orgId, date, CashDirection.OUT));
+
+        for (Long branchId : branchIds) {
+            CashDayClose close = lastClose.get(branchId);
+            BranchCashOpening opening = configured.get(branchId);
+            LocalDate countedOn = null;
+            LocalDate from = null;
+            BigDecimal base = BigDecimal.ZERO;
+            boolean set = false;
+            if (close != null) {
+                countedOn = close.getCloseDate();
+                from = close.getCloseDate().plusDays(1);
+                base = close.getCountedAmount();
+                set = true;
+            } else if (opening != null && !opening.getOpeningDate().isAfter(date)) {
+                from = opening.getOpeningDate();
+                base = opening.getAmount();
+                set = true;
+            }
+            BigDecimal movement = since(receipts.get(branchId), from)
+                .add(since(cashIn.get(branchId), from))
+                .subtract(since(expenses.get(branchId), from))
+                .subtract(since(cashOut.get(branchId), from));
+            out.put(branchId, new RunningPosition(countedOn, base, set, from, movement, base.add(movement)));
+        }
+        return out;
+    }
+
+    /** Σ of a per-day map for dates on/after {@code from} ({@code null} = all). */
+    private static BigDecimal since(Map<LocalDate, BigDecimal> byDay, LocalDate from) {
+        if (byDay == null) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal sum = BigDecimal.ZERO;
+        for (Map.Entry<LocalDate, BigDecimal> e : byDay.entrySet()) {
+            if (from == null || !e.getKey().isBefore(from)) {
+                sum = sum.add(e.getValue());
+            }
+        }
+        return sum;
+    }
+
+    /** {@code [branchId, date, amount]} rows → {@code branchId -> date -> amount}. */
+    private static Map<Long, Map<LocalDate, BigDecimal>> perDay(List<Object[]> rows) {
+        Map<Long, Map<LocalDate, BigDecimal>> m = new HashMap<>();
+        for (Object[] r : rows) {
+            m.computeIfAbsent(((Number) r[0]).longValue(), k -> new HashMap<>())
+                .merge((LocalDate) r[1], (BigDecimal) r[2], BigDecimal::add);
         }
         return m;
+    }
+
+    /**
+     * Every movement behind {@link #runningPositions} for one branch, newest first: an
+     * "opening" row (the counted amount carried in), then cash receipts and Cash In as positive
+     * amounts and cash expenses and Cash Out as NEGATIVE amounts — so the rows always sum to the
+     * position. {@code kind} is receipt / expense / cash-in / cash-out / opening.
+     */
+    @Transactional(readOnly = true)
+    public List<MoneyMovementItem> runningBreakdown(Long orgId, Long branchId, String branchCode, LocalDate date) {
+        RunningPosition pos = runningPositions(orgId, List.of(branchId), date).get(branchId);
+        LocalDate from = pos.from() == null ? LocalDate.of(2000, 1, 1) : pos.from();
+
+        List<MoneyMovementItem> out = new ArrayList<>();
+        List<Long> cashSettlementModeIds = cashSettlementModeIds(orgId);
+        List<Long> cashExpenseModeIds = cashExpenseModeIds(orgId);
+        if (!cashSettlementModeIds.isEmpty()) {
+            out.addAll(receiptItems(orgId, settlementLineRepo.findCashModeForBranchRange(
+                orgId, branchId, from, date, cashSettlementModeIds), branchCode));
+        }
+        if (!cashExpenseModeIds.isEmpty()) {
+            for (MoneyMovementItem e : expenseItems(orgId, expenseLineRepo.findCashModeForBranchRange(
+                    orgId, branchId, from, date, cashExpenseModeIds), branchCode)) {
+                out.add(withAmount(e, e.amount().negate()));
+            }
+        }
+        for (var c : cashDocumentRepo.findMovementsForBranchRange(orgId, branchId, from, date)) {
+            boolean in = c.getDirection() == CashDirection.IN;
+            out.add(new MoneyMovementItem(in ? "cash-in" : "cash-out", c.getId(), c.getDocumentNo(),
+                c.getWorkflowStatus().name(), c.getTransactionDate(), c.getCreatedAt(), branchCode,
+                in ? "Cash In from bank" : "Cash Out to bank",
+                c.getRemark() == null || c.getRemark().isBlank() ? "Cash movement" : c.getRemark(),
+                "Cash", in ? c.getAmount() : c.getAmount().negate()));
+        }
+        out.sort(java.util.Comparator.comparing(MoneyMovementItem::date).reversed());
+        if (pos.openingSet()) {
+            String where = pos.countedOn() != null ? "Counted at close of " + pos.countedOn() : "Opening balance";
+            out.add(new MoneyMovementItem("opening", null, null, "OPENING",
+                pos.countedOn() != null ? pos.countedOn() : pos.from(), null, branchCode,
+                where, "Carried in", "Cash", pos.opening()));
+        }
+        return out;
+    }
+
+    private static MoneyMovementItem withAmount(MoneyMovementItem m, BigDecimal amount) {
+        return new MoneyMovementItem(m.kind(), m.documentId(), m.documentNo(), m.workflowStatus(), m.date(),
+            m.createdAt(), m.branchCode(), m.party(), m.description(), m.modeName(), amount);
     }
 
     /** The opening drawer amount for a branch on a date — see the class doc for the chain. */

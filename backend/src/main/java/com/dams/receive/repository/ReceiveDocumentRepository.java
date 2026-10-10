@@ -92,4 +92,28 @@ public interface ReceiveDocumentRepository extends JpaRepository<ReceiveDocument
 
     /** Super Admin org-purge only. */
     long deleteByOrgId(Long orgId);
+
+    /** Documents in any of {@code statuses}, optionally one branch — the Owner dashboard's "stuck with whom" card (rev 71). */
+    @Query("""
+        select d from ReceiveDocument d
+        where d.orgId = :orgId
+          and d.workflowStatus in :statuses
+          and (:branchId is null or d.branchId = :branchId)
+        order by d.submittedAt asc nulls last, d.createdAt asc, d.id asc
+        """)
+    List<ReceiveDocument> findForPendingWork(@Param("orgId") Long orgId,
+                                             @Param("statuses") Collection<WorkflowStatus> statuses,
+                                             @Param("branchId") Long branchId);
+
+    /**
+     * Job cards whose receive documents are ALL still drafts (never submitted) — the Owner
+     * dashboard leaves the blank ones out of Outstanding (rev 73).
+     */
+    @Query("""
+        select d.jobCardId from ReceiveDocument d
+        where d.orgId = :orgId
+        group by d.jobCardId
+        having sum(case when d.workflowStatus <> com.dams.receive.entity.WorkflowStatus.DRAFT then 1 else 0 end) = 0
+        """)
+    List<Long> findDraftOnlyJobCardIds(@Param("orgId") Long orgId);
 }

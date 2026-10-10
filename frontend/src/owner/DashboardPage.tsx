@@ -8,22 +8,23 @@ import {
   dashboardApi,
   type DashboardPeriod, type DashboardSummary, type OutstandingItem, type ActivityItem,
 } from '../api/dashboard'
-import { cashApi } from '../api/cash'
 import { card, ErrorBanner, Skeleton, inr, fmtDate, fmtDateTime, primaryBtn, ghostBtn, istToday } from '../shell/ui'
 import GlobalSearch from '../shared/GlobalSearch'
 import ClaimsSummaryCard from '../shared/ClaimsSummaryCard'
+import PendingWorkCard from './PendingWorkCard'
 import AskDamsPanel from './AskDamsPanel'
 import AiInsightsSection from './AiInsightsSection'
 import { Download, AlertTriangle } from 'lucide-react'
 import ExportModal from '../shared/ExportModal'
-import MoneyBreakdownModal, { type BreakdownRow, moneyMovementsToRows, cashMovementsToRows } from '../shell/MoneyBreakdownModal'
+import MoneyBreakdownModal, { type BreakdownRow, moneyMovementsToRows } from '../shell/MoneyBreakdownModal'
 import { useNavigate } from 'react-router-dom'
 import { CountUp } from '../shell/motion'
 
 /**
  * Owner dashboard (intial ui prototypes/owner-dashboard.html, dashboard tab). Read-only
- * org aggregates — collections / expenses count APPROVED documents only and never include
- * cash In/Out; cash-in-hand is the live drawer position. Filter by branch and period.
+ * org aggregates — collections / expenses count APPROVED documents only (with what is still
+ * awaiting approval shown beside them) and never include cash In/Out; cash-in-hand is the
+ * running drawer position since each branch's last close. Filter by branch and period.
  */
 
 function apiError(err: unknown, fallback: string) {
@@ -70,6 +71,8 @@ export default function DashboardPage() {
 
   const donut = useMemo(() => (summary?.byMode ?? []).filter((m) => m.amount > 0), [summary])
   const donutTotal = donut.reduce((a, m) => a + m.amount, 0)
+  // rev 73: a closed claim below what was entered is a negative slice — it cannot be drawn, so say so.
+  const negativeSlices = useMemo(() => (summary?.byMode ?? []).filter((m) => m.amount < 0), [summary])
   const maxCat = Math.max(1, ...(summary?.byCategory ?? []).map((c) => c.amount))
   const scopeLabel = branchId === '' ? 'All branches' : (branches.find((x) => x.id === branchId)?.code ?? 'Branch')
 
@@ -109,8 +112,10 @@ export default function DashboardPage() {
   const scopeSubtitle = `${scopeLabel} · ${period === 'today' ? 'today' : 'month to date'}`
 
   function openBreakdownRow(row: BreakdownRow) {
+    if (row.documentId == null) return
     setBreakdown(null)
-    const path = row.kind === 'expense' ? '/app/new-expense' : row.kind === 'receipt' ? '/app/new-receipt' : '/app/cash'
+    const path = row.kind === 'expense' ? '/app/new-expense'
+      : row.kind === 'receipt' || row.kind === 'claim-adjustment' ? '/app/new-receipt' : '/app/cash'
     navigate(`${path}?editDoc=${row.documentId}`)
   }
 
@@ -131,23 +136,11 @@ export default function DashboardPage() {
   }
 
   function openCashBreakdown() {
-    const subtitle = `${scopeLabel} · today`
+    const subtitle = `${scopeLabel} · opening + everything since the last close`
     setBreakdown({ title: 'Cash in hand', subtitle, rows: null })
-    const targets = branchId === '' ? branches.map((b) => b.id) : [branchId]
-    if (targets.length === 0) {
-      setBreakdown({ title: 'Cash in hand', subtitle, rows: [] })
-      return
-    }
-    Promise.all(targets.map((id) => cashApi.drawer(istToday(), id)))
-      .then((responses) => {
-        const rows: BreakdownRow[] = []
-        for (const { data } of responses) {
-          rows.push(...moneyMovementsToRows(data.cashReceiptLines))
-          rows.push(...moneyMovementsToRows(data.cashExpenseLines))
-          rows.push(...cashMovementsToRows(data.movements))
-        }
-        setBreakdown({ title: 'Cash in hand', subtitle, rows })
-      })
+    const b = branchId === '' ? undefined : branchId
+    dashboardApi.cashBreakdown(b)
+      .then(({ data }) => setBreakdown({ title: 'Cash in hand', subtitle, rows: moneyMovementsToRows(data) }))
       .catch((e) => setBreakdown({ title: 'Cash in hand', subtitle, rows: [], error: apiError(e, 'Could not load the breakdown.') }))
   }
 
@@ -226,12 +219,16 @@ export default function DashboardPage() {
       {summary && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 14, marginBottom: 18 }}>
-            <Kpi label="Collections" value={inr(summary.kpis.collections)} tone="var(--green)" onClick={openCollectionsBreakdown} />
-            <Kpi label="Expenses" value={inr(summary.kpis.expenses)} tone="var(--red)" onClick={openExpensesBreakdown} />
-            <Kpi label="Net" value={inr(summary.kpis.net)} tone="var(--navy2)" />
+            <Kpi label="Collections" value={inr(summary.kpis.collections)} tone="var(--green)"
+              sub={awaitingText(summary.kpis.collectionsAwaiting)} onClick={openCollectionsBreakdown} />
+            <Kpi label="Expenses" value={inr(summary.kpis.expenses)} tone="var(--red)"
+              sub={awaitingText(summary.kpis.expensesAwaiting)} onClick={openExpensesBreakdown} />
+            <Kpi label="Net" value={inr(summary.kpis.net)} tone="var(--navy2)" sub="approved only" />
             <Kpi label="Cash in hand" value={inr(summary.kpis.cashInHand)} tone="var(--amber)"
-              sub={`${summary.kpis.pendingReview} pending review`} onClick={openCashBreakdown} />
+              sub="since each branch's last close" onClick={openCashBreakdown} />
           </div>
+
+          <PendingWorkCard branchId={branchId === '' ? undefined : branchId} scopeLabel={scopeLabel} />
 
           <ClaimsSummaryCard branchId={branchId === '' ? undefined : branchId} period={period} collapsedByDefault />
 
@@ -253,6 +250,11 @@ export default function DashboardPage() {
 
             <div style={{ ...card }}>
               <h3 style={{ fontSize: '0.94rem', fontWeight: 700, marginBottom: 10 }}>Collections by mode</h3>
+              {negativeSlices.length > 0 && (
+                <p style={{ color: 'var(--muted)', fontSize: '0.76rem', margin: '0 0 8px' }}>
+                  Collections also include {negativeSlices.map((m) => `${m.name} −${inr(-m.amount)}`).join(', ')} — shown in the card, not in the chart.
+                </p>
+              )}
               {donut.length === 0 ? (
                 <p style={{ color: 'var(--faint)', fontSize: '0.84rem' }}>No approved collections in this period.</p>
               ) : (
@@ -427,6 +429,11 @@ export default function DashboardPage() {
       )}
     </div>
   )
+}
+
+/** "+₹9,25,813 awaiting approval" under an approved-only KPI; blank when nothing is waiting. */
+function awaitingText(amount: number | undefined): string {
+  return amount && amount > 0 ? `+ ${inr(amount)} awaiting approval` : 'nothing awaiting approval'
 }
 
 const bcCell = { padding: '7px 8px', borderTop: '1px solid var(--line)', verticalAlign: 'middle' as const }

@@ -7,6 +7,51 @@
 
 ## Revision log
 
+- **rev 73 (2026-10-09)** — **Dashboard items C and D, decided by the owner.** (C) Collections for a closed receipt
+  claim uses the Finance Manager's final amount: the difference between it and the approved payment lines is a
+  labelled "Claim final amount adjustment" dated on the close day (job card's branch), carried through the KPI,
+  trend, branch table, mode split and drill-down; not cash, so the drawer / Cash in hand are untouched. Live
+  data: 9 closed claims differ (e.g. JC-95 lines ₹1,000 vs final ₹5,200; JC-24/36/48 ₹16,500 vs ₹15,000).
+  (D) Outstanding drops job cards that only have blank DRAFT receipts (3 live: JC-28/40/52, ₹15,600); the two with
+  rejected receipts (JC-26, JC-82, ₹93,000) stay. AGENT.md updated first.
+- **rev 72 (2026-10-09)** — **Documents and GST on the review screens.** Bug reports (live receipts OOR-OCT26-R-011 /
+  R-012): (1) a queried receipt could not take a new attachment; (2) the Accountant could not see an uploaded
+  document; (3) nor the Finance Manager; (4) GST details not shown. Causes, checked in the live DB: R-011 was
+  `settled` (fully paid) while QUERIED and both `AttachmentService.receiveOwner` and the form's `attachFrozen`
+  treated *settled* as frozen; R-012's file was frozen the moment it settled, so the Cashier could not replace
+  it once queried; and the shared `RecordCard` (Accountant, FM, Owner) had no documents section or GST line.
+  Fix: receipts freeze only at APPROVED / REJECTED (what AGENT.md already said); settling no longer freezes
+  files; V40 un-freezes files wrongly frozen on receipts that were never approved; `RecordCard` gets a Documents
+  section (view for all; the Accountant can also upload and add notes, not remove) and Customer type + GST #
+  rows (number for B2B, blank for B2C). Owner decisions: Accountant may upload; GST blank for B2C.
+- **rev 71 (2026-10-09)** — **Owner dashboard brought in line with the current workflows.** Audit against the live
+  DB found: Cash in hand = last close + *today's* movement only (OOJ/OOB last closed 30 Aug, so weeks of cash were
+  ignored); approved-only KPIs hid ₹9.26 L awaiting approval with no hint; "pending review" sat under Cash in hand;
+  the activity feed skipped ~23% of events (payments added, overrides, status changes…). Built: running cash
+  position (new `DrawerService.runningPositions` + `GET /dashboard/cash-breakdown`, signed rows summing to the
+  card), "awaiting approval" sub-line on Collections / Expenses (`DashboardKpis.collectionsAwaiting/expensesAwaiting`),
+  wider activity feed, and the new **Stuck with whom** card (`GET /dashboard/pending-work`, `PendingWorkService`) with a
+  details modal. AGENT.md updated first. **Not done, awaiting the owner's rule:** (C) closed claims in Collections
+  at the FM final amount instead of the cashier's lines; (D) Outstanding excluding draft-only / no-live-receipt
+  job cards. The Cash page's one-day drawer formula is unchanged.
+- **rev 70 (2026-10-09)** — **Vehicle owner vs typed customer: ask, never switch silently.** Bug report: after a
+  completed entry a different customer name was pasted, yet the new entry saved under the previous name. Cause:
+  `PartyResolver` adopted a known vehicle's owner whenever a customer *name* was typed without an id, ignoring the
+  typed name (the previous entry's vehicle number was still in the form). AGENT.md "Linking" updated first.
+  Frontend: on Save Draft / Submit / Send for Review (Receipt and Expense, new documents), if the typed vehicle
+  number belongs to another customer, a dialog with two option boxes — "XYZ is correct" / "Update the name to BCD"
+  (rename via the existing `PATCH /customers/{id}`, phone preserved) — and a Proceed button. No check while typing.
+  Server: `PartyResolver` now rejects a typed name that differs from the vehicle owner's (409) on both the
+  typed-number and picked-vehicle paths; same name (case/space-insensitive) or no name is unchanged. No migration.
+- **rev 69 (2026-10-09)** — **Accountant "Credit" bucket = the Credit status.** Bug report: receipt for Manoj
+  (₹3,000 cash + ₹4,000 bank, status Received) appeared under Credit. Cause: the bucket was "non-claim and not
+  all-cash", so any bank/UPI/mixed receipt landed there. Decision (user): Credit holds only receipts whose
+  business status is "Credit"; it clears when the status is changed to Received (Accountant) or the Cashier adds
+  settlement lines and flips it. AGENT.md updated first. `ReviewQueueItem.isCredit` added (receipts; false
+  elsewhere); frontend `inBucket('credit')` = `!isClaim && isCredit`. `isCashEligible` and every approve rule
+  unchanged. Known consequence: a Received receipt that is part/all non-cash is in neither Cash nor Credit and
+  shows under All only. Backend `ReviewServiceTest` +1, frontend `accountant/creditBucket.test.tsx` (3), both
+  mutation-checked.
 - **rev 68 (2026-10-10)** — **Optional Contact and Chassis # on a receipt.** Request: add a contact number and
   a chassis number to the receipt, after the name, and show them on the Accountant and Finance Manager pages
   next to the vehicle number; pre-fill contact from the last saved number. AGENT.md "Linking" updated first.

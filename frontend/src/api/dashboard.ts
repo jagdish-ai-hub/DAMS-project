@@ -8,6 +8,10 @@ export interface DashboardKpis {
   net: number
   cashInHand: number
   pendingReview: number
+  /** rev 71 — money on entries still in the workflow (submitted / verified / queried) for the same
+   * period: the approved-only headline never hides a pile waiting. */
+  collectionsAwaiting: number
+  expensesAwaiting: number
 }
 
 export interface TrendPoint {
@@ -65,8 +69,11 @@ export interface ActivityItem {
 
 /** One receipt or expense line behind a KPI — the reconciliation breakdown row shape. */
 export interface MoneyMovementItem {
-  kind: 'receipt' | 'expense'
-  documentId: number
+  /** cash-in / cash-out / opening only appear in the Cash in hand breakdown (rev 71); claim-adjustment only
+   * in the Collections breakdown (rev 73) — a closed claim counted at its final amount. */
+  kind: 'receipt' | 'expense' | 'cash-in' | 'cash-out' | 'opening' | 'claim-adjustment'
+  /** null on the opening row — there is no document behind it. */
+  documentId: number | null
   documentNo: string | null
   workflowStatus: string
   date: string
@@ -76,6 +83,41 @@ export interface MoneyMovementItem {
   description: string
   modeName: string
   amount: number
+}
+
+/** One entry waiting on a person — an unsent draft, a query to fix, or a review to do (rev 71). */
+export interface PendingItem {
+  type: 'receipt' | 'expense' | 'cash'
+  id: number
+  documentNo: string | null
+  branchId: number | null
+  branchCode: string
+  party: string
+  category: string
+  amount: number
+  workflowStatus: string
+  /** Plain words for why it is with them, e.g. "Awaiting verification". */
+  stage: string
+  /** An unsent draft (Cashier only) — shown beside, not inside, the Cashier's count. */
+  draft: boolean
+  /** When it was submitted (created, for a draft) — the days-waiting clock. */
+  since: string | null
+}
+
+export type PendingHolder = 'CASHIER' | 'ACCOUNTANT' | 'FINANCE_MANAGER'
+
+export interface PendingGroup {
+  holder: PendingHolder
+  label: string
+  count: number
+  amount: number
+  draftCount: number
+  draftAmount: number
+  items: PendingItem[]
+}
+
+export interface PendingWork {
+  groups: PendingGroup[]
 }
 
 /** One slice of the claims summary (rev 62). claimed = received + rejected + pending. */
@@ -113,6 +155,14 @@ export const dashboardApi = {
   },
   collectionsBreakdown(period: DashboardPeriod, branchId?: number) {
     return api.get<MoneyMovementItem[]>('/api/v1/dashboard/collections-breakdown', { params: { period, branchId } })
+  },
+  /** rev 71 — the movements that add up to Cash in hand: opening + everything since the last close. */
+  cashBreakdown(branchId?: number) {
+    return api.get<MoneyMovementItem[]>('/api/v1/dashboard/cash-breakdown', { params: { branchId } })
+  },
+  /** rev 71 — who every unfinished entry is waiting on. */
+  pendingWork(branchId?: number) {
+    return api.get<PendingWork>('/api/v1/dashboard/pending-work', { params: { branchId } })
   },
   expensesBreakdown(period: DashboardPeriod, branchId?: number) {
     return api.get<MoneyMovementItem[]>('/api/v1/dashboard/expenses-breakdown', { params: { period, branchId } })

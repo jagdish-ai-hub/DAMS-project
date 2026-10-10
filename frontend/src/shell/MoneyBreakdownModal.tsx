@@ -5,8 +5,9 @@ import type { CashDocument } from '../api/cash'
 /** One reconciliation row — a receipt line, expense line, or cash In/Out movement. */
 export interface BreakdownRow {
   id: string
-  documentId: number
-  kind: 'receipt' | 'expense' | 'cash-in' | 'cash-out'
+  /** null on the "opening" row of the Cash in hand breakdown — nothing to open. */
+  documentId: number | null
+  kind: 'receipt' | 'expense' | 'cash-in' | 'cash-out' | 'opening' | 'claim-adjustment'
   date: string
   documentNo: string | null
   status: string
@@ -53,6 +54,11 @@ export function cashMovementsToRows(movements: CashDocument[], direction?: 'IN' 
       description: m.remark || (m.direction === 'IN' ? 'Cash In from bank' : 'Cash Out to bank'),
       amount: m.amount,
     }))
+}
+
+/** "₹1,500", or "−₹1,500" for money going out of the drawer. */
+function signedInr(n: number): string {
+  return n < 0 ? `−${inr(-n)}` : inr(n)
 }
 
 function statusTone(status: string): 'green' | 'amber' | 'gray' | 'red' {
@@ -108,24 +114,24 @@ export default function MoneyBreakdownModal(props: {
                     key={r.id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => props.onRowClick(r)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); props.onRowClick(r) } }}
-                    style={{ cursor: 'pointer' }}
+                    onClick={() => { if (r.documentId != null) props.onRowClick(r) }}
+                    onKeyDown={(e) => { if (r.documentId != null && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); props.onRowClick(r) } }}
+                    style={{ cursor: r.documentId != null ? 'pointer' : 'default' }}
                     onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--navy3)' }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
                   >
-                    <td style={td}>{r.date}</td>
+                    <td style={td}>{r.date ?? ''}</td>
                     <td style={{ ...td, fontFamily: 'Consolas, monospace', fontSize: '0.78rem' }}>
-                      {r.documentNo ?? '(draft)'}
+                      {r.kind === 'opening' ? '—' : (r.documentNo ?? '(draft)')}
                     </td>
                     <td style={td}>{r.party}</td>
                     <td style={td}>
                       {r.description}
                       {r.branchCode && <span style={{ color: 'var(--faint)' }}> · {r.branchCode}</span>}
                     </td>
-                    <td style={td}><Badge tone={statusTone(r.status)}>{r.status}</Badge></td>
-                    <td style={{ ...td, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                      {inr(r.amount)}
+                    <td style={td}>{r.kind === 'opening' ? '' : <Badge tone={statusTone(r.status)}>{r.status}</Badge>}</td>
+                    <td style={{ ...td, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: r.amount < 0 ? 'var(--red)' : undefined }}>
+                      {signedInr(r.amount)}
                     </td>
                   </tr>
                 ))}
@@ -137,7 +143,7 @@ export default function MoneyBreakdownModal(props: {
             padding: '12px 4px 2px', marginTop: 8, borderTop: '2px solid var(--line)',
           }}>
             <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>{rows.length} entr{rows.length === 1 ? 'y' : 'ies'} · click a row to open it</span>
-            <span style={{ fontSize: '0.98rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{inr(total)}</span>
+            <span style={{ fontSize: '0.98rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{signedInr(total)}</span>
           </div>
         </>
       )}

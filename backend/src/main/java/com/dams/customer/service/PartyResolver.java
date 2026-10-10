@@ -19,7 +19,9 @@ import org.springframework.stereotype.Component;
  *   <li>typed text that matches nothing creates it (a customer is stamped with the creating
  *       branch; a vehicle is deduped on the normalised number);</li>
  *   <li>a vehicle number already registered to a <b>different</b> customer is rejected, never
- *       silently reused; with no customer given it adopts the vehicle's own customer.</li>
+ *       silently reused; with no customer given it adopts the vehicle's own customer — unless a
+ *       customer <i>name</i> was typed that differs from the owner's, which is rejected too
+ *       (rev 70: the typed name must never be dropped silently).</li>
  * </ul>
  * Runs inside the caller's transaction.
  */
@@ -60,6 +62,9 @@ public class PartyResolver {
             Long ownerId = vehicle.getCustomerId();
             customer = customerRepo.findByIdAndOrgId(ownerId, orgId)
                 .orElseThrow(() -> DamsException.notFound("Customer", ownerId));
+            if (customerId == null && namesDiffer(newCustomerName, customer.getName())) {
+                throw DamsException.conflict(nameConflictMessage(vehicle.getVehicleNo(), customer, newCustomerName));
+            }
         } else if (customerId != null) {
             customer = customerRepo.findByIdAndOrgId(customerId, orgId)
                 .orElseThrow(() -> DamsException.notFound("Customer", customerId));
@@ -79,6 +84,9 @@ public class PartyResolver {
                 vehicle = existing;
                 if (customer == null) {
                     customer = customerRepo.findByIdAndOrgId(existing.getCustomerId(), orgId).orElse(null);
+                    if (customer != null && namesDiffer(newCustomerName, customer.getName())) {
+                        throw DamsException.conflict(nameConflictMessage(normalised, customer, newCustomerName));
+                    }
                 }
                 hasNumber = false;
             }
@@ -122,6 +130,27 @@ public class PartyResolver {
         v.setCustomerId(customer.getId());
         v.setVehicleNo(normalisedNo);
         return vehicleRepo.save(v);
+    }
+
+    /** A typed name counts as different unless it matches ignoring case and extra spaces. */
+    private static boolean namesDiffer(String typed, String owner) {
+        if (typed == null || typed.isBlank()) {
+            return false;
+        }
+        return !squash(typed).equals(squash(owner));
+    }
+
+    private static String squash(String name) {
+        return name == null ? "" : name.trim().replaceAll("\\s+", " ").toLowerCase();
+    }
+
+    /** Like {@link #conflictMessage}: the owner's name is shown only to callers who are not branch-restricted. */
+    private String nameConflictMessage(String vehicleNo, Customer owner, String typed) {
+        boolean unrestricted = branchScope.allowedBranchIds().isEmpty();
+        return "Vehicle " + vehicleNo + " is on record under "
+            + (unrestricted ? owner.getName() : "a different customer")
+            + ", but the customer name entered is " + typed.trim()
+            + ". Use the customer on record, or update their name first.";
     }
 
     /** The other customer's name is shown only to callers who are not branch-restricted. */

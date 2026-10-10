@@ -235,4 +235,83 @@ public interface SettlementLineRepository extends JpaRepository<SettlementLine, 
 
     /** Super Admin org-purge only. */
     long deleteByOrgId(Long orgId);
+
+    // ---- Owner dashboard rev 71: running cash position + awaiting-approval ----
+
+    /**
+     * {@code [branchId, transactionDate, Σ cash-mode settlement]} for every date up to
+     * {@code upTo} — the per-day movements the running cash position adds up since each branch's
+     * last close. Same non-DRAFT / non-REJECTED filter as the drawer.
+     */
+    @Query("""
+        select d.branchId, l.transactionDate, coalesce(sum(l.amount), 0)
+        from SettlementLine l, ReceiveDocument d
+        where l.receiveDocumentId = d.id
+          and d.orgId = :orgId
+          and l.transactionDate <= :upTo
+          and l.settlementModeId in :cashModeIds
+          and d.workflowStatus <> com.dams.receive.entity.WorkflowStatus.DRAFT
+          and d.workflowStatus <> com.dams.receive.entity.WorkflowStatus.REJECTED
+        group by d.branchId, l.transactionDate
+        """)
+    List<Object[]> sumCashModeByBranchAndDateUpTo(@Param("orgId") Long orgId,
+                                                  @Param("upTo") java.time.LocalDate upTo,
+                                                  @Param("cashModeIds") java.util.Collection<Long> cashModeIds);
+
+    /** The cash-mode lines behind the running position for one branch, {@code from}..{@code to} inclusive. */
+    @Query("""
+        select l, d, j
+        from SettlementLine l, ReceiveDocument d, JobCard j
+        where l.receiveDocumentId = d.id
+          and d.jobCardId = j.id
+          and d.orgId = :orgId
+          and d.branchId = :branchId
+          and l.transactionDate between :from and :to
+          and l.settlementModeId in :cashModeIds
+          and d.workflowStatus <> com.dams.receive.entity.WorkflowStatus.DRAFT
+          and d.workflowStatus <> com.dams.receive.entity.WorkflowStatus.REJECTED
+        order by l.transactionDate desc, l.id desc
+        """)
+    List<Object[]> findCashModeForBranchRange(@Param("orgId") Long orgId,
+                                              @Param("branchId") Long branchId,
+                                              @Param("from") java.time.LocalDate from,
+                                              @Param("to") java.time.LocalDate to,
+                                              @Param("cashModeIds") java.util.Collection<Long> cashModeIds);
+
+    /**
+     * Money on receipts that are in the workflow but not yet APPROVED (submitted, verified,
+     * queried or FM-queried) — the "awaiting approval" figure shown beside Collections. Same
+     * period / branch window as {@link #dashboardCollections}; never drafts or rejected.
+     */
+    @Query("""
+        select coalesce(sum(l.amount), 0)
+        from SettlementLine l, ReceiveDocument d
+        where l.receiveDocumentId = d.id
+          and d.orgId = :orgId
+          and d.workflowStatus in (com.dams.receive.entity.WorkflowStatus.SUBMITTED,
+                                   com.dams.receive.entity.WorkflowStatus.VERIFIED,
+                                   com.dams.receive.entity.WorkflowStatus.QUERIED,
+                                   com.dams.receive.entity.WorkflowStatus.FM_QUERIED)
+          and l.transactionDate between :from and :to
+          and (:branchId is null or d.branchId = :branchId)
+        """)
+    BigDecimal dashboardCollectionsAwaiting(@Param("orgId") Long orgId,
+                                            @Param("from") java.time.LocalDate from,
+                                            @Param("to") java.time.LocalDate to,
+                                            @Param("branchId") Long branchId);
+
+    /**
+     * {@code [jobCardId, Σ amount]} over APPROVED receive documents only — exactly what the Owner
+     * dashboard's Collections counts for a job card, so a closed claim's "final amount adjustment"
+     * (final − this) lands Collections on the final amount (rev 73).
+     */
+    @Query("""
+        select d.jobCardId, coalesce(sum(l.amount), 0)
+        from SettlementLine l, ReceiveDocument d
+        where l.receiveDocumentId = d.id
+          and d.orgId = :orgId
+          and d.workflowStatus = com.dams.receive.entity.WorkflowStatus.APPROVED
+        group by d.jobCardId
+        """)
+    List<Object[]> sumApprovedByJobCard(@Param("orgId") Long orgId);
 }

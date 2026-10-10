@@ -39,9 +39,11 @@ function fmtGroupDate(key: string): string {
 /**
  * Receipts only. 'awaiting' is the flat, unfiltered list (no bulk actions — just click in and
  * Verify/Query one at a time). The other three are views over the same `items`, split by the
- * same rule the org's direct-approve toggle already uses: no claim + status isn't "Credit" +
- * every line cash-mode = 'cash' (the only bucket with bulk select/approve); everything else
- * non-claim is 'credit'; anything with a claim type is 'claim'.
+ * rule the org's direct-approve toggle already uses: no claim + status isn't "Credit" + every
+ * line cash-mode = 'cash' (the only bucket with bulk select/approve). 'credit' is simply a
+ * non-claim receipt whose business status is "Credit" (rev 69) — it leaves the bucket when the
+ * status is changed. A receipt that is neither (e.g. Received, part cash / part bank) shows
+ * under All only. Anything with a claim type is 'claim'.
  */
 type ReceiptBucket = 'awaiting' | 'cash' | 'credit' | 'claim'
 
@@ -52,7 +54,7 @@ function inBucket(it: ReviewQueueItem, bucket: ReceiptBucket): boolean {
   switch (bucket) {
     case 'claim': return it.isClaim
     case 'cash': return !it.isClaim && it.isCashEligible
-    case 'credit': return !it.isClaim && !it.isCashEligible
+    case 'credit': return !it.isClaim && it.isCredit
     default: return true
   }
 }
@@ -373,7 +375,7 @@ function QueuePane(props: {
     || (props.type === 'receipt' && props.receiptBucket === 'cash')
   const bucketLabel = props.type !== 'receipt' ? 'Awaiting your review'
     : props.receiptBucket === 'cash' ? 'Cash — eligible for direct approval'
-      : props.receiptBucket === 'credit' ? 'Credit'
+      : props.receiptBucket === 'credit' ? 'Credit — status marked Credit'
         : props.receiptBucket === 'claim' ? 'Claim transactions'
           : 'Awaiting your review'
   return (
@@ -417,6 +419,7 @@ function QueuePane(props: {
                 label="Credit" count={props.creditCount} small
                 active={props.receiptBucket === 'credit'}
                 onClick={() => props.onSelectCashCreditSub('credit')}
+                title="Receipts whose status is marked Credit — they leave this list once the status is changed"
               />
             </div>
           )}
@@ -1146,6 +1149,7 @@ function RecordDetail(props: {
           <RecordCard
             doc={doc as AnyDoc}
             canOverride={canReview || canResendToFm}
+            canUploadDocs
             busy={busy}
             onError={setError}
             onOverride={(lineNo, amount, reason) =>

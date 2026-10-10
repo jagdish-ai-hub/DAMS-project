@@ -123,7 +123,7 @@ class AiOpsServiceTest {
         when(dashboardService.outstanding(null)).thenReturn(List.of());
         when(dashboardService.summary(null, "mtd")).thenReturn(new DashboardSummary("ALL", "mtd",
             new DashboardKpis(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                BigDecimal.ZERO, 0L),
+                BigDecimal.ZERO, 0L, BigDecimal.ZERO, BigDecimal.ZERO),
             List.<TrendPoint>of(), List.<NamedAmount>of(), List.<NamedAmount>of(),
             List.of(new BranchComparisonRow(10L, "OOR", "OOR Branch",
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,

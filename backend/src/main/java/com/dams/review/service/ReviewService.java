@@ -435,7 +435,7 @@ public class ReviewService {
             out.add(new ReviewQueueItem("cash", d.getId(), d.getDocumentNo(),
                 d.getBranchId(), branchCode(orgId, d.getBranchId(), branchCodes),
                 party, "Cash movement", d.getAmount(), false, false, d.getSubmittedAt(),
-                d.getWorkflowStatus().name(), false, false, false, null));
+                d.getWorkflowStatus().name(), false, false, false, false, null));
         }
         return out;
     }
@@ -1130,11 +1130,12 @@ public class ReviewService {
             boolean hasOverride = lines.stream().anyMatch(l -> l.getOverriddenBy() != null);
             boolean isClaim = jc != null && jc.getClaimTypeId() != null;
             boolean isCashEligible = isDirectApproveEligible(jc, creditStatusId, cashModeIds, lines);
+            boolean isCredit = creditStatusId != null && jc != null && creditStatusId.equals(jc.getBusinessStatusId());
 
             out.add(new ReviewQueueItem("receipt", d.getId(), d.getDocumentNo(),
                 d.getBranchId(), branchCode(orgId, d.getBranchId(), branchCodes),
                 party, category, amount, false, hasOverride, d.getSubmittedAt(),
-                d.getWorkflowStatus().name(), isClaim, isCashEligible, false, null));
+                d.getWorkflowStatus().name(), isClaim, isCashEligible, isCredit, false, null));
         }
         return out;
     }
@@ -1161,7 +1162,7 @@ public class ReviewService {
             out.add(new ReviewQueueItem("expense", d.getId(), d.getDocumentNo(),
                 d.getBranchId(), branchCode(orgId, d.getBranchId(), branchCodes),
                 party, category, amount, d.isOverLimit(), hasOverride, d.getSubmittedAt(),
-                d.getWorkflowStatus().name(), claimStatusIds.contains(d.getBusinessStatusId()), false,
+                d.getWorkflowStatus().name(), claimStatusIds.contains(d.getBusinessStatusId()), false, false,
                 ExpenseDocumentService.preApprovalCovers(d, amount), d.getApprovalRequestedAt()));
         }
         return out;
@@ -1198,7 +1199,7 @@ public class ReviewService {
             out.add(new ReviewQueueItem("receipt", docId, ref, jc.getBranchId(),
                 code, party, category,
                 cc.getFinalAmount(), false, cc.isOverridden(), cc.getClosedAt(), "CLOSED",
-                jc.getClaimTypeId() != null, false, false, null));
+                jc.getClaimTypeId() != null, false, false, false, null));
         }
         return out;
     }

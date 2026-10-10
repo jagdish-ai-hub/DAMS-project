@@ -189,4 +189,59 @@ public interface ExpenseLineRepository extends JpaRepository<ExpenseLine, Long> 
 
     /** Super Admin org-purge only. */
     long deleteByOrgId(Long orgId);
+
+    // ---- Owner dashboard rev 71: running cash position + awaiting-approval ----
+
+    /** {@code [branchId, transactionDate, Σ cash-mode expense]} for every date up to {@code upTo}. */
+    @Query("""
+        select d.branchId, l.transactionDate, coalesce(sum(l.amount), 0)
+        from ExpenseLine l, ExpenseDocument d
+        where l.expenseDocumentId = d.id
+          and d.orgId = :orgId
+          and l.transactionDate <= :upTo
+          and l.expenseModeId in :cashModeIds
+          and d.workflowStatus <> com.dams.expense.entity.ExpenseWorkflowStatus.DRAFT
+          and d.workflowStatus <> com.dams.expense.entity.ExpenseWorkflowStatus.REJECTED
+        group by d.branchId, l.transactionDate
+        """)
+    List<Object[]> sumCashModeByBranchAndDateUpTo(@Param("orgId") Long orgId,
+                                                  @Param("upTo") LocalDate upTo,
+                                                  @Param("cashModeIds") Collection<Long> cashModeIds);
+
+    /** The cash-mode lines behind the running position for one branch, {@code from}..{@code to} inclusive. */
+    @Query("""
+        select l, d
+        from ExpenseLine l, ExpenseDocument d
+        where l.expenseDocumentId = d.id
+          and d.orgId = :orgId
+          and d.branchId = :branchId
+          and l.transactionDate between :from and :to
+          and l.expenseModeId in :cashModeIds
+          and d.workflowStatus <> com.dams.expense.entity.ExpenseWorkflowStatus.DRAFT
+          and d.workflowStatus <> com.dams.expense.entity.ExpenseWorkflowStatus.REJECTED
+        order by l.transactionDate desc, l.id desc
+        """)
+    List<Object[]> findCashModeForBranchRange(@Param("orgId") Long orgId,
+                                              @Param("branchId") Long branchId,
+                                              @Param("from") LocalDate from,
+                                              @Param("to") LocalDate to,
+                                              @Param("cashModeIds") Collection<Long> cashModeIds);
+
+    /** Expense money in the workflow but not yet approved or closed — shown beside the Expenses KPI. */
+    @Query("""
+        select coalesce(sum(l.amount), 0)
+        from ExpenseLine l, ExpenseDocument d
+        where l.expenseDocumentId = d.id
+          and d.orgId = :orgId
+          and d.workflowStatus in (com.dams.expense.entity.ExpenseWorkflowStatus.SUBMITTED,
+                                   com.dams.expense.entity.ExpenseWorkflowStatus.VERIFIED,
+                                   com.dams.expense.entity.ExpenseWorkflowStatus.QUERIED,
+                                   com.dams.expense.entity.ExpenseWorkflowStatus.FM_QUERIED)
+          and l.transactionDate between :from and :to
+          and (:branchId is null or d.branchId = :branchId)
+        """)
+    BigDecimal dashboardExpensesAwaiting(@Param("orgId") Long orgId,
+                                         @Param("from") LocalDate from,
+                                         @Param("to") LocalDate to,
+                                         @Param("branchId") Long branchId);
 }

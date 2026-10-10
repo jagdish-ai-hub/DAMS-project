@@ -96,8 +96,40 @@ class AttachmentServiceTest {
         verify(storage, never()).put(any(), any(), any());
     }
 
+    /** rev 72 — OOR-OCT26-R-011: fully paid ("settled") but only QUERIED, so it must still take the missing bill. */
     @Test
-    void upload_rejectedWhenDocumentIsSettled() {
+    void upload_isAllowed_onAQueriedReceiptThatIsFullyPaid() {
+        when(receiveDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(doc(WorkflowStatus.QUERIED, true)));
+        MockMultipartFile file = new MockMultipartFile("file", "missing-bill.pdf", "application/pdf", new byte[] {1, 2});
+
+        var response = service.upload(ParentType.RECEIVE_DOCUMENT, DOC_ID, file, null);
+
+        assertThat(response.filename()).isEqualTo("missing-bill.pdf");
+        verify(attachmentRepo).save(any(Attachment.class));
+    }
+
+    @Test
+    void upload_isAllowed_onAFullyPaidReceiptStillWaitingForTheFinanceManager() {
+        when(receiveDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(doc(WorkflowStatus.VERIFIED, true)));
+        MockMultipartFile file = new MockMultipartFile("file", "bill.pdf", "application/pdf", new byte[] {1});
+
+        service.upload(ParentType.RECEIVE_DOCUMENT, DOC_ID, file, null);
+
+        verify(attachmentRepo).save(any(Attachment.class));
+    }
+
+    @Test
+    void upload_rejectedWhenReceiptIsRejected() {
+        when(receiveDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(doc(WorkflowStatus.REJECTED, false)));
+        MockMultipartFile file = new MockMultipartFile("file", "receipt.pdf", "application/pdf", new byte[] {1});
+
+        assertThatThrownBy(() -> service.upload(ParentType.RECEIVE_DOCUMENT, DOC_ID, file, null))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("frozen");
+    }
+
+    @Test
+    void upload_rejectedWhenDocumentIsApproved() {
         when(receiveDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(doc(WorkflowStatus.APPROVED, true)));
         MockMultipartFile file = new MockMultipartFile("file", "receipt.pdf", "application/pdf", new byte[] {1});
 

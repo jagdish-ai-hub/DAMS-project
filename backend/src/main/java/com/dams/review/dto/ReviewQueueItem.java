@@ -27,6 +27,8 @@ public record ReviewQueueItem(
     boolean isCashEligible, // receipts only — the direct-approve rule: no claim, status isn't
                             // "Credit", every settlement line is cash-mode (rev 49's
                             // Cash/Credit/Claim Transaction split reuses this same predicate)
+    boolean isCredit,       // receipts only (rev 69) — job card's business status is "Credit".
+                            // The Accountant's Credit bucket; it clears when the status changes
     boolean preApproved,    // expenses only (rev 53) — FM pre-approved it and the total is still
                             // within the approved amount: the Accountant may close it without
                             // a second FM approval, and it stays off the FM's approval list

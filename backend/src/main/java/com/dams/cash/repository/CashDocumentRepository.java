@@ -119,4 +119,47 @@ public interface CashDocumentRepository extends JpaRepository<CashDocument, Long
 
     /** Super Admin org-purge only. */
     long deleteByOrgId(Long orgId);
+
+    /** {@code [branchId, transactionDate, Σ amount]} for one direction, every date up to {@code upTo}. */
+    @Query("""
+        select c.branchId, c.transactionDate, coalesce(sum(c.amount), 0)
+        from CashDocument c
+        where c.orgId = :orgId
+          and c.transactionDate <= :upTo
+          and c.direction = :direction
+          and c.workflowStatus <> com.dams.cash.entity.CashWorkflowStatus.DRAFT
+          and c.workflowStatus <> com.dams.cash.entity.CashWorkflowStatus.REJECTED
+        group by c.branchId, c.transactionDate
+        """)
+    List<Object[]> sumByBranchAndDateUpTo(@Param("orgId") Long orgId,
+                                          @Param("upTo") LocalDate upTo,
+                                          @Param("direction") CashDirection direction);
+
+    /** The cash movements behind the running position for one branch, {@code from}..{@code to} inclusive. */
+    @Query("""
+        select c
+        from CashDocument c
+        where c.orgId = :orgId
+          and c.branchId = :branchId
+          and c.transactionDate between :from and :to
+          and c.workflowStatus <> com.dams.cash.entity.CashWorkflowStatus.DRAFT
+          and c.workflowStatus <> com.dams.cash.entity.CashWorkflowStatus.REJECTED
+        order by c.transactionDate desc, c.id desc
+        """)
+    List<CashDocument> findMovementsForBranchRange(@Param("orgId") Long orgId,
+                                                   @Param("branchId") Long branchId,
+                                                   @Param("from") LocalDate from,
+                                                   @Param("to") LocalDate to);
+
+    /** Documents in any of {@code statuses}, optionally one branch — the Owner dashboard's "stuck with whom" card (rev 71). */
+    @Query("""
+        select c from CashDocument c
+        where c.orgId = :orgId
+          and c.workflowStatus in :statuses
+          and (:branchId is null or c.branchId = :branchId)
+        order by c.submittedAt asc nulls last, c.createdAt asc, c.id asc
+        """)
+    List<CashDocument> findForPendingWork(@Param("orgId") Long orgId,
+                                          @Param("statuses") Collection<CashWorkflowStatus> statuses,
+                                          @Param("branchId") Long branchId);
 }
