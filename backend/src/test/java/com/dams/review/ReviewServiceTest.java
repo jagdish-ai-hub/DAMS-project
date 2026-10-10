@@ -56,6 +56,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
@@ -458,15 +459,85 @@ class ReviewServiceTest {
     // ---------------------------------------------------- accountant: expenses
 
     @Test
-    void verifyExpense_movesSubmittedToVerified() {
+    void verifyExpense_inLimit_closesInTheSameStep_rev74() {
         ExpenseDocument doc = expenseDoc(ExpenseWorkflowStatus.SUBMITTED, false);
         when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, E_ID)).thenReturn(List.of());
+
+        service.verifyExpense(E_ID);
+
+        assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.CLOSED);
+        verify(auditService).recordUserEvent(eq("ExpenseDocument"), eq(E_ID), eq(BRANCH),
+            eq(EventType.VERIFIED), eq(ACTOR_ID), any());
+        verify(auditService).recordUserEvent(eq("ExpenseDocument"), eq(E_ID), eq(BRANCH),
+            eq(EventType.CLOSED), eq(ACTOR_ID), argThat(m -> Boolean.TRUE.equals(m.get("auto"))));
+        verify(attachmentService).freezeExpenseDocument(eq(ORG), eq(E_ID), any());
+    }
+
+    @Test
+    void verifyExpense_overLimitWithoutPreApproval_staysVerifiedForTheFm() {
+        ExpenseDocument doc = expenseDoc(ExpenseWorkflowStatus.SUBMITTED, true);
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, E_ID))
+            .thenReturn(List.of(expenseLine(1, new BigDecimal("4100"))));
 
         service.verifyExpense(E_ID);
 
         assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.VERIFIED);
-        verify(auditService).recordUserEvent(eq("ExpenseDocument"), eq(E_ID), eq(BRANCH),
-            eq(EventType.VERIFIED), eq(ACTOR_ID), any());
+        verify(auditService, never()).recordUserEvent(any(), any(), any(), eq(EventType.CLOSED), any(), any());
+    }
+
+    @Test
+    void verifyExpense_overLimitCoveredByPreApproval_closesInTheSameStep() {
+        ExpenseDocument doc = expenseDoc(ExpenseWorkflowStatus.SUBMITTED, true);
+        doc.setPreApprovalStatus(PreApprovalStatus.APPROVED);
+        doc.setPreApprovedAmount(new BigDecimal("8000"));
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, E_ID))
+            .thenReturn(List.of(expenseLine(1, new BigDecimal("8000"))));
+
+        service.verifyExpense(E_ID);
+
+        assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.CLOSED);
+    }
+
+    @Test
+    void verifyExpense_inFinanceApprovalStatusWithoutPreApproval_staysVerified() {
+        ExpenseDocument doc = expenseDoc(ExpenseWorkflowStatus.SUBMITTED, false);
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+        when(expenseDocumentService.statusRequiresFmApproval(ORG, doc)).thenReturn(true);
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, E_ID))
+            .thenReturn(List.of(expenseLine(1, new BigDecimal("800"))));
+
+        service.verifyExpense(E_ID);
+
+        assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.VERIFIED);
+    }
+
+    @Test
+    void verifyExpense_transferToClaim_staysVerifiedForTheFmCloseClaim() {
+        ExpenseDocument doc = expenseDoc(ExpenseWorkflowStatus.SUBMITTED, false);
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+        when(expenseDocumentService.statusTriggersClaim(ORG, doc)).thenReturn(true);
+
+        service.verifyExpense(E_ID);
+
+        assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.VERIFIED);
+    }
+
+    @Test
+    void bulkVerifyExpenses_closesTheOnesThatNeedNoFm_andLeavesTheRest() {
+        ExpenseDocument inLimit = expenseDoc(ExpenseWorkflowStatus.SUBMITTED, false);
+        ExpenseDocument over = expenseDoc(ExpenseWorkflowStatus.SUBMITTED, true);
+        ReflectionTestUtils.setField(over, "id", 2L);
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(inLimit));
+        when(expenseDocumentRepo.findByIdAndOrgId(2L, ORG)).thenReturn(Optional.of(over));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(any(), any())).thenReturn(List.of());
+
+        service.bulkVerifyExpenses(List.of(E_ID, 2L));
+
+        assertThat(inLimit.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.CLOSED);
+        assertThat(over.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.VERIFIED);
     }
 
     @Test
@@ -957,8 +1028,10 @@ class ReviewServiceTest {
 
     @Test
     void resubmitExpenseToFm_movesFmQueriedToVerified() {
-        ExpenseDocument doc = expenseDoc(ExpenseWorkflowStatus.FM_QUERIED, false);
+        ExpenseDocument doc = expenseDoc(ExpenseWorkflowStatus.FM_QUERIED, true);
         when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, E_ID))
+            .thenReturn(List.of(expenseLine(1, new BigDecimal("4100"))));
 
         service.resubmitExpenseToFm(E_ID);
 
@@ -998,15 +1071,30 @@ class ReviewServiceTest {
     }
 
     @Test
-    void approveExpense_movesVerifiedToApproved() {
+    void approveExpense_closesInTheSameStep_rev74() {
         ExpenseDocument doc = expenseDoc(ExpenseWorkflowStatus.VERIFIED, true);
         when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, E_ID)).thenReturn(List.of());
+
+        service.approveExpense(E_ID);
+
+        assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.CLOSED);
+        verify(auditService).recordUserEvent(eq("ExpenseDocument"), eq(E_ID), eq(BRANCH),
+            eq(EventType.APPROVED), eq(ACTOR_ID), any());
+        verify(auditService).recordUserEvent(eq("ExpenseDocument"), eq(E_ID), eq(BRANCH),
+            eq(EventType.CLOSED), eq(ACTOR_ID), any());
+    }
+
+    @Test
+    void approveExpense_onAClaim_staysApprovedForCloseClaim() {
+        ExpenseDocument doc = expenseDoc(ExpenseWorkflowStatus.VERIFIED, false);
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+        when(expenseDocumentService.statusTriggersClaim(ORG, doc)).thenReturn(true);
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, E_ID)).thenReturn(List.of());
 
         service.approveExpense(E_ID);
 
         assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.APPROVED);
-        verify(auditService).recordUserEvent(eq("ExpenseDocument"), eq(E_ID), eq(BRANCH),
-            eq(EventType.APPROVED), eq(ACTOR_ID), any());
     }
 
     // ---------------------------------------------------- cash

@@ -6,7 +6,7 @@ DAMS is where every branch records the money it takes in and pays out. As an **a
 
 - **Review the queue** — every entry a cashier submits in your branches lands on your home screen. You **verify**, **query**, or **reject** each one.
 - **Override an amount** — if a line's figure is wrong and you're sure of the correct one, you can fix it in place instead of sending it back.
-- **Close expenses** — an expense document doesn't finish on its own; you close it once it's settled and the bill is in hand.
+- **Verify expenses** — an expense that needs no finance-manager step closes the moment you verify it, so check it first.
 - **Review cash movements** — cash in / cash out gets checked the same way, on the **Cash** tab of your queue.
 
 ## Where you sit in the flow

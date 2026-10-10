@@ -237,7 +237,18 @@ has `org_id = null`.
    VERIFIED or APPROVED at the time, it also moves back to SUBMITTED for
    re-review, same as the VERIFIED/APPROVED reopen case — a self-closed
    receipt is not a dead end, it's just the strictest starting point.
-2. **Expenses are closed explicitly by the Accountant.** Status flow: Open
+2. **Expenses close by themselves at their last approval step (rev 74).** The
+   moment the last reviewer who has to act presses their button, the expense
+   goes straight to CLOSED (files freeze, audit shows `CLOSED` with `auto`):
+   an in-limit expense with an ordinary status closes when the **Accountant
+   verifies** it; one that needs the Finance Manager (over its limit, or a
+   status flagged "needs Finance Manager approval", and no pre-approval
+   covering the total) closes when the **Finance Manager approves** it. A
+   Transfer to Claim expense is *not* auto-closed — the Finance Manager's
+   Close Claim ends it. The Accountant's **Close expense** button stays for
+   expenses verified before this rule. (Before rev 74 the Accountant had to
+   press Close expense as a separate step, and expenses sat at VERIFIED.)
+   Status flow: Open
    → In Progress → Awaiting Receipt → Received Receipt → Closed (or
    Transfer to Claim). **Any expense may be transferred to a claim — it need
    not be tagged to a job card, and its job card need not be a Warranty / AMC /
