@@ -765,6 +765,7 @@ public class ReviewService {
                 expenseDocumentRepo.save(doc);
                 auditService.recordUserEvent(EXPENSE, doc.getId(), doc.getBranchId(), EventType.VERIFIED, me.getId(),
                     detail("documentNo", doc.getDocumentNo(), "bulk", true));
+                autoCloseIfDone(orgId, doc, me);
                 verifiedIds.add(doc.getId());
                 log.info("Bulk verified expense: orgId={} docId={} by={}", orgId, doc.getId(), me.getId());
             } catch (Exception e) {
@@ -959,17 +960,7 @@ public class ReviewService {
                 + " — it needs Finance Manager approval before it can be closed");
         }
 
-        doc.setWorkflowStatus(ExpenseWorkflowStatus.CLOSED);
-        expenseDocumentRepo.save(doc);
-
-        List<Long> lineIds = expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(orgId, doc.getId())
-            .stream().map(ExpenseLine::getId).toList();
-        attachmentService.freezeExpenseDocument(orgId, doc.getId(), lineIds);
-
-        auditService.recordUserEvent(EXPENSE, doc.getId(), doc.getBranchId(), EventType.CLOSED, me.getId(),
-            detail("documentNo", doc.getDocumentNo(), "fromStatus", s.name()));
-        log.info("ExpenseDocument closed: orgId={} branchId={} docId={} documentNo={} from={} by={}",
-            orgId, doc.getBranchId(), doc.getId(), doc.getDocumentNo(), s, me.getId());
+        finishExpenseClose(orgId, doc, me, s, false);
         return expenseDocumentService.get(id);
     }
 
@@ -1027,6 +1018,45 @@ public class ReviewService {
         return expenseDocumentService.get(id);
     }
 
+    /** Marks the expense CLOSED, freezes its files and writes the audit event (shared by manual and automatic close). */
+    private void finishExpenseClose(Long orgId, ExpenseDocument doc, AppUser me, ExpenseWorkflowStatus from, boolean auto) {
+        doc.setWorkflowStatus(ExpenseWorkflowStatus.CLOSED);
+        expenseDocumentRepo.save(doc);
+
+        List<Long> lineIds = expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(orgId, doc.getId())
+            .stream().map(ExpenseLine::getId).toList();
+        attachmentService.freezeExpenseDocument(orgId, doc.getId(), lineIds);
+
+        auditService.recordUserEvent(EXPENSE, doc.getId(), doc.getBranchId(), EventType.CLOSED, me.getId(),
+            auto ? detail("documentNo", doc.getDocumentNo(), "fromStatus", from.name(), "auto", true)
+                 : detail("documentNo", doc.getDocumentNo(), "fromStatus", from.name()));
+        log.info("ExpenseDocument closed{}: orgId={} branchId={} docId={} documentNo={} from={} by={}",
+            auto ? " (automatically)" : "", orgId, doc.getBranchId(), doc.getId(), doc.getDocumentNo(), from, me.getId());
+    }
+
+    /**
+     * rev 74 — closes the expense in the same transaction as the step that completes it: a VERIFIED
+     * expense that needs no Finance Manager step (in limit, ordinary status, or covered by a pre-approval),
+     * or an APPROVED one. A Transfer to Claim expense is left for the FM's Close Claim. No-op otherwise.
+     */
+    private void autoCloseIfDone(Long orgId, ExpenseDocument doc, AppUser actor) {
+        ExpenseWorkflowStatus s = doc.getWorkflowStatus();
+        if (s != ExpenseWorkflowStatus.VERIFIED && s != ExpenseWorkflowStatus.APPROVED) {
+            return;
+        }
+        if (expenseDocumentService.statusTriggersClaim(orgId, doc)) {
+            return;
+        }
+        if (s == ExpenseWorkflowStatus.VERIFIED) {
+            boolean statusNeedsFm = !doc.isOverLimit() && expenseDocumentService.statusRequiresFmApproval(orgId, doc);
+            if ((doc.isOverLimit() || statusNeedsFm)
+                && !ExpenseDocumentService.preApprovalCovers(doc, expenseTotal(orgId, doc.getId()))) {
+                return;
+            }
+        }
+        finishExpenseClose(orgId, doc, actor, s, true);
+    }
+
     // ============================================================ transition core
 
     private ReceiveDocumentResponse transitionReceipt(Long id, AppUser me, WorkflowStatus required,
@@ -1074,6 +1104,9 @@ public class ReviewService {
             detail("documentNo", doc.getDocumentNo(), noteKey, noteVal));
         log.info("ExpenseDocument {}->{}: orgId={} branchId={} docId={} by={}",
             required, next, orgId, doc.getBranchId(), doc.getId(), me.getId());
+        if (next == ExpenseWorkflowStatus.VERIFIED || next == ExpenseWorkflowStatus.APPROVED) {
+            autoCloseIfDone(orgId, doc, me);
+        }
         return expenseDocumentService.get(id);
     }
 

@@ -7,6 +7,11 @@
 
 ## Revision log
 
+- **rev 74 (2026-10-10)** — **Expenses auto-close at their last approval step, decided by the owner.** Verified
+  expenses sat at VERIFIED until the Accountant pressed a separate Close expense. Now `ReviewService` closes an
+  expense in the same transaction as the step that completes it: Accountant verify (also bulk verify and
+  resubmit-to-FM) when no Finance Manager step is needed, Finance Manager approve otherwise. Transfer to Claim stays
+  with the FM's Close Claim. Close expense remains for already-verified rows. No migration.
 - **rev 73 (2026-10-09)** — **Dashboard items C and D, decided by the owner.** (C) Collections for a closed receipt
   claim uses the Finance Manager's final amount: the difference between it and the approved payment lines is a
   labelled "Claim final amount adjustment" dated on the close day (job card's branch), carried through the KPI,

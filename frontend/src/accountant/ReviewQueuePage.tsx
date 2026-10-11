@@ -1218,9 +1218,9 @@ function RecordDetail(props: {
                 <button type="button" onClick={() => { setBox(box === 'query' ? null : 'query'); setBoxText(''); setError('') }}
                   style={{ ...ghostBtn, color: 'var(--amber)', minHeight: 36 }}>Query</button>
                 <button type="button" onClick={() => run(() => reviewApi.verify(type, doc.id),
-                  // rev 60: an in-limit expense in an ordinary status never goes to the FM — the Accountant closes it.
+                  // rev 74: an expense that needs no FM step closes itself the moment it is verified.
                   expense && !claimExpense && !(needsFm && !preApproved)
-                    ? `${docNo} verified — you can close it now`
+                    ? `${docNo} verified and closed`
                     : `${docNo} verified — moved to Finance Manager`)}
                   disabled={busy || queryOpen} title={queryOpen ? 'Send or cancel the Query first' : undefined}
                   style={{ ...primaryBtn(busy || queryOpen), minHeight: 36 }}>Verify</button>
