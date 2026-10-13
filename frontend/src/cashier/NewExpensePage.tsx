@@ -845,6 +845,43 @@ export default function NewExpensePage() {
                   style={inputStyle}
                 />
               </Row>
+              <Row label="Vehicle #">
+                <VehicleCombobox
+                  vehicleNo={vehicleNo}
+                  vehicleId={vehicleId}
+                  customerId={customerId}
+                  locked={jcPick?.vehicleId != null}
+                  onChange={(no, id) => { setVehicleNo(no); setVehicleId(id) }}
+                  onOwnerFound={(v) => { setCustomerId(v.customerId); setCustomerName(v.customerName ?? '') }}
+                />
+              </Row>
+              <Row label="Customer Name">
+                <CustomerCombobox
+                  name={customerName}
+                  customerId={customerId}
+                  locked={jcPick?.customerId != null}
+                  onChange={(name, id) => {
+                    setCustomerName(name)
+                    if (id !== customerId) { setVehicleId(null); if (id != null) setVehicleNo('') }
+                    setCustomerId(id)
+                  }}
+                />
+              </Row>
+              <Row label="Job ID / PO / SO">
+                <input value={dbmId} onChange={(e) => setDbmId(e.target.value)} placeholder="4009941587" style={inputStyle} />
+              </Row>
+            </div>
+
+            {/* right column */}
+            <div>
+              <Row label="Total Expenses">
+                <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--red)' }}>{inr(total)}</span>
+              </Row>
+              <Row label="Status">
+                <select value={businessStatusId} onChange={(e) => setBusinessStatusId(Number(e.target.value))} style={inputStyle}>
+                  {statuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </Row>
               <Row label="Job Card (Ooriba ID)">
                 <div>
                   <JobCardSearch
@@ -878,43 +915,6 @@ export default function NewExpensePage() {
                     </div>
                   )}
                 </div>
-              </Row>
-              <Row label="Customer Name">
-                <CustomerCombobox
-                  name={customerName}
-                  customerId={customerId}
-                  locked={jcPick?.customerId != null}
-                  onChange={(name, id) => {
-                    setCustomerName(name)
-                    if (id !== customerId) { setVehicleId(null); if (id != null) setVehicleNo('') }
-                    setCustomerId(id)
-                  }}
-                />
-              </Row>
-              <Row label="Job ID / PO / SO">
-                <input value={dbmId} onChange={(e) => setDbmId(e.target.value)} placeholder="4009941587" style={inputStyle} />
-              </Row>
-            </div>
-
-            {/* right column */}
-            <div>
-              <Row label="Total Expenses">
-                <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--red)' }}>{inr(total)}</span>
-              </Row>
-              <Row label="Status">
-                <select value={businessStatusId} onChange={(e) => setBusinessStatusId(Number(e.target.value))} style={inputStyle}>
-                  {statuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </Row>
-              <Row label="Vehicle #">
-                <VehicleCombobox
-                  vehicleNo={vehicleNo}
-                  vehicleId={vehicleId}
-                  customerId={customerId}
-                  locked={jcPick?.vehicleId != null}
-                  onChange={(no, id) => { setVehicleNo(no); setVehicleId(id) }}
-                  onOwnerFound={(v) => { setCustomerId(v.customerId); setCustomerName(v.customerName ?? '') }}
-                />
               </Row>
               <Row label="Invoice #">
                 <input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="7731122600388" style={inputStyle} />
