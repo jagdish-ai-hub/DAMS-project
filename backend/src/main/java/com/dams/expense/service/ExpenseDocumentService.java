@@ -297,11 +297,15 @@ public class ExpenseDocumentService {
      * after an FM query, or after an approval the total has since outgrown.
      */
     @Transactional
-    public ExpenseDocumentResponse requestApproval(Long documentId) {
+    public ExpenseDocumentResponse requestApproval(Long documentId, String reason) {
         Long orgId = TenantContext.requireOrgId();
         ExpenseDocument doc = load(orgId, documentId);
         AppUser me = postingGuard.requireCanPost(orgId, jobCardOrNull(orgId, doc));
 
+        String why = blankToNull(reason);
+        if (why == null) {
+            throw DamsException.badRequest("Write why this expense is needed — the Finance Manager reads it before approving");
+        }
         if (doc.getWorkflowStatus() != ExpenseWorkflowStatus.DRAFT) {
             throw DamsException.conflict("Only a draft can be sent for review (document " + describe(doc)
                 + " is " + doc.getWorkflowStatus() + ")");
@@ -323,6 +327,8 @@ public class ExpenseDocumentService {
         }
 
         doc.setPreApprovalStatus(PreApprovalStatus.PENDING);
+        doc.setApprovalReason(why);
+        doc.setApprovalComment(null);
         doc.setApprovalRequestedAt(Instant.now());
         doc.setPreApprovedAmount(null);
         doc.setPreApprovedBy(null);
@@ -330,7 +336,7 @@ public class ExpenseDocumentService {
         doc.setLastModifiedBy(me.getId());
         expenseDocumentRepo.save(doc);
         auditService.recordUserEvent(ENTITY, doc.getId(), doc.getBranchId(), EventType.APPROVAL_REQUESTED, me.getId(),
-            orderedDetail("amount", total, "overLimit", doc.isOverLimit()));
+            approvalRequestDetail(total, doc.isOverLimit(), why));
         log.info("Expense sent for FM pre-approval: orgId={} docId={} amount={}", orgId, doc.getId(), total);
         return assemble(doc);
     }
@@ -454,6 +460,8 @@ public class ExpenseDocumentService {
             shim.setReceiverId(request.getReceiverId());
             shim.setReceiverName(request.getReceiverName());
             shim.setReceiverPhone(request.getReceiverPhone());
+            shim.setExpenseCategoryId(request.getExpenseCategoryId() != null
+                ? request.getExpenseCategoryId() : doc.getExpenseCategoryId());
             doc.setReceiverId(resolveReceiver(orgId, shim).getId());
         }
         if (request.getExpenseCategoryId() != null) {
@@ -596,23 +604,40 @@ public class ExpenseDocumentService {
     // ------------------------------------------------------------------ internals
 
     private Receiver resolveReceiver(Long orgId, CreateExpenseRequest r) {
+        String phone = blankToNull(r.getReceiverPhone());
         if (r.getReceiverId() != null) {
-            return receiverRepo.findByIdAndOrgId(r.getReceiverId(), orgId)
+            Receiver receiver = receiverRepo.findByIdAndOrgId(r.getReceiverId(), orgId)
                 .orElseThrow(() -> DamsException.notFound("Receiver", r.getReceiverId()));
+            updateReceiverPhone(receiver, phone);
+            return receiver;
         }
         if (r.getReceiverName() == null || r.getReceiverName().isBlank()) {
             throw DamsException.badRequest("Provide receiverId or receiverName for the expense");
         }
         String name = r.getReceiverName().trim();
-        return receiverRepo.findFirstByOrgIdAndNameIgnoreCase(orgId, name).orElseGet(() -> {
+        return receiverRepo.findFirstByOrgIdAndNameIgnoreCase(orgId, name).map(receiver -> {
+            updateReceiverPhone(receiver, phone);
+            return receiver;
+        }).orElseGet(() -> {
             Receiver rec = new Receiver();
             rec.setOrgId(orgId);
             rec.setName(name);
-            rec.setPhone(blankToNull(r.getReceiverPhone()));
+            rec.setPhone(phone);
+            // rev 76 — a vendor typed fresh on an expense is mapped to that expense's category, so it shows up next time.
+            if (r.getExpenseCategoryId() != null) {
+                rec.getCategoryIds().add(r.getExpenseCategoryId());
+            }
             Receiver saved = receiverRepo.save(rec);
             log.info("Receiver created inline for expense: orgId={} receiverId={}", orgId, saved.getId());
             return saved;
         });
+    }
+
+    private void updateReceiverPhone(Receiver receiver, String phone) {
+        if (phone != null && !phone.equals(receiver.getPhone())) {
+            receiver.setPhone(phone);
+            receiverRepo.save(receiver);
+        }
     }
 
     private List<ExpenseLine> appendLines(Long orgId, ExpenseDocument doc, List<ExpenseLineInput> inputs,
@@ -954,6 +979,8 @@ public class ExpenseDocumentService {
                 : userRepo.findByIdAndOrganization_Id(doc.getPreApprovedBy(), orgId).map(AppUser::getName).orElse(null),
             doc.getPreApprovedAt(),
             doc.getApprovalRequestedAt(),
+            doc.getApprovalReason(),
+            doc.getApprovalComment(),
             preApprovalCovers(doc, total),
             requiresFmApproval(orgId, doc),
             doc.getClaimFinalAmount(),
@@ -1005,6 +1032,12 @@ public class ExpenseDocumentService {
 
     private static String describe(ExpenseDocument doc) {
         return doc.getDocumentNo() != null ? doc.getDocumentNo() : "#" + doc.getId();
+    }
+
+    private static Map<String, Object> approvalRequestDetail(BigDecimal total, boolean overLimit, String reason) {
+        Map<String, Object> m = orderedDetail("amount", total, "overLimit", overLimit);
+        m.put("reason", reason);
+        return m;
     }
 
     private static Map<String, Object> orderedDetail(String k1, Object v1, String k2, Object v2) {

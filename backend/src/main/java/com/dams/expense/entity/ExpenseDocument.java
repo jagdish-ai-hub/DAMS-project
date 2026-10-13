@@ -110,6 +110,14 @@ public class ExpenseDocument {
     @Column(name = "approval_requested_at")
     private Instant approvalRequestedAt;
 
+    /** rev 76 — the cashier's reason for needing Finance Manager approval (mandatory when sent for review). */
+    @Column(name = "approval_reason", length = 1000)
+    private String approvalReason;
+
+    /** rev 76 — the Finance Manager's optional comment when they approve ("approved because …"). */
+    @Column(name = "approval_comment", length = 1000)
+    private String approvalComment;
+
     /**
      * Finance Manager's Close Claim on a "Transfer to Claim" expense (rev 61, V38): the amount
      * actually recovered. Null until closed. {@code claimOverridden} when it differs from the

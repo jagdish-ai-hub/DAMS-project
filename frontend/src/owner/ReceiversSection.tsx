@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { receiversApi, type Receiver } from '../api/receivers'
+import { mastersApi, type MasterRow } from '../api/masters'
 import {
   Badge, ErrorBanner, Field, Modal, TextInput,
   card, cardTitle, ghostBtn, primaryBtn, td, th,
@@ -19,6 +20,7 @@ export default function ReceiversSection() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [modal, setModal] = useState<{ editing: Receiver | null } | null>(null)
+  const [categories, setCategories] = useState<MasterRow[]>([])
 
   async function load() {
     setLoading(true)
@@ -34,6 +36,9 @@ export default function ReceiversSection() {
   }
 
   useEffect(() => { load() }, [])
+  useEffect(() => {
+    mastersApi.list('expense-categories').then(({ data }) => setCategories(data.filter((c) => c.active))).catch(() => setCategories([]))
+  }, [])
 
   return (
     <section style={card} aria-label="Receivers and vendors">
@@ -43,10 +48,10 @@ export default function ReceiversSection() {
       </div>
       <ErrorBanner message={error} />
       <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 500, fontSize: '0.84rem' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 620, fontSize: '0.84rem' }}>
           <thead>
             <tr>
-              <th style={th}>Name</th><th style={th}>Phone</th>
+              <th style={th}>Name</th><th style={th}>Phone</th><th style={th}>Expense categories</th>
               <th style={th}>Status</th><th style={th}></th>
             </tr>
           </thead>
@@ -55,6 +60,11 @@ export default function ReceiversSection() {
               <tr key={r.id}>
                 <td style={td}>{r.name}</td>
                 <td style={td}>{r.phone ?? '—'}</td>
+                <td style={td}>
+                  {r.categoryIds.length === 0
+                    ? <span style={{ color: 'var(--muted)' }}>Not mapped</span>
+                    : r.categoryIds.map((id) => categories.find((c) => c.id === id)?.name ?? `#${id}`).join(', ')}
+                </td>
                 <td style={td}>{r.active ? <Badge tone="green">Active</Badge> : <Badge>Inactive</Badge>}</td>
                 <td style={{ ...td, textAlign: 'right' }}>
                   <button style={{ ...ghostBtn, minHeight: 36, padding: '4px 12px' }} onClick={() => setModal({ editing: r })}>Edit</button>
@@ -62,7 +72,7 @@ export default function ReceiversSection() {
               </tr>
             ))}
             {!loading && rows.length === 0 && (
-              <tr><td style={td} colSpan={4}>Nothing here yet.</td></tr>
+              <tr><td style={td} colSpan={5}>Nothing here yet.</td></tr>
             )}
           </tbody>
         </table>
@@ -71,6 +81,7 @@ export default function ReceiversSection() {
       {modal && (
         <ReceiverModal
           editing={modal.editing}
+          categories={categories}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); load() }}
         />
@@ -79,8 +90,9 @@ export default function ReceiversSection() {
   )
 }
 
-function ReceiverModal(props: { editing: Receiver | null; onClose: () => void; onSaved: () => void }) {
+function ReceiverModal(props: { editing: Receiver | null; categories: MasterRow[]; onClose: () => void; onSaved: () => void }) {
   const { editing } = props
+  const [categoryIds, setCategoryIds] = useState<number[]>(editing?.categoryIds ?? [])
   const [name, setName] = useState(editing?.name ?? '')
   const [phone, setPhone] = useState(editing?.phone ?? '')
   const [active, setActive] = useState(editing?.active ?? true)
@@ -92,7 +104,7 @@ function ReceiverModal(props: { editing: Receiver | null; onClose: () => void; o
     setError('')
     setSaving(true)
     try {
-      const body = { name: name.trim(), phone: phone.trim() === '' ? undefined : phone.trim(), active }
+      const body = { name: name.trim(), phone: phone.trim() === '' ? undefined : phone.trim(), active, categoryIds }
       if (editing == null) {
         await receiversApi.create(body)
       } else {
@@ -107,7 +119,7 @@ function ReceiverModal(props: { editing: Receiver | null; onClose: () => void; o
   }
 
   return (
-    <Modal title={editing == null ? 'Add vendor' : 'Edit vendor'} onClose={props.onClose} maxWidth={440}>
+    <Modal title={editing == null ? 'Add vendor' : 'Edit vendor'} onClose={props.onClose} maxWidth={520}>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <ErrorBanner message={error} />
         <Field label="Name">
@@ -115,6 +127,21 @@ function ReceiverModal(props: { editing: Receiver | null; onClose: () => void; o
         </Field>
         <Field label="Phone (optional)">
           <TextInput value={phone} onChange={setPhone} placeholder="Phone number" maxLength={32} />
+        </Field>
+        <Field label="Expense categories this vendor supplies">
+          <div role="group" aria-label="Expense categories" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px' }}>
+            {props.categories.map((c) => (
+              <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.84rem' }}>
+                <input
+                  type="checkbox"
+                  checked={categoryIds.includes(c.id)}
+                  onChange={(e) => setCategoryIds((cur) => e.target.checked ? [...cur, c.id] : cur.filter((x) => x !== c.id))}
+                />
+                {c.name}
+              </label>
+            ))}
+            {props.categories.length === 0 && <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>No expense categories yet.</span>}
+          </div>
         </Field>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84rem' }}>
           <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />

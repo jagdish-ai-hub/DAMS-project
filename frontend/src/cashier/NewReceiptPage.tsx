@@ -630,6 +630,15 @@ export default function NewReceiptPage() {
           <h3 style={{ fontSize: '0.94rem', fontWeight: 700 }}>Receive Entry</h3>
           <span style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>customer receipt — one record per job / cause</span>
           <span style={{ flex: 1 }} />
+          <label htmlFor="receive-document-number" style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: '0.76rem', fontWeight: 600, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+            DAMS-Receive-ID
+            <input
+              id="receive-document-number"
+              readOnly
+              value={loadedDoc?.documentNo ?? 'assigned on submit'}
+              style={{ ...inputStyle, width: 190, background: 'var(--bg)', color: 'var(--muted)', fontFamily: 'Consolas, monospace' }}
+            />
+          </label>
           {loadedDoc?.documentNo && (
             <button
               type="button"
@@ -717,19 +726,11 @@ export default function NewReceiptPage() {
                   style={inputStyle}
                 />
               </Row>
-              <Row label="Job Card / DBM">
+              <Row label="Job ID / PO / SO">
                 <input value={dbmId} disabled={jcLinked} onChange={(e) => setDbmId(e.target.value)} placeholder="4009941587" style={inputStyle} />
               </Row>
               <Row label="Invoice #">
                 <input value={invoiceNo} disabled={jcLinked} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="7731122600388" style={inputStyle} />
-              </Row>
-              <Row label="Transaction Type">
-                <select value={categoryId} disabled={jcLinked} onChange={(e) => setCategoryId(Number(e.target.value))} style={inputStyle}>
-                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </Row>
-              <Row label="Invoice Amount">
-                <input type="number" value={invoiceAmount} disabled={jcLinked} onChange={(e) => setInvoiceAmount(e.target.value)} placeholder="Total amount" style={inputStyle} />
               </Row>
               <Row label="Claim Type">
                 <select value={claimTypeId} disabled={jcLinked} onChange={(e) => setClaimTypeId(e.target.value === '' ? '' : Number(e.target.value))} style={inputStyle}>
@@ -754,6 +755,14 @@ export default function NewReceiptPage() {
                   disabled={jcLinked}
                   currentName={loadedDoc?.businessStatusName ?? linkedStatusName}
                 />
+              </Row>
+              <Row label="Transaction Type">
+                <select value={categoryId} disabled={jcLinked} onChange={(e) => setCategoryId(Number(e.target.value))} style={inputStyle}>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </Row>
+              <Row label="Invoice Amount">
+                <input type="number" value={invoiceAmount} disabled={jcLinked} onChange={(e) => setInvoiceAmount(e.target.value)} placeholder="Total amount" style={inputStyle} />
               </Row>
               <Row label="Customer Type">
                 <div style={{ display: 'flex', border: '1.5px solid var(--line)', borderRadius: 7, overflow: 'hidden', width: 'fit-content' }}>
@@ -781,9 +790,6 @@ export default function NewReceiptPage() {
                   <input value={gstNo} disabled={jcLinked} onChange={(e) => setGstNo(e.target.value)} placeholder="21ABCDE1234F1Z5" style={inputStyle} />
                 </Row>
               )}
-              <Row label="DAMS-Receive-ID">
-                <input readOnly value={loadedDoc?.documentNo ?? 'assigned on submit'} style={{ ...inputStyle, background: 'var(--bg)', color: 'var(--muted)', fontFamily: 'Consolas, monospace' }} />
-              </Row>
 
               {/* rev 64 — linking an existing job card is the exception, so it stays out of the way: a small
                   link just above Documents. Picked, it fills (and locks) the customer / vehicle / job fields. */}
@@ -951,33 +957,35 @@ export default function NewReceiptPage() {
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 16, marginTop: 8, borderTop: '1px solid var(--line)', flexWrap: 'wrap' }}>
-            <button type="button" onClick={() => navigate(-1)} style={ghostBtn} disabled={busy}>Cancel</button>
-            {isQueried ? (
-              <button type="button" onClick={resubmitEdited} style={primaryBtn(busy)} disabled={busy}>
-                {busy ? <><Spinner /> Resubmitting…</> : 'Resubmit'}
-              </button>
-            ) : loadedDoc != null && loadedDoc.workflowStatus === 'DRAFT' ? (
-              <>
-                <button type="button" onClick={saveDraftExisting} style={ghostBtn} disabled={busy}>Save Draft</button>
-                <button type="button" onClick={submitDraft} style={primaryBtn(busy)} disabled={busy}>
-                  {busy ? <><Spinner /> Submitting…</> : 'Submit'}
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => navigate(-1)} style={ghostBtn} disabled={busy}>Cancel</button>
+              {isQueried ? (
+                <button type="button" onClick={resubmitEdited} style={primaryBtn(busy)} disabled={busy}>
+                  {busy ? <><Spinner /> Resubmitting…</> : 'Resubmit'}
                 </button>
-              </>
-            ) : loadedDoc != null ? (
-              // Already reviewed (SUBMITTED/VERIFIED/APPROVED/REJECTED/settled) — existing
-              // lines are locked above, so this can only save a header edit or a brand-new
-              // payment row; there's nothing left here to "submit".
-              <button type="button" onClick={saveDraftExisting} style={primaryBtn(busy)} disabled={busy}>
-                {busy ? <><Spinner /> Saving…</> : 'Save'}
-              </button>
-            ) : (
-              <>
-                <button type="button" onClick={() => saveNew(false)} style={ghostBtn} disabled={busy}>Save Draft</button>
-                <button type="button" onClick={() => saveNew(true)} style={primaryBtn(busy)} disabled={busy}>
-                  {busy ? <><Spinner /> Submitting…</> : 'Submit'}
+              ) : loadedDoc != null && loadedDoc.workflowStatus === 'DRAFT' ? (
+                <>
+                  <button type="button" onClick={saveDraftExisting} style={ghostBtn} disabled={busy}>Save Draft</button>
+                  <button type="button" onClick={submitDraft} style={primaryBtn(busy)} disabled={busy}>
+                    {busy ? <><Spinner /> Submitting…</> : 'Submit'}
+                  </button>
+                </>
+              ) : loadedDoc != null ? (
+                // Already reviewed (SUBMITTED/VERIFIED/APPROVED/REJECTED/settled) — existing
+                // lines are locked above, so this can only save a header edit or a brand-new
+                // payment row; there's nothing left here to "submit".
+                <button type="button" onClick={saveDraftExisting} style={primaryBtn(busy)} disabled={busy}>
+                  {busy ? <><Spinner /> Saving…</> : 'Save'}
                 </button>
-              </>
-            )}
+              ) : (
+                <>
+                  <button type="button" onClick={() => saveNew(false)} style={ghostBtn} disabled={busy}>Save Draft</button>
+                  <button type="button" onClick={() => saveNew(true)} style={primaryBtn(busy)} disabled={busy}>
+                    {busy ? <><Spinner /> Submitting…</> : 'Submit'}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </section>

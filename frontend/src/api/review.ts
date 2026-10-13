@@ -104,8 +104,9 @@ export const reviewApi = {
   bulkVerify(t: 'receipt' | 'expense', ids: number[]) {
     return api.post<BulkVerifyResponse>(`${base(t)}/bulk-verify`, { ids })
   },
-  approve(t: ReviewType, id: number) {
-    return api.post<AnyReviewDoc>(`${base(t)}/${id}/approve`)
+  /** `comment` (rev 76) is the Finance Manager's optional "approved because …" — used for expenses. */
+  approve(t: ReviewType, id: number, comment?: string) {
+    return api.post<AnyReviewDoc>(`${base(t)}/${id}/approve`, comment?.trim() ? { comment: comment.trim() } : undefined)
   },
   query(t: ReviewType, id: number, note: string) {
     return api.post<AnyReviewDoc>(`${base(t)}/${id}/query`, { note })
@@ -138,8 +139,8 @@ export const reviewApi = {
   fmExpenseRequests() {
     return api.get<ReviewQueueItem[]>('/api/v1/review/fm/expense-requests')
   },
-  preApproveExpense(id: number) {
-    return api.post<ExpenseDocument>(`/api/v1/expenses/${id}/pre-approve`)
+  preApproveExpense(id: number, comment?: string) {
+    return api.post<ExpenseDocument>(`/api/v1/expenses/${id}/pre-approve`, comment?.trim() ? { comment: comment.trim() } : undefined)
   },
   queryExpenseApproval(id: number, note: string) {
     return api.post<ExpenseDocument>(`/api/v1/expenses/${id}/query-approval`, { note })

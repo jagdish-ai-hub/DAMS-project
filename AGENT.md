@@ -248,6 +248,30 @@ has `org_id = null`.
    Close Claim ends it. The Accountant's **Close expense** button stays for
    expenses verified before this rule. (Before rev 74 the Accountant had to
    press Close expense as a separate step, and expenses sat at VERIFIED.)
+   **Receiver Contact (rev 75).** The expense form has an optional Receiver
+   Contact (mobile number). Typing one updates that receiver's saved phone,
+   on create and on edit; leaving it blank never erases a saved number.
+   **Why it's needed, and the Finance Manager's comment (rev 76).** Sending an
+   expense for Finance Manager review — over a sub-category limit, or in a
+   status flagged "needs Finance Manager approval" — needs a **mandatory
+   "Why is this expense needed?"** box (max 500 characters); the form will not
+   send without it. The Finance Manager reads it on the request, and Approve
+   (the pre-approval, and the later approve of a verified expense) takes an
+   **optional comment** ("approved because …"). Both are saved on the
+   expense, in its history, and shown to the Accountant and Owner. Query and
+   Reject still need a note.
+   **Transfer to Claim is a Yes / No dropdown (rev 76)** on the cashier's
+   expense form, not a status choice or a button. Yes puts the expense on the
+   claim status (the one flagged `triggers_claim`); No puts it back on a plain
+   status. The Finance Manager's Close Claim is unchanged.
+   **Vendors are mapped to expense categories (rev 76).** Each vendor
+   (receiver) can supply **many** expense categories; the Owner ticks them in
+   Masters → Vendors. The expense form has a **vendor search box** like the
+   customer search on Receipts: it searches active vendors by name or phone and
+   lists the ones mapped to the chosen category first. A vendor typed fresh is
+   added and mapped to that expense's category automatically; a vendor that
+   already exists keeps the mapping the Owner gave it. Vendors already used on
+   an expense were mapped to their past categories when this shipped.
    Status flow: Open
    → In Progress → Awaiting Receipt → Received Receipt → Closed (or
    Transfer to Claim). **Any expense may be transferred to a claim — it need

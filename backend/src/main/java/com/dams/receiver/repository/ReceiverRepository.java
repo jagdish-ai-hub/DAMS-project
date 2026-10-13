@@ -20,6 +20,17 @@ public interface ReceiverRepository extends JpaRepository<Receiver, Long> {
 
     boolean existsByOrgIdAndNameIgnoreCase(Long orgId, String name);
 
+    /** Vendor search (rev 76): active vendors whose name or phone contains the text, name order. */
+    @org.springframework.data.jpa.repository.Query("""
+        select r from Receiver r
+        where r.orgId = :orgId and r.active = true
+          and (:q = '' or lower(r.name) like lower(concat('%', :q, '%')) or coalesce(r.phone, '') like concat('%', :q, '%'))
+        order by r.name asc
+        """)
+    List<Receiver> searchActive(@org.springframework.data.repository.query.Param("orgId") Long orgId,
+                                @org.springframework.data.repository.query.Param("q") String q,
+                                org.springframework.data.domain.Pageable page);
+
     /** Super Admin org-purge only. */
     long deleteByOrgId(Long orgId);
 }

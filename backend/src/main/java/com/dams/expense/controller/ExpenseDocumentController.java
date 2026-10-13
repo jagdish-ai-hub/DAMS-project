@@ -81,8 +81,9 @@ public class ExpenseDocumentController {
     @PostMapping("/{id}/request-approval")
     @Operation(summary = "Send an over-limit expense draft to the Finance Manager for pre-approval (rev 53)")
     @PreAuthorize("hasAuthority('CASHIER')")
-    public ExpenseDocumentResponse requestApproval(@PathVariable Long id) {
-        return expenseDocumentService.requestApproval(id);
+    public ExpenseDocumentResponse requestApproval(@PathVariable Long id,
+                                                   @Valid @RequestBody com.dams.expense.dto.RequestApprovalRequest request) {
+        return expenseDocumentService.requestApproval(id, request.getReason());
     }
 
     @PostMapping("/{id}/transfer-to-claim")

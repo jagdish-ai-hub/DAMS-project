@@ -24,6 +24,7 @@ vi.mock('../api/customers', () => ({
   customersApi: { search: vi.fn(), get: vi.fn(), update: vi.fn(), vehicles: vi.fn(() => Promise.resolve({ data: [] })) },
 }))
 vi.mock('../api/vehicles', () => ({ vehiclesApi: { byNumber: vi.fn() } }))
+vi.mock('../api/receivers', () => ({ receiversApi: { search: vi.fn().mockResolvedValue({ data: [] }) } }))
 vi.mock('../api/jobCards', () => ({
   jobCardsApi: { search: vi.fn(() => Promise.resolve({ data: [] })), get: vi.fn(), patch: vi.fn() },
 }))
@@ -40,7 +41,7 @@ const xyz = { id: 7, name: 'XYZ Transport', phone: '70000 00000', vehicles: [], 
 
 async function fillAndSave(user: ReturnType<typeof userEvent.setup>) {
   render(<MemoryRouter initialEntries={['/app/new-expense']}><NewExpensePage /></MemoryRouter>)
-  await user.type(await screen.findByPlaceholderText('Vendor / payee name'), 'Some Vendor')
+  await user.type(await screen.findByRole('textbox', { name: 'Receiver name' }), 'Some Vendor')
   await user.type(screen.getByLabelText('Customer name'), 'BCD Motors')
   await user.type(screen.getByLabelText('Vehicle number'), 'OD33AB1234')
   await user.click(screen.getByRole('button', { name: 'Save Draft' }))

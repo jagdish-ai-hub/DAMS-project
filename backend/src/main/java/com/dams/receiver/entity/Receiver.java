@@ -1,6 +1,10 @@
 package com.dams.receiver.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.Fetch;
+import org.hibernate.annotations.FetchMode;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -35,6 +39,13 @@ public class Receiver {
 
     @Column(nullable = false)
     private boolean active = true;
+
+    /** rev 76 — the expense categories this vendor supplies (many per vendor). */
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "receiver_category", joinColumns = @JoinColumn(name = "receiver_id"))
+    @Column(name = "expense_category_id")
+    @Fetch(FetchMode.SUBSELECT)
+    private Set<Long> categoryIds = new LinkedHashSet<>();
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();

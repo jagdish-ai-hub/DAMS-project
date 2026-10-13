@@ -78,6 +78,9 @@ export interface ExpenseDocument {
   preApprovedByName: string | null
   preApprovedAt: string | null
   approvalRequestedAt: string | null
+  /** rev 76 — why the cashier needs Finance Manager approval, and the FM's comment when they approved. */
+  approvalReason: string | null
+  approvalComment: string | null
   /** Approved and the total is still within the approved amount — may be submitted / closed. */
   preApprovalCovers: boolean
   /** rev 54 — needs FM approval: over a limit, or its status is flagged "requires FM approval". */
@@ -160,8 +163,8 @@ export const expensesApi = {
     return api.post<ExpenseDocument>(`/api/v1/expenses/${id}/resubmit`)
   },
   /** rev 53 — send an over-limit draft to the Finance Manager for pre-approval instead of submitting. */
-  requestApproval(id: number) {
-    return api.post<ExpenseDocument>(`/api/v1/expenses/${id}/request-approval`)
+  requestApproval(id: number, reason: string) {
+    return api.post<ExpenseDocument>(`/api/v1/expenses/${id}/request-approval`, { reason })
   },
   transferToClaim(id: number) {
     return api.post<ExpenseDocument>(`/api/v1/expenses/${id}/transfer-to-claim`)

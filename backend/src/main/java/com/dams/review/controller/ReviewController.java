@@ -287,8 +287,9 @@ public class ReviewController {
     @PostMapping("/expenses/{id}/pre-approve")
     @Operation(summary = "Finance Manager: approve an over-limit expense before the Cashier submits it (rev 53)")
     @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
-    public ExpenseDocumentResponse preApproveExpense(@PathVariable Long id) {
-        return reviewService.preApproveExpense(id);
+    public ExpenseDocumentResponse preApproveExpense(@PathVariable Long id,
+                                                     @Valid @RequestBody(required = false) com.dams.review.dto.ApproveRequest request) {
+        return reviewService.preApproveExpense(id, request == null ? null : request.comment());
     }
 
     @PostMapping("/expenses/{id}/query-approval")
@@ -301,8 +302,9 @@ public class ReviewController {
     @PostMapping("/expenses/{id}/approve")
     @Operation(summary = "Finance Manager: give a verified expense final approval")
     @PreAuthorize("hasAuthority('FINANCE_MANAGER')")
-    public ExpenseDocumentResponse approveExpense(@PathVariable Long id) {
-        return reviewService.approveExpense(id);
+    public ExpenseDocumentResponse approveExpense(@PathVariable Long id,
+                                                  @Valid @RequestBody(required = false) com.dams.review.dto.ApproveRequest request) {
+        return reviewService.approveExpense(id, request == null ? null : request.comment());
     }
 
     // ---- cash actions ----

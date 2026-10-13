@@ -803,9 +803,11 @@ public class ReviewService {
     }
 
     @Transactional
-    public ExpenseDocumentResponse approveExpense(Long id) {
+    public ExpenseDocumentResponse approveExpense(Long id, String comment) {
+        String note = trimToNull(comment);
         return transitionExpense(id, guard.requireFinanceManager(),
-            ExpenseWorkflowStatus.VERIFIED, ExpenseWorkflowStatus.APPROVED, EventType.APPROVED, null, null);
+            ExpenseWorkflowStatus.VERIFIED, ExpenseWorkflowStatus.APPROVED, EventType.APPROVED,
+            note == null ? null : "comment", note, note);
     }
 
     /** Reviewer status change (rev 58) — Accountant, Finance Manager or Owner; see {@link ExpenseDocumentService#changeBusinessStatus}. */
@@ -836,20 +838,22 @@ public class ReviewService {
      * it without a second FM approval. The document stays DRAFT — the Cashier still submits it.
      */
     @Transactional
-    public ExpenseDocumentResponse preApproveExpense(Long id) {
+    public ExpenseDocumentResponse preApproveExpense(Long id, String comment) {
         Long orgId = TenantContext.requireOrgId();
         AppUser me = guard.requireFinanceManager();
         ExpenseDocument doc = loadExpense(orgId, id);
         requirePendingApproval(me, doc);
+        String note = trimToNull(comment);
 
         BigDecimal total = expenseTotal(orgId, doc.getId());
         doc.setPreApprovalStatus(PreApprovalStatus.APPROVED);
         doc.setPreApprovedAmount(total);
         doc.setPreApprovedBy(me.getId());
         doc.setPreApprovedAt(Instant.now());
+        doc.setApprovalComment(note);
         expenseDocumentRepo.save(doc);
         auditService.recordUserEvent(EXPENSE, doc.getId(), doc.getBranchId(), EventType.PRE_APPROVED, me.getId(),
-            detail("amount", total));
+            detail("amount", total, "comment", note));
         log.info("Expense pre-approved by FM: orgId={} branchId={} docId={} amount={} by={}",
             orgId, doc.getBranchId(), doc.getId(), total, me.getId());
         return expenseDocumentService.get(id);
@@ -1087,11 +1091,20 @@ public class ReviewService {
 
     private ExpenseDocumentResponse transitionExpense(Long id, AppUser me, ExpenseWorkflowStatus required,
             ExpenseWorkflowStatus next, EventType event, String noteKey, String noteVal) {
+        return transitionExpense(id, me, required, next, event, noteKey, noteVal, null);
+    }
+
+    /** {@code fmComment} (rev 76) is the Finance Manager's optional comment on an approval; null leaves it as it was. */
+    private ExpenseDocumentResponse transitionExpense(Long id, AppUser me, ExpenseWorkflowStatus required,
+            ExpenseWorkflowStatus next, EventType event, String noteKey, String noteVal, String fmComment) {
         Long orgId = TenantContext.requireOrgId();
         ExpenseDocument doc = loadExpense(orgId, id);
         requireState(me, doc.getBranchId(), doc.getCreatedBy(), doc.getLastModifiedBy(),
             describe(doc), doc.getWorkflowStatus() == required, doc.getWorkflowStatus());
 
+        if (fmComment != null) {
+            doc.setApprovalComment(fmComment);
+        }
         doc.setWorkflowStatus(next);
         expenseDocumentRepo.save(doc);
         if (next == ExpenseWorkflowStatus.APPROVED) {
@@ -1108,6 +1121,14 @@ public class ReviewService {
             autoCloseIfDone(orgId, doc, me);
         }
         return expenseDocumentService.get(id);
+    }
+
+    private static String trimToNull(String s) {
+        if (s == null) {
+            return null;
+        }
+        String t = s.trim();
+        return t.isEmpty() ? null : t;
     }
 
     /** The one query/reject endpoint serves both reviewers — dispatch on the caller's role. */

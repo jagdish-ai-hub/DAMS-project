@@ -451,6 +451,9 @@ function FmDetail(props: {
   const [busy, setBusy] = useState(false)
   const [box, setBox] = useState<'query' | null>(null)
   const [boxText, setBoxText] = useState('')
+  // rev 76 — the FM's optional "approved because …" comment, sent with Approve
+  const [approveComment, setApproveComment] = useState('')
+  useEffect(() => { setApproveComment('') }, [doc.id])
   const [claimModal, setClaimModal] = useState(false)
   const [statusOptions, setStatusOptions] = useState<MasterRow[]>([])
 
@@ -588,6 +591,18 @@ function FmDetail(props: {
           so the cashier needs your approval before they can submit it.
           Approving it lets them submit up to <strong>{inr(expense.totalAmount)}</strong>; after that the
           Accountant verifies and closes it without coming back to you. Query sends it back with your note.
+          {expense.approvalReason && (
+            <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--card, #fff)', border: '1px solid var(--line)', borderRadius: 7 }}>
+              <strong>Why the cashier needs it:</strong> {expense.approvalReason}
+            </div>
+          )}
+        </div>
+      )}
+
+      {!isApprovalRequest && expense && expense.approvalReason && (
+        <div style={{ ...card, marginBottom: 14, fontSize: '0.84rem' }}>
+          <strong>Why the cashier needed it:</strong> {expense.approvalReason}
+          {expense.approvalComment && <div style={{ marginTop: 4 }}><strong>Finance comment:</strong> {expense.approvalComment}</div>}
         </div>
       )}
 
@@ -615,18 +630,34 @@ function FmDetail(props: {
               onSubmit={submitBox}
             />
           )}
+          {box == null && expense && (isApprovalRequest || canApprove) && (
+            <div style={{ marginBottom: 10 }}>
+              <label htmlFor="fm-approve-comment" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, marginBottom: 4 }}>
+                Comment (optional)
+              </label>
+              <textarea
+                id="fm-approve-comment"
+                value={approveComment}
+                onChange={(e) => setApproveComment(e.target.value)}
+                maxLength={500}
+                rows={2}
+                placeholder="e.g. Approved because the part was urgent — the cashier and Accountant will see this."
+                style={{ ...inputStyle, width: '100%', resize: 'vertical', fontFamily: 'inherit' }}
+              />
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
             {(canQuery || isApprovalRequest) && (
               <button type="button" onClick={() => { setBox(box === 'query' ? null : 'query'); setBoxText(''); setError('') }}
                 style={{ ...ghostBtn, color: 'var(--amber)', minHeight: 36 }}>Query</button>
             )}
             {isApprovalRequest && (
-              <button type="button" onClick={() => run(() => reviewApi.preApproveExpense(doc.id), `Request #${doc.id} approved — the cashier can submit it now`)}
+              <button type="button" onClick={() => run(() => reviewApi.preApproveExpense(doc.id, approveComment), `Request #${doc.id} approved — the cashier can submit it now`)}
                 disabled={busy || box != null} title={box != null ? 'Send or cancel the Query first' : undefined}
                 style={{ ...primaryBtn(busy || box != null), minHeight: 36 }}>Approve</button>
             )}
             {canApprove && (
-              <button type="button" onClick={() => run(() => reviewApi.approve(type, doc.id), `${docNo} approved`)}
+              <button type="button" onClick={() => run(() => reviewApi.approve(type, doc.id, approveComment), `${docNo} approved`)}
                 disabled={busy || box != null} title={box != null ? 'Send or cancel the Query first' : undefined}
                 style={{ ...primaryBtn(busy || box != null), minHeight: 36 }}>Approve</button>
             )}
