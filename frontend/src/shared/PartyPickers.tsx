@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { customersApi, type Customer, type VehicleRef } from '../api/customers'
 import { vehiclesApi, type Vehicle } from '../api/vehicles'
 import { jobCardsApi, type JobCardSearchHit } from '../api/jobCards'
+import { receiversApi, type Receiver } from '../api/receivers'
 import { inputStyle } from '../shell/ui'
 
 /**
@@ -139,6 +140,52 @@ export function CustomerCombobox(props: {
       {props.customerId != null && (
         <div style={hintStyle}>Existing customer linked.</div>
       )}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ vendor (rev 76) */
+
+/**
+ * Vendor / payee search for the Expense form, the way customer search works on Receipts: pick an
+ * existing vendor, or just type a new name (the server adds it, mapped to the chosen category).
+ * Vendors mapped to the expense category are listed first.
+ */
+export function ReceiverCombobox(props: {
+  name: string
+  /** The expense category chosen on the form — mapped vendors are listed first. */
+  categoryId: number | null
+  /** true once an existing vendor was picked (and the name has not been edited since). */
+  linked: boolean
+  onChange: (name: string, picked?: Receiver) => void
+  placeholder?: string
+}) {
+  const typed = props.name.trim()
+  return (
+    <div>
+      <Combo
+        ariaLabel="Receiver name"
+        text={props.name}
+        refetchKey={props.categoryId}
+        placeholder={props.placeholder ?? 'Search or type a vendor / payee name'}
+        onText={(t) => props.onChange(t)}
+        load={async (q) => {
+          const { data } = await receiversApi.search(q.trim(), props.categoryId)
+          return data.map((r) => {
+            const mapped = props.categoryId != null && r.categoryIds.includes(props.categoryId)
+            return {
+              key: r.id,
+              label: r.name,
+              sub: [r.phone, mapped ? 'Supplies this category' : undefined].filter(Boolean).join(' · ') || undefined,
+              pick: () => props.onChange(r.name, r),
+            }
+          })
+        }}
+      />
+      {typed && !props.linked && (
+        <div style={{ ...hintStyle, color: 'var(--amber)' }}>New vendor — will be added when you save.</div>
+      )}
+      {props.linked && <div style={hintStyle}>Existing vendor linked.</div>}
     </div>
   )
 }

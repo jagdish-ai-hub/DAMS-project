@@ -143,7 +143,7 @@ class ReviewControllerSecurityTest {
     @Test
     void expensePreApproval_isFinanceManagerOnly() throws Exception {
         stubToken("fm-token", 8L, 1L, Role.FINANCE_MANAGER);
-        when(reviewService.preApproveExpense(1L)).thenReturn(mock(ExpenseDocumentResponse.class));
+        when(reviewService.preApproveExpense(1L, null)).thenReturn(mock(ExpenseDocumentResponse.class));
         mockMvc.perform(post("/api/v1/expenses/1/pre-approve").header("Authorization", "Bearer fm-token"))
             .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/review/fm/expense-requests").header("Authorization", "Bearer fm-token"))

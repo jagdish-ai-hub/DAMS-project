@@ -637,7 +637,7 @@ class ReviewServiceTest {
         when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, E_ID))
             .thenReturn(List.of(expenseLine(1, new BigDecimal("1400")), expenseLine(2, new BigDecimal("200"))));
 
-        service.preApproveExpense(E_ID);
+        service.preApproveExpense(E_ID, null);
 
         assertThat(doc.getPreApprovalStatus()).isEqualTo(PreApprovalStatus.APPROVED);
         assertThat(doc.getPreApprovedAmount()).isEqualByComparingTo("1600");
@@ -649,12 +649,49 @@ class ReviewServiceTest {
     }
 
     @Test
+    void preApproveExpense_withAComment_storesItTrimmed_rev76() {
+        ExpenseDocument doc = pendingRequest();
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, E_ID))
+            .thenReturn(List.of(expenseLine(1, new BigDecimal("1400"))));
+
+        service.preApproveExpense(E_ID, "  Cheaper than the dealer  ");
+
+        assertThat(doc.getApprovalComment()).isEqualTo("Cheaper than the dealer");
+    }
+
+    @Test
+    void preApproveExpense_withNoComment_leavesItEmpty_rev76() {
+        ExpenseDocument doc = pendingRequest();
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, E_ID))
+            .thenReturn(List.of(expenseLine(1, new BigDecimal("1400"))));
+
+        service.preApproveExpense(E_ID, "   ");
+
+        assertThat(doc.getApprovalComment()).isNull();
+    }
+
+    @Test
+    void approveExpense_withAComment_storesIt_rev76() {
+        ExpenseDocument doc = expenseDoc(ExpenseWorkflowStatus.VERIFIED, true);
+        when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, E_ID)).thenReturn(List.of());
+
+        service.approveExpense(E_ID, " Approved because the part was urgent ");
+
+        assertThat(doc.getApprovalComment()).isEqualTo("Approved because the part was urgent");
+        verify(auditService).recordUserEvent(eq("ExpenseDocument"), eq(E_ID), eq(BRANCH),
+            eq(EventType.APPROVED), eq(ACTOR_ID), argThat(m -> "Approved because the part was urgent".equals(m.get("comment"))));
+    }
+
+    @Test
     void preApproveExpense_conflict_whenNoRequestIsWaiting() {
         ExpenseDocument doc = pendingRequest();
         doc.setPreApprovalStatus(null);
         when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
 
-        assertThatThrownBy(() -> service.preApproveExpense(E_ID))
+        assertThatThrownBy(() -> service.preApproveExpense(E_ID, null))
             .isInstanceOf(DamsException.class)
             .hasMessageContaining("no approval request waiting");
     }
@@ -1076,7 +1113,7 @@ class ReviewServiceTest {
         when(expenseDocumentRepo.findByIdAndOrgId(E_ID, ORG)).thenReturn(Optional.of(doc));
         when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, E_ID)).thenReturn(List.of());
 
-        service.approveExpense(E_ID);
+        service.approveExpense(E_ID, null);
 
         assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.CLOSED);
         verify(auditService).recordUserEvent(eq("ExpenseDocument"), eq(E_ID), eq(BRANCH),
@@ -1092,7 +1129,7 @@ class ReviewServiceTest {
         when(expenseDocumentService.statusTriggersClaim(ORG, doc)).thenReturn(true);
         when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, E_ID)).thenReturn(List.of());
 
-        service.approveExpense(E_ID);
+        service.approveExpense(E_ID, null);
 
         assertThat(doc.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.APPROVED);
     }

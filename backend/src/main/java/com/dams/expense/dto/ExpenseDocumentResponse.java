@@ -59,6 +59,9 @@ public record ExpenseDocumentResponse(
     String preApprovedByName,
     Instant preApprovedAt,
     Instant approvalRequestedAt,
+    // rev 76 — why the cashier needs FM approval, and the FM's comment when they approved.
+    String approvalReason,
+    String approvalComment,
     boolean preApprovalCovers,
     // rev 54 — FM approval is needed for this expense: over a limit, or its status is flagged.
     boolean needsFmApproval,

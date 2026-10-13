@@ -9,9 +9,11 @@ public record ReceiverResponse(
     String name,
     String phone,
     boolean active,
-    Instant createdAt
+    Instant createdAt,
+    java.util.List<Long> categoryIds
 ) {
     public static ReceiverResponse of(Receiver r) {
-        return new ReceiverResponse(r.getId(), r.getName(), r.getPhone(), r.isActive(), r.getCreatedAt());
+        return new ReceiverResponse(r.getId(), r.getName(), r.getPhone(), r.isActive(), r.getCreatedAt(),
+            r.getCategoryIds().stream().sorted().toList());
     }
 }

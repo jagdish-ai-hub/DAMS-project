@@ -4,7 +4,7 @@ import { mastersApi, type MasterRow } from '../api/masters'
 import { customersApi } from '../api/customers'
 import { jobCardsApi, type JobCard, type JobCardSearchHit } from '../api/jobCards'
 import { BusinessStatusSelect } from '../shared/BusinessStatusSelect'
-import { CustomerCombobox, JobCardSearch, VehicleCombobox } from '../shared/PartyPickers'
+import { CustomerCombobox, JobCardSearch, ReceiverCombobox, VehicleCombobox } from '../shared/PartyPickers'
 import { useVehicleOwnerCheck } from '../shared/VehicleOwnerCheck'
 import {
   expensesApi,
@@ -89,6 +89,11 @@ export default function NewExpensePage() {
   // header
   const [receiverName, setReceiverName] = useState('')
   const [receiverPhone, setReceiverPhone] = useState('')
+  // rev 76 — vendor picked from search (null while typing a new name) and the reason for needing FM approval
+  const [receiverLinked, setReceiverLinked] = useState(false)
+  const [approvalReason, setApprovalReason] = useState('')
+  // the plain status to go back to when "Transfer to Claim" is switched back to No
+  const [plainStatusId, setPlainStatusId] = useState<number | null>(null)
   const [customerName, setCustomerName] = useState('')
   const [customerId, setCustomerId] = useState<number | null>(null)
   const [vehicleNo, setVehicleNo] = useState('')
@@ -228,6 +233,8 @@ export default function NewExpensePage() {
         setLoadedDoc(data)
         setReceiverName(data.receiverName ?? '')
         setReceiverPhone(data.receiverPhone ?? '')
+        setReceiverLinked(true)
+        setApprovalReason(data.approvalReason ?? '')
         setCustomerName(data.customerName ?? '')
         setCustomerId(data.customerId)
         setVehicleNo(data.vehicleNo ?? '')
@@ -594,8 +601,15 @@ export default function NewExpensePage() {
    * approval first. New form: save as draft, then send it. The draft already exists if the
    * second call fails, so the cashier lands on it to retry.
    */
+  /** rev 76 — the reason for needing Finance Manager approval is mandatory. */
+  function reasonProblem(): string | null {
+    return approvalReason.trim() === ''
+      ? 'Write why this expense is needed — the Finance Manager reads it before approving'
+      : null
+  }
+
   async function sendNewForReview() {
-    const problem = validate(true)
+    const problem = validate(true) ?? reasonProblem()
     if (problem) {
       setError(problem)
       return
@@ -607,7 +621,7 @@ export default function NewExpensePage() {
       if (!owner) return
       const { data } = await expensesApi.create({ ...buildBody(false), ...owner })
       try {
-        await expensesApi.requestApproval(data.id)
+        await expensesApi.requestApproval(data.id, approvalReason.trim())
       } catch (e) {
         setError(apiError(e, 'Saved as a draft, but it could not be sent for review. Try Send for Review again.'))
         navigate(`/app/new-expense?editDoc=${data.id}`, { replace: true })
@@ -623,7 +637,7 @@ export default function NewExpensePage() {
 
   async function sendDraftForReview() {
     if (!loadedDoc) return
-    const problem = validate(true)
+    const problem = validate(true) ?? reasonProblem()
     if (problem) {
       setError(problem)
       return
@@ -633,7 +647,7 @@ export default function NewExpensePage() {
     try {
       await patchHeader()
       await syncLines(loadedDoc.id)
-      const { data } = await expensesApi.requestApproval(loadedDoc.id)
+      const { data } = await expensesApi.requestApproval(loadedDoc.id, approvalReason.trim())
       sentForReview(data)
     } catch (e) {
       setError(apiError(e, 'Could not send it for review.'))
@@ -682,27 +696,12 @@ export default function NewExpensePage() {
     }
   }
 
-  async function transferToClaim() {
-    if (!loadedDoc) return
-    setBusy(true)
-    setError('')
-    try {
-      const { data } = await expensesApi.transferToClaim(loadedDoc.id)
-      navigate(`/app?flash=${encodeURIComponent(`${data.documentNo ?? `#${data.id}`} moved to claim`)}`)
-    } catch (e) {
-      setError(apiError(e, 'Could not transfer to claim.'))
-    } finally {
-      setBusy(false)
-    }
-  }
-
   function finish(submitted: boolean, doc: ExpenseDocument) {
     const ref = doc.documentNo ?? `draft #${doc.id}`
     navigate(`/app?flash=${encodeURIComponent(submitted ? `${ref} submitted for checking` : `${ref} saved as draft`)}`)
   }
 
   const isQueried = loadedDoc?.workflowStatus === 'QUERIED'
-  const inEditMode = editDocId != null
   // Once VERIFIED/APPROVED (or SUBMITTED again after a reopen), the accountant/FM has
   // already checked what's on record — an existing line stays locked for the cashier.
   // A brand-new row (lineNo == null) is always addable; the server reopens the document
@@ -719,13 +718,19 @@ export default function NewExpensePage() {
   const needsApproval = (limitWarnings.length > 0 || statusNeedsApproval) && !approvalCovers
   const linesEditable = !awaitingApproval
     && (!loadedDoc || loadedDoc.workflowStatus === 'DRAFT' || loadedDoc.workflowStatus === 'QUERIED')
-  const showTransferButton =
-    !awaitingApproval &&
-    inEditMode &&
-    loadedDoc != null &&
-    !loadedDoc.businessStatusTriggersClaim &&
-    loadedDoc.workflowStatus !== 'REJECTED' &&
-    loadedDoc.workflowStatus !== 'CLOSED'
+  // rev 76 — "Transfer to Claim" is a Yes / No dropdown. Yes puts the expense on the claim status behind the scenes.
+  const claimStatus = statuses.find((x) => x.triggersClaim === true) ?? null
+  const claimYes = claimStatus != null && businessStatusId === claimStatus.id
+  const plainStatuses = statuses.filter((x) => x.triggersClaim !== true)
+  function setTransferToClaim(yes: boolean) {
+    if (!claimStatus) return
+    if (yes) {
+      if (businessStatusId !== claimStatus.id) setPlainStatusId(Number(businessStatusId))
+      setBusinessStatusId(claimStatus.id)
+    } else {
+      setBusinessStatusId(plainStatusId ?? plainStatuses[0]?.id ?? businessStatusId)
+    }
+  }
 
   return (
     <div style={{ maxWidth: 940, margin: '0 auto' }}>
@@ -760,9 +765,15 @@ export default function NewExpensePage() {
           This expense is locked until they approve it or send it back.
         </div>
       )}
+      {awaitingApproval && loadedDoc?.approvalReason && (
+        <div style={{ ...approvalBanner, background: 'var(--card, #fff)', border: '1px solid var(--line)', color: 'var(--ink, inherit)' }}>
+          <strong>Your reason:</strong> {loadedDoc.approvalReason}
+        </div>
+      )}
       {preApproval === 'APPROVED' && approvedAmount != null && (approvalCovers ? (
         <div role="status" style={{ ...approvalBanner, background: 'var(--green-bg)', border: '1px solid #BBDCC9', color: 'var(--green)' }}>
           <strong>✓ Approved by {loadedDoc?.preApprovedByName ?? 'the Finance Manager'} for {inr(approvedAmount)}.</strong>{' '}
+          {loadedDoc?.approvalComment && <>Their comment: &ldquo;{loadedDoc.approvalComment}&rdquo;. </>}
           Submit it when you&apos;re ready.
         </div>
       ) : (
@@ -821,11 +832,15 @@ export default function NewExpensePage() {
             {/* left column */}
             <div>
               <Row label="Receiver Name" req>
-                <input
-                  value={receiverName}
-                  onChange={(e) => setReceiverName(e.target.value)}
-                  placeholder="Vendor / payee name"
-                  style={inputStyle}
+                <ReceiverCombobox
+                  name={receiverName}
+                  categoryId={expenseCategoryId === '' ? null : Number(expenseCategoryId)}
+                  linked={receiverLinked}
+                  onChange={(name, picked) => {
+                    setReceiverName(name)
+                    setReceiverLinked(picked != null)
+                    if (picked) setReceiverPhone(picked.phone ?? '')
+                  }}
                 />
               </Row>
               <Row label="Expenses Category">
@@ -878,10 +893,29 @@ export default function NewExpensePage() {
                 <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--red)' }}>{inr(total)}</span>
               </Row>
               <Row label="Status">
-                <select value={businessStatusId} onChange={(e) => setBusinessStatusId(Number(e.target.value))} style={inputStyle}>
-                  {statuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                <select
+                  value={claimYes ? '' : businessStatusId}
+                  disabled={claimYes}
+                  onChange={(e) => setBusinessStatusId(Number(e.target.value))}
+                  style={inputStyle}
+                >
+                  {claimYes && <option value="">{claimStatus?.name}</option>}
+                  {plainStatuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </Row>
+              {claimStatus && (
+                <Row label="Transfer to Claim">
+                  <select
+                    aria-label="Transfer to Claim"
+                    value={claimYes ? 'yes' : 'no'}
+                    onChange={(e) => setTransferToClaim(e.target.value === 'yes')}
+                    style={inputStyle}
+                  >
+                    <option value="no">No</option>
+                    <option value="yes">Yes — the manufacturer will repay it</option>
+                  </select>
+                </Row>
+              )}
               <Row label="Job Card (Ooriba ID)">
                 <div>
                   <JobCardSearch
@@ -1052,15 +1086,33 @@ export default function NewExpensePage() {
             </div>
           )}
 
+          {needsApproval && !awaitingApproval && (
+            <div style={{ marginTop: 12 }}>
+              <label htmlFor="approval-reason" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: 5 }}>
+                Why is this expense needed? <span style={{ color: 'var(--red)' }}>*</span>
+              </label>
+              <textarea
+                id="approval-reason"
+                aria-required="true"
+                value={approvalReason}
+                onChange={(e) => setApprovalReason(e.target.value)}
+                maxLength={500}
+                rows={3}
+                placeholder="Explain it for the Finance Manager — they read this before approving."
+                style={{ ...inputStyle, width: '100%', minHeight: 70, resize: 'vertical', fontFamily: 'inherit' }}
+              />
+              <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: 3 }}>
+                Required. Sent along with this expense to the Finance Manager.
+              </div>
+            </div>
+          )}
+
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 28, padding: '12px 6px 4px', borderTop: '2px solid var(--line)', marginTop: 12, flexWrap: 'wrap' }}>
             <Foot k="Total Expenses" v={inr(total)} />
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 16, marginTop: 8, borderTop: '1px solid var(--line)', flexWrap: 'wrap' }}>
             <button type="button" onClick={() => navigate(-1)} style={ghostBtn} disabled={busy}>Cancel</button>
-            {showTransferButton && (
-              <button type="button" onClick={transferToClaim} style={ghostBtn} disabled={busy}>Transfer to Claim</button>
-            )}
             {isQueried ? (
               <button type="button" onClick={resubmitEdited} style={primaryBtn(busy)} disabled={busy}>
                 {busy ? <><Spinner /> Resubmitting…</> : 'Resubmit'}

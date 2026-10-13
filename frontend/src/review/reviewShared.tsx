@@ -235,7 +235,11 @@ export function RecordCard(props: {
           <Kv k={expense ? 'Job ID / PO / SO' : 'Job card / DBM'} v={doc.dbmId ?? '—'} />
           <Kv k="Branch" v={doc.branchCode ?? '—'} />
           {expense ? (
-            <Kv k="Entered" v={fmtDate(doc.createdAt)} />
+            <>
+              <Kv k="Entered" v={fmtDate(doc.createdAt)} />
+              {doc.approvalReason && <Kv k="Reason (cashier)" v={doc.approvalReason} />}
+              {doc.approvalComment && <Kv k="Finance comment" v={doc.approvalComment} />}
+            </>
           ) : (
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '6px 0', borderBottom: '1px dashed var(--line)', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>Invoice amount</span>

@@ -20,9 +20,28 @@ public class ReceiverService {
     private static final Logger log = LoggerFactory.getLogger(ReceiverService.class);
 
     private final ReceiverRepository receiverRepo;
+    private final com.dams.masters.repository.ExpenseCategoryRepository categoryRepo;
 
-    public ReceiverService(ReceiverRepository receiverRepo) {
+    public ReceiverService(ReceiverRepository receiverRepo,
+                           com.dams.masters.repository.ExpenseCategoryRepository categoryRepo) {
         this.receiverRepo = receiverRepo;
+        this.categoryRepo = categoryRepo;
+    }
+
+    /**
+     * Vendor search for the expense form (rev 76): active vendors matching the text by name or
+     * phone. When {@code categoryId} is given, vendors mapped to it come first, then the rest.
+     */
+    @Transactional(readOnly = true)
+    public List<ReceiverResponse> search(String q, Long categoryId) {
+        String text = q == null ? "" : q.trim();
+        List<Receiver> hits = receiverRepo.searchActive(TenantContext.requireOrgId(), text,
+            org.springframework.data.domain.PageRequest.of(0, 200));
+        return hits.stream()
+            .sorted(java.util.Comparator.comparing((Receiver r) -> categoryId == null || !r.getCategoryIds().contains(categoryId)))
+            .limit(20)
+            .map(ReceiverResponse::of)
+            .toList();
     }
 
     @Transactional(readOnly = true)
@@ -51,6 +70,7 @@ public class ReceiverService {
         receiver.setName(name);
         receiver.setPhone(trimToNull(request.getPhone()));
         receiver.setActive(true);
+        applyCategories(orgId, receiver, request.getCategoryIds());
         receiver = receiverRepo.save(receiver);
 
         log.info("Receiver created: orgId={} receiverId={} name='{}'", orgId, receiver.getId(), name);
@@ -73,11 +93,29 @@ public class ReceiverService {
         if (request.getActive() != null) {
             receiver.setActive(request.getActive());
         }
+        applyCategories(orgId, receiver, request.getCategoryIds());
         receiver = receiverRepo.save(receiver);
 
         log.info("Receiver updated: orgId={} receiverId={} name='{}' active={}",
             orgId, receiver.getId(), receiver.getName(), receiver.isActive());
         return ReceiverResponse.of(receiver);
+    }
+
+    /** Replaces the vendor's category mapping; null means "leave it". Every id must be a category of this org. */
+    private void applyCategories(Long orgId, Receiver receiver, List<Long> categoryIds) {
+        if (categoryIds == null) {
+            return;
+        }
+        java.util.Set<Long> next = new java.util.LinkedHashSet<>();
+        for (Long cid : categoryIds) {
+            if (cid != null) {
+                categoryRepo.findByIdAndOrgId(cid, orgId)
+                    .orElseThrow(() -> DamsException.notFound("Expense category", cid));
+                next.add(cid);
+            }
+        }
+        receiver.getCategoryIds().clear();
+        receiver.getCategoryIds().addAll(next);
     }
 
     private Receiver load(Long id) {

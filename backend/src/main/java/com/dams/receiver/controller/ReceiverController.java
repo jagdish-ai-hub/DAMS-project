@@ -36,6 +36,13 @@ public class ReceiverController {
         return receiverService.list();
     }
 
+    @GetMapping("/search")
+    @Operation(summary = "Search active vendors by name or phone; vendors mapped to categoryId come first (rev 76)")
+    public List<ReceiverResponse> search(@RequestParam(defaultValue = "") String q,
+                                         @RequestParam(required = false) Long categoryId) {
+        return receiverService.search(q, categoryId);
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Get one receiver")
     public ReceiverResponse get(@PathVariable Long id) {

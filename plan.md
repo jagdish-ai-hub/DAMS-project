@@ -7,6 +7,15 @@
 
 ## Revision log
 
+- **rev 76 (2026-10-13)** — **Expense approval reason and comment, Transfer to Claim dropdown, vendor mapping and
+  search, decided by the owner.** (1) Sending an expense for FM review needs a mandatory reason
+  (`expense_document.approval_reason`, `POST /expenses/{id}/request-approval {reason}`); the FM's Approve
+  (pre-approve and approve) takes an optional comment (`approval_comment`, optional body `{comment}`), both shown on
+  the FM, Accountant and Owner cards and in the audit detail. (2) Transfer to Claim is a Yes / No dropdown on the
+  expense form that switches the `triggers_claim` status; the old button is gone. (3) `receiver_category` maps each
+  vendor to many expense categories (V41, backfilled from past expenses); `GET /receivers/search?q=&categoryId=`
+  lists mapped vendors first; a vendor typed fresh on an expense is mapped to its category; the Owner edits the
+  mapping in Masters → Vendors. Migration V41.
 - **rev 75 (2026-10-13)** — **Cashier Receive / Expense Entry form layout and receiver contact.** Receive:
   move `DAMS-Receive-ID` to the top-right of the heading; place Transaction Type below Status and Invoice
   Amount below Transaction Type; rename `Job Card / DBM` to `Job ID / PO / SO`. Expense: move

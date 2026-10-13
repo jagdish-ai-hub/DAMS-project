@@ -179,6 +179,37 @@ class ExpenseDocumentServiceTest {
     }
 
     @Test
+    void create_aVendorTypedFresh_isMappedToTheExpenseCategory_rev76() {
+        CreateExpenseRequest req = baseRequest();
+        req.setReceiverName("Brand New Spares");
+        when(receiverRepo.findFirstByOrgIdAndNameIgnoreCase(ORG, "Brand New Spares")).thenReturn(Optional.empty());
+        when(receiverRepo.save(any(Receiver.class))).thenAnswer(inv -> {
+            Receiver r = inv.getArgument(0);
+            ReflectionTestUtils.setField(r, "id", RECEIVER_ID);
+            return r;
+        });
+
+        service.create(req);
+
+        ArgumentCaptor<Receiver> saved = ArgumentCaptor.forClass(Receiver.class);
+        verify(receiverRepo).save(saved.capture());
+        assertThat(saved.getValue().getCategoryIds()).containsExactly(CATEGORY_ID);
+    }
+
+    @Test
+    void create_anExistingVendor_keepsItsMapping_evenUnderAnotherCategory() {
+        Receiver existing = receiver();
+        existing.getCategoryIds().add(999L);
+        when(receiverRepo.findFirstByOrgIdAndNameIgnoreCase(ORG, "Sharma Auto Spares")).thenReturn(Optional.of(existing));
+        CreateExpenseRequest req = baseRequest();
+        req.setReceiverName("Sharma Auto Spares");
+
+        service.create(req);
+
+        assertThat(existing.getCategoryIds()).containsExactly(999L);
+    }
+
+    @Test
     void create_updatesExistingReceiverPhone_whenProvided() {
         Receiver existingReceiver = receiver();
         when(receiverRepo.findFirstByOrgIdAndNameIgnoreCase(ORG, "Sharma Auto Spares"))
@@ -477,7 +508,7 @@ class ExpenseDocumentServiceTest {
         when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, DOC_ID))
             .thenReturn(List.of(persistedLine(1, new BigDecimal("1400"))));
 
-        service.requestApproval(DOC_ID);
+        service.requestApproval(DOC_ID, "Needed for the job");
 
         assertThat(draft.getPreApprovalStatus()).isEqualTo(PreApprovalStatus.PENDING);
         assertThat(draft.getApprovalRequestedAt()).isNotNull();
@@ -488,13 +519,40 @@ class ExpenseDocumentServiceTest {
     }
 
     @Test
+    void requestApproval_storesTheCashiersReason_rev76() {
+        ExpenseDocument draft = draftDoc();
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(draft));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, DOC_ID))
+            .thenReturn(List.of(persistedLine(1, new BigDecimal("1400"))));
+
+        service.requestApproval(DOC_ID, "  Tow truck for a stranded customer  ");
+
+        assertThat(draft.getApprovalReason()).isEqualTo("Tow truck for a stranded customer");
+        assertThat(draft.getApprovalComment()).isNull();
+    }
+
+    @Test
+    void requestApproval_withoutAReason_isRefused_rev76() {
+        ExpenseDocument draft = draftDoc();
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(draft));
+
+        assertThatThrownBy(() -> service.requestApproval(DOC_ID, "   "))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("why this expense is needed");
+        assertThatThrownBy(() -> service.requestApproval(DOC_ID, null))
+            .isInstanceOf(DamsException.class);
+        assertThat(draft.getPreApprovalStatus()).isNull();
+        assertThat(draft.getApprovalReason()).isNull();
+    }
+
+    @Test
     void requestApproval_withinEveryLimit_isRefused() {
         ExpenseDocument draft = draftDoc();
         when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(draft));
         when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, DOC_ID))
             .thenReturn(List.of(persistedLine(1, new BigDecimal("500"))));
 
-        assertThatThrownBy(() -> service.requestApproval(DOC_ID))
+        assertThatThrownBy(() -> service.requestApproval(DOC_ID, "Needed for the job"))
             .isInstanceOf(DamsException.class)
             .hasMessageContaining("just Submit it");
         assertThat(draft.getPreApprovalStatus()).isNull();
@@ -548,7 +606,7 @@ class ExpenseDocumentServiceTest {
         verify(documentNumberService, never()).nextNumber(any(), any(), any());
 
         // ...and sending it again resets it to a fresh request.
-        service.requestApproval(DOC_ID);
+        service.requestApproval(DOC_ID, "Needed for the job");
         assertThat(draft.getPreApprovalStatus()).isEqualTo(PreApprovalStatus.PENDING);
         assertThat(draft.getPreApprovedAmount()).isNull();
     }
@@ -578,7 +636,7 @@ class ExpenseDocumentServiceTest {
         when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, DOC_ID))
             .thenReturn(List.of(persistedLine(1, new BigDecimal("500"))));
 
-        service.requestApproval(DOC_ID);
+        service.requestApproval(DOC_ID, "Needed for the job");
 
         assertThat(draft.getPreApprovalStatus()).isEqualTo(PreApprovalStatus.PENDING);
     }

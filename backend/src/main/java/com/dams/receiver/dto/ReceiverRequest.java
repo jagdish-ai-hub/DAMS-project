@@ -20,4 +20,7 @@ public class ReceiverRequest {
 
     /** Optional on update; ignored on create. */
     private Boolean active;
+
+    /** rev 76 — the expense categories this vendor supplies. Null leaves the mapping as it is. */
+    private java.util.List<Long> categoryIds;
 }
