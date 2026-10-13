@@ -88,6 +88,7 @@ export default function NewExpensePage() {
 
   // header
   const [receiverName, setReceiverName] = useState('')
+  const [receiverPhone, setReceiverPhone] = useState('')
   const [customerName, setCustomerName] = useState('')
   const [customerId, setCustomerId] = useState<number | null>(null)
   const [vehicleNo, setVehicleNo] = useState('')
@@ -226,6 +227,7 @@ export default function NewExpensePage() {
       .then(({ data }) => {
         setLoadedDoc(data)
         setReceiverName(data.receiverName ?? '')
+        setReceiverPhone(data.receiverPhone ?? '')
         setCustomerName(data.customerName ?? '')
         setCustomerId(data.customerId)
         setVehicleNo(data.vehicleNo ?? '')
@@ -369,6 +371,7 @@ export default function NewExpensePage() {
       dbmId: dbmId.trim() || undefined,
       invoiceNo: invoiceNo.trim() || undefined,
       receiverName: receiverName.trim(),
+      receiverPhone: receiverPhone.trim() || undefined,
       expenseCategoryId: Number(expenseCategoryId),
       businessStatusId: Number(businessStatusId),
       lines: buildLines(),
@@ -538,6 +541,7 @@ export default function NewExpensePage() {
       dbmId: dbmId.trim(),
       invoiceNo: invoiceNo.trim(),
       receiverName: receiverName.trim(),
+      receiverPhone: receiverPhone.trim(),
       expenseCategoryId: Number(expenseCategoryId),
       businessStatusId: Number(businessStatusId),
     })
@@ -782,10 +786,19 @@ export default function NewExpensePage() {
       )}
 
       <section style={{ ...card, padding: 0, marginTop: 12 }}>
-        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <h3 style={{ fontSize: '0.94rem', fontWeight: 700 }}>Expense Entry</h3>
           <span style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>petty cash — one record per vendor / cause</span>
           <span style={{ flex: 1 }} />
+          <label htmlFor="expense-document-number" style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: '0.76rem', fontWeight: 600, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+            DAMS-Expenses-ID
+            <input
+              id="expense-document-number"
+              readOnly
+              value={loadedDoc?.documentNo ?? 'assigned on submit'}
+              style={{ ...inputStyle, width: 190, background: 'var(--bg)', color: 'var(--muted)', fontFamily: 'Consolas, monospace' }}
+            />
+          </label>
           <span style={{
             fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em',
             padding: '2px 9px', borderRadius: 999,
@@ -812,6 +825,23 @@ export default function NewExpensePage() {
                   value={receiverName}
                   onChange={(e) => setReceiverName(e.target.value)}
                   placeholder="Vendor / payee name"
+                  style={inputStyle}
+                />
+              </Row>
+              <Row label="Expenses Category">
+                <select value={expenseCategoryId} onChange={(e) => setExpenseCategoryId(Number(e.target.value))} style={inputStyle}>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </Row>
+              <Row label="Receiver Contact">
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  maxLength={32}
+                  autoComplete="off"
+                  value={receiverPhone}
+                  onChange={(e) => setReceiverPhone(e.target.value)}
+                  placeholder="Optional — mobile number"
                   style={inputStyle}
                 />
               </Row>
@@ -861,26 +891,8 @@ export default function NewExpensePage() {
                   }}
                 />
               </Row>
-              <Row label="Vehicle #">
-                <VehicleCombobox
-                  vehicleNo={vehicleNo}
-                  vehicleId={vehicleId}
-                  customerId={customerId}
-                  locked={jcPick?.vehicleId != null}
-                  onChange={(no, id) => { setVehicleNo(no); setVehicleId(id) }}
-                  onOwnerFound={(v) => { setCustomerId(v.customerId); setCustomerName(v.customerName ?? '') }}
-                />
-              </Row>
               <Row label="Job ID / PO / SO">
                 <input value={dbmId} onChange={(e) => setDbmId(e.target.value)} placeholder="4009941587" style={inputStyle} />
-              </Row>
-              <Row label="Invoice #">
-                <input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="7731122600388" style={inputStyle} />
-              </Row>
-              <Row label="Expenses Category">
-                <select value={expenseCategoryId} onChange={(e) => setExpenseCategoryId(Number(e.target.value))} style={inputStyle}>
-                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
               </Row>
             </div>
 
@@ -894,11 +906,21 @@ export default function NewExpensePage() {
                   {statuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </Row>
-              <Row label="DAMS-Expenses-ID">
-                <input readOnly value={loadedDoc?.documentNo ?? 'assigned on submit'} style={{ ...inputStyle, background: 'var(--bg)', color: 'var(--muted)', fontFamily: 'Consolas, monospace' }} />
+              <Row label="Vehicle #">
+                <VehicleCombobox
+                  vehicleNo={vehicleNo}
+                  vehicleId={vehicleId}
+                  customerId={customerId}
+                  locked={jcPick?.vehicleId != null}
+                  onChange={(no, id) => { setVehicleNo(no); setVehicleId(id) }}
+                  onOwnerFound={(v) => { setCustomerId(v.customerId); setCustomerName(v.customerName ?? '') }}
+                />
+              </Row>
+              <Row label="Invoice #">
+                <input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="7731122600388" style={inputStyle} />
               </Row>
 
-              {/* Documents live under the ID field, in this column. */}
+              {/* Documents live under the status field, in this column. */}
               <AttachmentsPanel
                 docId={loadedDoc?.id ?? editDocId}
                 noun="expense"

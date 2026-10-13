@@ -179,6 +179,21 @@ class ExpenseDocumentServiceTest {
     }
 
     @Test
+    void create_updatesExistingReceiverPhone_whenProvided() {
+        Receiver existingReceiver = receiver();
+        when(receiverRepo.findFirstByOrgIdAndNameIgnoreCase(ORG, "Sharma Auto Spares"))
+            .thenReturn(Optional.of(existingReceiver));
+        CreateExpenseRequest req = baseRequest();
+        req.setReceiverName("Sharma Auto Spares");
+        req.setReceiverPhone("9876543210");
+
+        service.create(req);
+
+        assertThat(existingReceiver.getPhone()).isEqualTo("9876543210");
+        verify(receiverRepo).save(existingReceiver);
+    }
+
+    @Test
     void create_flagsOverLimit_whenALineExceedsItsSubCategoryLimit() {
         CreateExpenseRequest req = baseRequest();
         req.setReceiverId(RECEIVER_ID);

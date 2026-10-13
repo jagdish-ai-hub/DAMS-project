@@ -7,6 +7,14 @@
 
 ## Revision log
 
+- **rev 75 (2026-10-13)** — **Cashier Receive / Expense Entry form layout and receiver contact.** Receive:
+  move `DAMS-Receive-ID` to the top-right of the heading; place Transaction Type below Status and Invoice
+  Amount below Transaction Type; rename `Job Card / DBM` to `Job ID / PO / SO`. Expense: move
+  `DAMS-Expenses-ID` to the top-right of the heading; put Expenses Category and Receiver Contact below
+  Receiver Name; order the right column as Status, Vehicle #, Invoice #. Receiver Contact is sent on create
+  and edit and updates the existing receiver's phone when a non-empty number is provided. No migration:
+  reuse the existing nullable `receiver.phone` column. Verified: frontend production build and all 28
+  `ExpenseDocumentServiceTest` tests pass.
 - **rev 74 (2026-10-10)** — **Expenses auto-close at their last approval step, decided by the owner.** Verified
   expenses sat at VERIFIED until the Accountant pressed a separate Close expense. Now `ReviewService` closes an
   expense in the same transaction as the step that completes it: Accountant verify (also bulk verify and

@@ -248,6 +248,9 @@ has `org_id = null`.
    Close Claim ends it. The Accountant's **Close expense** button stays for
    expenses verified before this rule. (Before rev 74 the Accountant had to
    press Close expense as a separate step, and expenses sat at VERIFIED.)
+   **Receiver Contact (rev 75).** The expense form has an optional Receiver
+   Contact (mobile number). Typing one updates that receiver's saved phone,
+   on create and on edit; leaving it blank never erases a saved number.
    Status flow: Open
    → In Progress → Awaiting Receipt → Received Receipt → Closed (or
    Transfer to Claim). **Any expense may be transferred to a claim — it need

@@ -596,23 +596,36 @@ public class ExpenseDocumentService {
     // ------------------------------------------------------------------ internals
 
     private Receiver resolveReceiver(Long orgId, CreateExpenseRequest r) {
+        String phone = blankToNull(r.getReceiverPhone());
         if (r.getReceiverId() != null) {
-            return receiverRepo.findByIdAndOrgId(r.getReceiverId(), orgId)
+            Receiver receiver = receiverRepo.findByIdAndOrgId(r.getReceiverId(), orgId)
                 .orElseThrow(() -> DamsException.notFound("Receiver", r.getReceiverId()));
+            updateReceiverPhone(receiver, phone);
+            return receiver;
         }
         if (r.getReceiverName() == null || r.getReceiverName().isBlank()) {
             throw DamsException.badRequest("Provide receiverId or receiverName for the expense");
         }
         String name = r.getReceiverName().trim();
-        return receiverRepo.findFirstByOrgIdAndNameIgnoreCase(orgId, name).orElseGet(() -> {
+        return receiverRepo.findFirstByOrgIdAndNameIgnoreCase(orgId, name).map(receiver -> {
+            updateReceiverPhone(receiver, phone);
+            return receiver;
+        }).orElseGet(() -> {
             Receiver rec = new Receiver();
             rec.setOrgId(orgId);
             rec.setName(name);
-            rec.setPhone(blankToNull(r.getReceiverPhone()));
+            rec.setPhone(phone);
             Receiver saved = receiverRepo.save(rec);
             log.info("Receiver created inline for expense: orgId={} receiverId={}", orgId, saved.getId());
             return saved;
         });
+    }
+
+    private void updateReceiverPhone(Receiver receiver, String phone) {
+        if (phone != null && !phone.equals(receiver.getPhone())) {
+            receiver.setPhone(phone);
+            receiverRepo.save(receiver);
+        }
     }
 
     private List<ExpenseLine> appendLines(Long orgId, ExpenseDocument doc, List<ExpenseLineInput> inputs,
