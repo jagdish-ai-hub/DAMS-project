@@ -14,6 +14,7 @@ export type HelpEntry = { slug: string; title: string }
 export const HELP_MANIFEST: Record<HelpRole, HelpEntry[]> = {
   cashier: [
     { slug: 'your-role-in-dams', title: 'Your role in DAMS' },
+    { slug: 'where-is-my-entry', title: 'Where is my entry — and what’s next?' },
     { slug: 'finding-a-customer', title: 'Finding a customer' },
     { slug: 'creating-a-receipt', title: 'Creating a receipt' },
     { slug: 'adding-a-payment', title: 'Adding a payment' },
@@ -24,6 +25,7 @@ export const HELP_MANIFEST: Record<HelpRole, HelpEntry[]> = {
   ],
   accountant: [
     { slug: 'your-role-in-dams', title: 'Your role in DAMS' },
+    { slug: 'where-is-it', title: 'Where is it — and what’s next?' },
     { slug: 'reviewing-the-queue', title: 'Reviewing the queue' },
     { slug: 'reviewing-cash', title: 'Reviewing cash movements' },
     { slug: 'overriding-an-amount', title: 'Overriding an amount' },
@@ -31,12 +33,14 @@ export const HELP_MANIFEST: Record<HelpRole, HelpEntry[]> = {
   ],
   'finance-manager': [
     { slug: 'your-role-in-dams', title: 'Your role in DAMS' },
+    { slug: 'where-is-it', title: 'Where is it — and what’s next?' },
     { slug: 'approving-entries', title: 'Approving entries' },
     { slug: 'closing-a-claim', title: 'Closing a claim' },
     { slug: 'override-audit', title: 'Override audit' },
   ],
   owner: [
     { slug: 'your-role-in-dams', title: 'Your role in DAMS' },
+    { slug: 'where-is-it', title: 'Where is it — and who is holding it?' },
     { slug: 'reading-the-dashboard', title: 'Reading the dashboard' },
     { slug: 'comparing-branches', title: 'Comparing branches' },
     { slug: 'team-and-branches', title: 'Team & branches' },

@@ -134,6 +134,9 @@
 
 /* Help Center article typography (react-markdown output) */
 .dams-help-body { color: var(--ink); font-size: 0.88rem; line-height: 1.6; }
+.dams-help-diagram { margin: 14px 0; padding: 12px; background: #fff; border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; text-align: center; }
+.dams-help-diagram svg { max-width: 100%; height: auto; }
+.dams-help-diagram-fallback { white-space: pre-wrap; font-size: 0.78rem; }
 .dams-help-body h1 { font-size: 1.25rem; color: var(--navy); margin: 0 0 12px; }
 .dams-help-body h2 { font-size: 1.02rem; color: var(--navy); margin: 22px 0 8px; }
 .dams-help-body h3 { font-size: 0.92rem; color: var(--ink); margin: 16px 0 6px; }

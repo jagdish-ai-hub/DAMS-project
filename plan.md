@@ -7,6 +7,15 @@
 
 ## Revision log
 
+- **rev 80 (2026-10-16)** — **Document-flow help pages with Mermaid diagrams, and a database diagram at the project
+  root, requested by the owner.** (1) Every role (cashier, accountant, finance manager, owner) gets a *Where is it — and
+  what's next?* Help page: receipt, expense and cash diagrams (expense split into "getting it submitted" and "after it
+  is submitted"), the role's own steps highlighted, a "your steps" list, where to find it in the app, and a table of what
+  every status means. The Help Center now draws ```` ```mermaid ```` blocks (`help/MermaidDiagram.tsx`; the `mermaid`
+  package, pinned `11.17.2`, is loaded on demand and runs in strict mode; the owner approved adding it). `npm audit`
+  flags a low-severity advisory fixed only in 12.2.0, released under two weeks ago, so it stays on 11.17.2.
+  (2) `DATABASE.md` at the project root holds the whole schema as Mermaid ER diagrams — an overview and seven groups —
+  generated from the migrated database by `scripts/generate-db-diagram.py` (34 tables, 89 foreign keys at V43).
 - **rev 79 (2026-10-16)** — **Docs sync, no code change.** `plan.md`'s Flyway migration table and API endpoint list
   now include V39–V43 and the rev 74–77 endpoints (request-approval / pre-approve / approve bodies, vendor search and
   category mapping, customer master, vehicle rename / move). The Help Center pages for the cashier's expense form, the
