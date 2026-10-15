@@ -19,6 +19,13 @@ A new organization starts with a sensible default set. Adjust from there.
 - **Expense sub-categories** — pick the parent **category** at the top, then add rows under it. Set a **per-line limit** if you want any line above it to need the finance manager's approval — the cashier sends it for review and can only submit it once the finance manager approves.
 - **Expense statuses** — tick **Needs Finance Manager approval before the cashier can submit** on any status that should always go to the finance manager first, whatever the amount. Every organization starts with one such status, **Requires Finance Approval**.
 
+## Vendors and customers
+
+Two more lists sit below the others, each with a **search box**:
+
+- **Receivers / vendors** — search by name or phone. Tick the **expense categories** each vendor supplies (as many as needed). On the expense form, vendors mapped to the chosen category are listed first.
+- **Customers** — name, mobile, vehicles and address, for the whole organisation. Search by name, mobile, vehicle number or address. **Edit** changes everything, including correcting a vehicle number, adding a vehicle, or **Move…** to give a vehicle to another customer (records already made stay with the old customer). **Address** isn't asked on any form yet — you keep it here. Vehicles are never deleted.
+
 ## Removing a row
 
 You can't delete a master row — set it to **Inactive** instead. It stops appearing in new dropdowns but stays valid on every record that already uses it, so history never breaks.

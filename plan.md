@@ -7,6 +7,11 @@
 
 ## Revision log
 
+- **rev 79 (2026-10-16)** — **Docs sync, no code change.** `plan.md`'s Flyway migration table and API endpoint list
+  now include V39–V43 and the rev 74–77 endpoints (request-approval / pre-approve / approve bodies, vendor search and
+  category mapping, customer master, vehicle rename / move). The Help Center pages for the cashier's expense form, the
+  Finance Manager's approvals and claims, and the Owner's Masters now describe auto-close, the reason and comment,
+  the Transfer to Claim dropdown, vendor search and mapping, and the Customers list.
 - **rev 78 (2026-10-16)** — **Claim guidance on the approval request, wording only.** A Transfer to Claim expense that
   needs Finance Manager approval has two Finance Manager steps (approve the request, then Close Claim after the
   Accountant verifies). The FM's request card and its approve message now say so — the card used to say the request
@@ -2003,6 +2008,11 @@ Flyway callback / profile guard and instead runs a masters-only seed.
 | V33 | `user_role_grant`; `audit_event.actor_role`; `audit_event` CHECK += `ROLE_SWITCHED` *(rev 55)* | role switching |
 | V34 | `job_card.customer_id` nullable + `vehicle_no_text`; `expense_document.customer_id/vehicle_id`; `customer.created_branch_id`; `audit_event` CHECK += `JOB_CARD_CUSTOMER_ATTACHED` *(rev 56)* | expense/customer/vehicle linking |
 | V38 | `expense_document` += `claim_final_amount/_computed_total/_overridden/_override_reason/_closed_by/_closed_at` + CHECKs + partial index *(rev 61)* | FM closes Transfer-to-Claim expenses |
+| V39 | `job_card.contact_phone` (32) + `chassis_no` (40), nullable *(rev 68)* | Contact and Chassis # on a receipt |
+| V40 | un-freezes attachments on receipts that were never approved *(rev 72)* | queried receipts can take a bill |
+| V41 | `receiver_category` (vendor ↔ expense category, many-to-many, backfilled from past expenses); `expense_document.approval_reason` / `approval_comment` *(rev 76)* | vendor mapping; reason and FM comment |
+| V42 | `customer.address` (500), nullable *(rev 77)* | Owner-kept customer address |
+| V43 | `audit_event` CHECK += `VEHICLE_MOVED` *(rev 77)* | Owner moves a vehicle to another customer |
 | V37 | `audit_event` CHECK += `CASH_REOPENED` *(rev 60; V35 repair and V36 `STATUS_CHANGED` precede it)* | Owner reopen of a closed cash day |
 
 ---
@@ -2038,7 +2048,8 @@ PUT /api/v1/admin/appearance      # SUPER_ADMIN — { font } ∈ allowlist (plex
 ```
 GET/POST/PATCH  /api/v1/branches/{id?}
 GET/POST/PATCH  /api/v1/users/{id?}          # POST a CASHIER requires home_branch_id; POST an ACCOUNTANT takes branch_ids[]
-GET/POST/PATCH  /api/v1/receivers/{id?}
+GET/POST/PATCH  /api/v1/receivers/{id?}      # PATCH takes categoryIds[] — the expense categories the vendor supplies (rev 76)
+GET             /api/v1/receivers/search     # ?q= name or phone &categoryId= — mapped vendors first (rev 76)
 GET/POST/PATCH  /api/v1/masters/receive-categories/{id?}
 GET/POST/PATCH  /api/v1/masters/receive-statuses/{id?}
 GET/POST/PATCH  /api/v1/masters/settlement-modes/{id?}
@@ -2061,6 +2072,10 @@ GET    /api/v1/customers/{id}
 GET    /api/v1/customers/{id}/history
 GET    /api/v1/vehicles?vehicle_no=
 POST   /api/v1/vehicles
+GET    /api/v1/customers/master               # OWNER — whole organisation, with vehicles + address (rev 77)
+PATCH  /api/v1/customers/{id}                 # name / phone; address omitted = unchanged, "" = clear (OWNER also, rev 77)
+PATCH  /api/v1/vehicles/{id}                  # OWNER — correct the number, unique per org (rev 77)
+PATCH  /api/v1/vehicles/{id}/customer         # OWNER — move to another customer; past records stay put; audited VEHICLE_MOVED (rev 77)
 POST   /api/v1/job-cards                     # inline customer/vehicle create; sets category, business_status, invoice_no/amount, dbm_id
 GET    /api/v1/job-cards/{id}                # derived: pending_amount (0 if ClaimClose exists), is_claim,
                                             #   settled_via_claim_close, claim_final_amount
@@ -2104,6 +2119,9 @@ POST   /api/v1/expenses/{id}/reject
 POST   /api/v1/expenses/{id}/resubmit
 POST   /api/v1/expenses/{id}/close           # ACCOUNTANT
 POST   /api/v1/expenses/{id}/transfer-to-claim
+POST   /api/v1/expenses/{id}/request-approval  # CASHIER — body {reason} is mandatory (rev 76)
+POST   /api/v1/expenses/{id}/pre-approve       # FINANCE_MANAGER — optional body {comment} (rev 76)
+POST   /api/v1/expenses/{id}/approve           # FINANCE_MANAGER — optional body {comment} (rev 76); closes it (rev 74)
 POST   /api/v1/expenses/{id}/close-claim      # FINANCE_MANAGER — final amount recovered + reason if it differs (rev 61)
 POST   /api/v1/expenses/{id}/lines
 PATCH  /api/v1/expenses/{id}/lines/{lineNo}/override
