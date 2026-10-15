@@ -165,6 +165,8 @@ Document numbers are **unique per-org, never globally**: unique constraint on
 
 ## 5. Core data model
 
+The full, current database diagram (every table, column and foreign key) is [`DATABASE.md`](DATABASE.md) — generated from the migrated schema.
+
 Clubbing principle: **one cause = one document with many sub-transaction lines.**
 
 - Receive Document (`DAMS-Receive-ID`) ← many Settlement Lines
@@ -556,9 +558,12 @@ swappable `InsightService` interface, so every endpoint works offline and in tes
 `? Help` in the shell header opens a right-side drawer: search + role-scoped table of
 contents + Markdown articles bundled from `frontend/src/help/<role>/*.md`
 (`help/manifest.ts` fixes order + titles). No backend, no migration. Text-only by
-design (owner decision: no screenshots). Per-screen `HelpButton` deep-links to the
-relevant article. 24 articles: cashier ×8, accountant ×5, finance-manager ×4,
-owner ×5, super-admin ×2.
+design (owner decision: no screenshots) — apart from **Mermaid diagrams** (rev 80): a
+```` ```mermaid ```` block in an article is drawn as a picture by `help/MermaidDiagram.tsx`
+(the `mermaid` library is loaded only when such an article is opened). Each role has a
+*Where is it — and what's next?* page showing receipts, expenses and cash with the role's
+own steps highlighted. Per-screen `HelpButton` deep-links to the relevant article.
+29 articles: cashier ×9, accountant ×6, finance-manager ×5, owner ×7, super-admin ×2.
 
 ---
 

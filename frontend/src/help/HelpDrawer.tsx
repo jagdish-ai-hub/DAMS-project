@@ -1,7 +1,19 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Children, isValidElement, lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { HELP_MANIFEST, articleBody, type HelpRole } from './manifest'
+
+// The diagram library is only fetched when an article that has a diagram is opened.
+const MermaidDiagram = lazy(() => import('./MermaidDiagram'))
+
+/** A fenced ```mermaid block arrives as <pre><code class="language-mermaid">…</code></pre>. */
+function mermaidSource(children: ReactNode): string | null {
+  const child = Children.toArray(children)[0]
+  if (!isValidElement(child)) return null
+  const props = child.props as { className?: string; children?: ReactNode }
+  if (!props.className?.includes('language-mermaid')) return null
+  return String(props.children ?? '').trim()
+}
 
 /**
  * Slide-over Help panel opened from the shell header. Left: a search box + the role's
@@ -197,6 +209,17 @@ export default function HelpDrawer({ role, open, onClose, initialSlug }: {
                     table: ({ node: _node, ...props }) => (
                       <div className="dams-help-table-wrap"><table {...props} /></div>
                     ),
+                    // rev 80 — ```mermaid blocks are drawn as diagrams; every other code block stays as is.
+                    pre: ({ node: _node, children, ...props }) => {
+                      const chart = mermaidSource(children)
+                      return chart == null
+                        ? <pre {...props}>{children}</pre>
+                        : (
+                          <Suspense fallback={<span style={{ color: 'var(--faint)', fontSize: '0.8rem' }}>Drawing the diagram…</span>}>
+                            <MermaidDiagram chart={chart} />
+                          </Suspense>
+                        )
+                    },
                   }}
                 >
                   {body}

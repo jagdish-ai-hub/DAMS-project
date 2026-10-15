@@ -18,6 +18,8 @@ Every receive document on the job card has to be **verified by the accountant** 
 
 ## Expenses marked Transfer to Claim
 
+If the expense was over its limit, you'll have approved the cashier's request first. That is **not** the end — after the accountant verifies it, it appears under **Open claims** and you press **Close claim** with the amount recovered.
+
 An expense the cashier (or a reviewer) marked **Transfer to Claim** — money the manufacturer will pay back — is closed by **you**, not the accountant.
 
 1. The cashier submits it and the **accountant verifies it** (or queries it back to the cashier). Only then does it reach you, under **Open expense claims** on the **Expenses** tab.

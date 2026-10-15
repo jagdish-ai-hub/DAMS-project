@@ -12,10 +12,12 @@ From your home screen press **New Expense**. From a customer's page, **＋ New E
 
 ## Step 2 — fill the header
 
-- **Receiver Name** *(required)* — the person or firm the money actually went to. Type a new one and DAMS keeps it for next time.
+- **Receiver Name** *(required)* — the person or firm the money actually went to. Start typing and DAMS searches your vendors by **name or phone number**, listing the ones that supply the chosen category first. Pick one, or type a new name and DAMS keeps it for next time.
+- **Receiver Contact** *(optional)* — their mobile number. Typing one updates the vendor's saved number; leaving it blank never erases it.
 - **Job Card** — pick the job this expense is for, or leave it as **branch overhead** if it isn't tied to one job.
 - **Expenses Category** — from your owner's list. This decides which **sub-categories** you can pick on the lines.
 - **Status** — where this expense is in its own handling (Open, Awaiting Receipt, …). Picking **Requires Finance Approval** (or any status your owner set up the same way) sends it to the finance manager first — see *Send for Review* below.
+- **Transfer to Claim** — **No** normally. Choose **Yes** if the manufacturer will repay this expense; the finance manager then closes it as a claim after the accountant verifies it.
 
 ## Step 3 — add the expense lines
 
@@ -33,11 +35,12 @@ If an amount is **above the sub-category's limit**, you'll see a warning. It sti
 
 When any line is over its sub-category limit, **or** you pick a status that needs the finance manager's approval (such as **Requires Finance Approval**), you can't submit straight away. Press **Send for Review** instead:
 
-1. The expense goes to the **finance manager** as an approval request. It stays a draft (no number yet) and is **locked** while they look at it — My Entries shows it as **Waiting for FM approval**.
-2. The finance manager either **approves** it or **queries** it back to you with a note.
+1. A box appears: **Why is this expense needed?** It is **required** — the finance manager reads it before deciding, and Send for Review won't go without it.
+2. The expense goes to the **finance manager** as an approval request. It stays a draft (no number yet) and is **locked** while they look at it — My Entries shows it as **Waiting for FM approval**.
+3. The finance manager either **approves** it (they may add a comment, which you'll see) or **queries** it back to you with a note.
    - **Approved** — My Entries shows **Approved — ready to submit**. Open it and press **Submit**. After that the accountant checks and closes it as usual; it doesn't go back to the finance manager.
    - **Queried by FM** — open it, read their note at the top, fix it, and press **Send for Review** again.
-3. If you raise the total **above what was approved**, it needs approval again — the button switches back to **Send for Review**. The same or a lower total can be submitted directly.
+4. If you raise the total **above what was approved**, it needs approval again — the button switches back to **Send for Review**. The same or a lower total can be submitted directly.
 
 You can keep adding lines to an expense right up until the accountant closes it.
 

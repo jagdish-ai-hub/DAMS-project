@@ -10,7 +10,9 @@ Sources of truth, in order — read all three before writing code:
 3. **intial ui prototypes/*.html** — layout, flow, field names, and
    interactions for the frontend. Build to match these closely, not as loose
    inspiration. `dams-er-diagram-v2.mermaid` is an early sketch; where it and
-   plan.md disagree, plan.md is newer.
+   plan.md disagree, plan.md is newer. **`DATABASE.md` is the current database
+   diagram**, generated from the real schema — rerun
+   `scripts/generate-db-diagram.py` after adding a migration.
 
 ## Working process (from AGENT.md)
 

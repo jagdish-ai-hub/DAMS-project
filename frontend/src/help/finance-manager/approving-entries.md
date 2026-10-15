@@ -6,9 +6,9 @@ Your home screen is **Approvals & Claims**. It lists every entry the accountant 
 
 When a cashier's expense has a line **above its sub-category limit**, or is in a status that needs your approval (such as **Requires Finance Approval**), they can't submit it — they send it to you first. You'll see a card at the top of **Approvals & Claims** saying how many requests are waiting, and the same requests at the top of the **Expenses** tab under **Approval requests from cashiers**.
 
-Click a request (from the card or the list) to open it, then:
+Each request shows **why the cashier needs it** — they must write a reason before they can send it. Click a request (from the card or the list) to open it, then:
 
-- **Approve** — the cashier can now submit it, up to the total you approved. After they submit, the accountant verifies and closes it — it does **not** come back to you for a second approval.
+- **Approve** — the cashier can now submit it, up to the total you approved. You can add an optional **comment** ("approved because …") — the cashier, accountant and owner will see it. After they submit, the accountant verifies and closes it — it does **not** come back to you for a second approval. **Exception: Transfer to Claim.** After the accountant verifies it, come back to **Open claims** and press **Close Claim**.
 - **Query** — send it back to the cashier with a note. They fix it and send it for review again.
 
 A request has no document number yet — it's still the cashier's draft. It shows as *Request #id*. If the cashier later raises the total above what you approved, it needs your approval again.
