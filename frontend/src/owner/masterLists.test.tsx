@@ -12,7 +12,7 @@ vi.mock('../api/masters', () => ({
 }))
 vi.mock('../api/receivers', () => ({ receiversApi: { list: vi.fn(), create: vi.fn(), update: vi.fn() } }))
 vi.mock('../api/customers', () => ({ customersApi: { master: vi.fn(), create: vi.fn(), update: vi.fn() } }))
-vi.mock('../api/vehicles', () => ({ vehiclesApi: { rename: vi.fn(), create: vi.fn() } }))
+vi.mock('../api/vehicles', () => ({ vehiclesApi: { rename: vi.fn(), create: vi.fn(), move: vi.fn() } }))
 
 const vendor = (id: number, name: string, phone: string | null) =>
   ({ id, name, phone, active: true, createdAt: '', categoryIds: [] })
@@ -71,6 +71,7 @@ describe('Customers master (rev 77)', () => {
     vi.mocked(customersApi.create).mockResolvedValue({ data: { id: 9 } } as never)
     vi.mocked(vehiclesApi.rename).mockResolvedValue({ data: {} } as never)
     vi.mocked(vehiclesApi.create).mockResolvedValue({ data: {} } as never)
+    vi.mocked(vehiclesApi.move).mockResolvedValue({ data: {} } as never)
   })
 
   it('lists name, mobile, vehicles and address', async () => {
@@ -137,5 +138,40 @@ describe('Customers master (rev 77)', () => {
     await waitFor(() => expect(customersApi.create).toHaveBeenCalledWith({
       name: 'New Customer', phone: undefined, address: '5 Market Road',
     }))
+  })
+
+  it('moves a vehicle to another customer, saying first that past records stay put', async () => {
+    const user = userEvent.setup()
+    render(<CustomersSection />)
+    const row = (await screen.findByText('Sumati Sahoo')).closest('tr') as HTMLElement
+    await user.click(within(row).getByRole('button', { name: 'Edit' }))
+    await user.click(await screen.findByRole('button', { name: 'Move OD33AB1234 to another customer' }))
+
+    await user.type(screen.getByLabelText('Search customer to move to'), 'kalai')
+    expect(screen.queryByRole('button', { name: /Sumati Sahoo/ })).not.toBeInTheDocument() // not offered back to the same owner
+    await user.click(await screen.findByRole('button', { name: /Kalaivani Logistics/ }))
+
+    expect(screen.getByText(/Will move to/)).toHaveTextContent('Kalaivani Logistics')
+    expect(screen.getByText(/Past records stay with Sumati Sahoo/)).toBeInTheDocument()
+    expect(vehiclesApi.move).not.toHaveBeenCalled() // nothing happens until Save
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(vehiclesApi.move).toHaveBeenCalledWith(11, 2))
+    expect(vehiclesApi.rename).not.toHaveBeenCalled()
+  })
+
+  it('Undo cancels a pending move', async () => {
+    const user = userEvent.setup()
+    render(<CustomersSection />)
+    const row = (await screen.findByText('Sumati Sahoo')).closest('tr') as HTMLElement
+    await user.click(within(row).getByRole('button', { name: 'Edit' }))
+    await user.click(await screen.findByRole('button', { name: 'Move OD33AB1234 to another customer' }))
+    await user.type(screen.getByLabelText('Search customer to move to'), 'kalai')
+    await user.click(await screen.findByRole('button', { name: /Kalaivani Logistics/ }))
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(customersApi.update).toHaveBeenCalled())
+    expect(vehiclesApi.move).not.toHaveBeenCalled()
   })
 })

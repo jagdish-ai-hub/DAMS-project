@@ -100,6 +100,7 @@ export default function CustomersSection() {
       {modal && (
         <CustomerModal
           editing={modal.editing}
+          allCustomers={rows}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); load() }}
         />
@@ -108,9 +109,9 @@ export default function CustomersSection() {
   )
 }
 
-type VehicleDraft = { id: number | null; original: string; value: string }
+type VehicleDraft = { id: number | null; original: string; value: string; moveTo?: { id: number; name: string } | null }
 
-function CustomerModal(props: { editing: Customer | null; onClose: () => void; onSaved: () => void }) {
+function CustomerModal(props: { editing: Customer | null; allCustomers: Customer[]; onClose: () => void; onSaved: () => void }) {
   const { editing } = props
   const [name, setName] = useState(editing?.name ?? '')
   const [phone, setPhone] = useState(editing?.phone ?? '')
@@ -119,6 +120,14 @@ function CustomerModal(props: { editing: Customer | null; onClose: () => void; o
     (editing?.vehicles ?? []).map((v) => ({ id: v.id, original: v.vehicleNo, value: v.vehicleNo })))
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  // which vehicle row has its "move to another customer" search open, and what was typed
+  const [moving, setMoving] = useState<number | null>(null)
+  const [moveQuery, setMoveQuery] = useState('')
+  const [moveDigits, moveText] = [digitsOf(moveQuery), moveQuery.trim().toLowerCase()]
+  const moveMatches = moveText === '' ? [] : props.allCustomers
+    .filter((c) => c.id !== editing?.id)
+    .filter((c) => c.name.toLowerCase().includes(moveText) || (moveDigits.length > 0 && digitsOf(c.phone ?? '').includes(moveDigits)))
+    .slice(0, 6)
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -132,8 +141,9 @@ function CustomerModal(props: { editing: Customer | null; onClose: () => void; o
         if (next === '') continue
         if (v.id == null) {
           await vehiclesApi.create({ customerId, vehicleNo: next })
-        } else if (next !== v.original) {
-          await vehiclesApi.rename(v.id, next)
+        } else {
+          if (next !== v.original) await vehiclesApi.rename(v.id, next)
+          if (v.moveTo) await vehiclesApi.move(v.id, v.moveTo.id)
         }
       }
       props.onSaved()
@@ -168,15 +178,65 @@ function CustomerModal(props: { editing: Customer | null; onClose: () => void; o
           <div style={{ fontSize: '0.76rem', fontWeight: 600, color: 'var(--muted)', marginBottom: 5 }}>Vehicles</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {vehicles.map((v, i) => (
-              <input
-                key={v.id ?? `new-${i}`}
-                aria-label={v.id == null ? 'New vehicle number' : `Vehicle ${v.original}`}
-                value={v.value}
-                maxLength={24}
-                placeholder="Vehicle number, e.g. OD05CA4177"
-                onChange={(e) => setVehicles((cur) => cur.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))}
-                style={inputStyle}
-              />
+              <div key={v.id ?? `new-${i}`}>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    aria-label={v.id == null ? 'New vehicle number' : `Vehicle ${v.original}`}
+                    value={v.value}
+                    maxLength={24}
+                    placeholder="Vehicle number, e.g. OD05CA4177"
+                    onChange={(e) => setVehicles((cur) => cur.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))}
+                    style={{ ...inputStyle, flex: 1 }}
+                  />
+                  {v.id != null && !v.moveTo && (
+                    <button
+                      type="button"
+                      aria-label={`Move ${v.original} to another customer`}
+                      style={{ ...ghostBtn, minHeight: 36, whiteSpace: 'nowrap' }}
+                      onClick={() => { setMoving(moving === i ? null : i); setMoveQuery('') }}
+                    >
+                      Move…
+                    </button>
+                  )}
+                </div>
+                {v.moveTo && (
+                  <div style={{ fontSize: '0.78rem', color: 'var(--amber)', marginTop: 4 }}>
+                    Will move to <strong>{v.moveTo.name}</strong> when you save. Past records stay with {editing?.name}.{' '}
+                    <button type="button" style={{ ...ghostBtn, minHeight: 28, padding: '2px 8px' }}
+                      onClick={() => setVehicles((cur) => cur.map((x, j) => (j === i ? { ...x, moveTo: null } : x)))}>
+                      Undo
+                    </button>
+                  </div>
+                )}
+                {moving === i && (
+                  <div style={{ marginTop: 6 }}>
+                    <input
+                      autoFocus
+                      aria-label="Search customer to move to"
+                      value={moveQuery}
+                      onChange={(e) => setMoveQuery(e.target.value)}
+                      placeholder="Search the new owner by name or mobile"
+                      style={inputStyle}
+                    />
+                    {moveMatches.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        style={{ ...ghostBtn, display: 'block', width: '100%', textAlign: 'left', marginTop: 4, minHeight: 34 }}
+                        onClick={() => {
+                          setVehicles((cur) => cur.map((x, j) => (j === i ? { ...x, moveTo: { id: c.id, name: c.name } } : x)))
+                          setMoving(null)
+                        }}
+                      >
+                        {c.name}{c.phone ? ` · ${c.phone}` : ''}
+                      </button>
+                    ))}
+                    {moveText !== '' && moveMatches.length === 0 && (
+                      <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: 4 }}>No other customer matches.</div>
+                    )}
+                  </div>
+                )}
+              </div>
             ))}
             {vehicles.length === 0 && <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>No vehicles yet.</span>}
           </div>

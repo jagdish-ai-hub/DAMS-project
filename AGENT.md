@@ -282,6 +282,11 @@ has `org_id = null`.
    is stored and editable here only. A cashier's later name/phone edit never
    erases an address. A vehicle number stays unique per organisation (a clash
    is refused), and vehicles are never deleted — their history is kept.
+   **Moving a vehicle to another customer** (Owner) changes who owns it from
+   then on: new job cards and expenses for that number go under the new
+   customer. Everything already recorded — job cards, receipts, expenses, what
+   is owed — stays with the customer it was recorded for, so no balance is ever
+   rewritten. Every move is recorded in the audit trail (who, from, to).
    Status flow: Open
    → In Progress → Awaiting Receipt → Received Receipt → Closed (or
    Transfer to Claim). **Any expense may be transferred to a claim — it need

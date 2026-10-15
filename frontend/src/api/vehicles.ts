@@ -21,6 +21,10 @@ export const vehiclesApi = {
   rename(id: number, vehicleNo: string) {
     return api.patch<Vehicle>(`/api/v1/vehicles/${id}`, { vehicleNo })
   },
+  /** Owner (rev 77) — move a vehicle to another customer; records already made stay where they are. */
+  move(id: number, customerId: number) {
+    return api.patch<Vehicle>(`/api/v1/vehicles/${id}/customer`, { customerId })
+  },
   create(data: VehicleRequest) {
     return api.post<Vehicle>('/api/v1/vehicles', data)
   },

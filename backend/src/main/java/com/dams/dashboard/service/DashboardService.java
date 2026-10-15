@@ -673,6 +673,7 @@ public class DashboardService {
             case APPROVAL_REQUESTED -> "Asked for approval on";
             case PRE_APPROVED -> "Pre-approved";
             case CASH_REOPENED -> "Re-opened the";
+            case VEHICLE_MOVED -> "Moved a vehicle on";
             default -> type.name();
         };
     }

@@ -1,6 +1,7 @@
 package com.dams.vehicle.controller;
 
 import com.dams.common.exception.DamsException;
+import com.dams.vehicle.dto.VehicleMoveRequest;
 import com.dams.vehicle.dto.VehicleRenameRequest;
 import com.dams.vehicle.dto.VehicleRequest;
 import com.dams.vehicle.dto.VehicleResponse;
@@ -42,6 +43,13 @@ public class VehicleController {
     @Operation(summary = "Owner: correct a vehicle's number (rev 77) — unique per organisation")
     public VehicleResponse rename(@PathVariable Long id, @Valid @RequestBody VehicleRenameRequest request) {
         return vehicleService.rename(id, request.getVehicleNo());
+    }
+
+    @PatchMapping("/{id}/customer")
+    @PreAuthorize("hasAuthority('OWNER')")
+    @Operation(summary = "Owner: move a vehicle to another customer (rev 77) — past records stay where they are")
+    public VehicleResponse move(@PathVariable Long id, @Valid @RequestBody VehicleMoveRequest request) {
+        return vehicleService.move(id, request.getCustomerId());
     }
 
     @PostMapping
