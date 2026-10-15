@@ -120,8 +120,12 @@ Every table and every link, without columns. Start here, then open the group you
 # overview: omit organization links for legibility
 all_tables = sorted(cols)
 overview_rels = [(c, col, p) for c, col, p in fks if p not in ('organization', 'app_user', 'branch')]
-ov = 'erDiagram\n' + ''.join(f'  {t} {{\n    bigint id PK\n  }}\n' for t in all_tables) + ''.join(rel(c, col, p) for c, col, p in overview_rels)
+linked = sorted({x for c, _, p in overview_rels for x in (c, p)})
+alone = [t for t in all_tables if t not in linked]
+ov = 'erDiagram\n' + ''.join(f'  {t} {{\n    bigint id PK\n  }}\n' for t in linked) + ''.join(rel(c, col, p) for c, col, p in overview_rels)
 doc += '```mermaid\n' + ov + '```\n\n'
+doc += ('Tables with no link left to draw here (they only point at `organization`, `branch` or `app_user`, or — for `audit_event` '
+        'and `attachment` — at any kind of document by type and id): ' + ', '.join(f'`{t}`' for t in alone) + '.\n\n')
 
 for i, (title, blurb, tables) in enumerate(GROUPS, start=2):
     tables = [t for t in tables if t in cols]

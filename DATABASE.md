@@ -18,28 +18,7 @@ Every table and every link, without columns. Start here, then open the group you
 
 ```mermaid
 erDiagram
-  ai_query_log {
-    bigint id PK
-  }
-  app_user {
-    bigint id PK
-  }
-  attachment {
-    bigint id PK
-  }
-  audit_event {
-    bigint id PK
-  }
   bank {
-    bigint id PK
-  }
-  branch {
-    bigint id PK
-  }
-  branch_cash_opening {
-    bigint id PK
-  }
-  cash_day_close {
     bigint id PK
   }
   cash_document {
@@ -52,9 +31,6 @@ erDiagram
     bigint id PK
   }
   customer {
-    bigint id PK
-  }
-  document_sequence {
     bigint id PK
   }
   expense_business_status {
@@ -76,12 +52,6 @@ erDiagram
     bigint id PK
   }
   job_card {
-    bigint id PK
-  }
-  organization {
-    bigint id PK
-  }
-  platform_setting {
     bigint id PK
   }
   receive_business_status {
@@ -106,15 +76,6 @@ erDiagram
     bigint id PK
   }
   settlement_mode {
-    bigint id PK
-  }
-  upi_vpa {
-    bigint id PK
-  }
-  user_branch_access {
-    bigint id PK
-  }
-  user_role_grant {
     bigint id PK
   }
   vehicle {
@@ -147,6 +108,8 @@ erDiagram
   receiver_category }o--|| receiver : "receiver_id"
   receiver_category }o--|| expense_category : "expense_category_id"
 ```
+
+Tables with no link left to draw here (they only point at `organization`, `branch` or `app_user`, or — for `audit_event` and `attachment` — at any kind of document by type and id): `ai_query_log`, `app_user`, `attachment`, `audit_event`, `branch`, `branch_cash_opening`, `cash_day_close`, `document_sequence`, `organization`, `platform_setting`, `upi_vpa`, `user_branch_access`, `user_role_grant`.
 
 ## 2. People, branches and the organisation
 
