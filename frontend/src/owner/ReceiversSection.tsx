@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { receiversApi, type Receiver } from '../api/receivers'
 import { mastersApi, type MasterRow } from '../api/masters'
 import {
-  Badge, ErrorBanner, Field, Modal, TextInput,
+  Badge, ErrorBanner, Field, Modal, TextInput, inputStyle,
   card, cardTitle, ghostBtn, primaryBtn, td, th,
 } from '../shell/ui'
 
@@ -21,6 +21,8 @@ export default function ReceiversSection() {
   const [error, setError] = useState('')
   const [modal, setModal] = useState<{ editing: Receiver | null } | null>(null)
   const [categories, setCategories] = useState<MasterRow[]>([])
+  // rev 77 — filter the list by name or phone number as you type
+  const [query, setQuery] = useState('')
 
   async function load() {
     setLoading(true)
@@ -35,6 +37,12 @@ export default function ReceiversSection() {
     }
   }
 
+  const needle = query.trim().toLowerCase()
+  const digits = query.replace(/\D/g, '')
+  const shownRows = needle === '' ? rows : rows.filter((r) =>
+    r.name.toLowerCase().includes(needle)
+    || (digits.length > 0 && (r.phone ?? '').replace(/\D/g, '').includes(digits)))
+
   useEffect(() => { load() }, [])
   useEffect(() => {
     mastersApi.list('expense-categories').then(({ data }) => setCategories(data.filter((c) => c.active))).catch(() => setCategories([]))
@@ -47,6 +55,14 @@ export default function ReceiversSection() {
         <button style={{ ...primaryBtn(), minHeight: 36 }} onClick={() => setModal({ editing: null })}>+ Add</button>
       </div>
       <ErrorBanner message={error} />
+      <input
+        type="search"
+        aria-label="Search vendors"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search by name or phone number"
+        style={{ ...inputStyle, marginBottom: 12, maxWidth: 360 }}
+      />
       <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 620, fontSize: '0.84rem' }}>
           <thead>
@@ -56,7 +72,7 @@ export default function ReceiversSection() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {shownRows.map((r) => (
               <tr key={r.id}>
                 <td style={td}>{r.name}</td>
                 <td style={td}>{r.phone ?? '—'}</td>
@@ -71,8 +87,8 @@ export default function ReceiversSection() {
                 </td>
               </tr>
             ))}
-            {!loading && rows.length === 0 && (
-              <tr><td style={td} colSpan={5}>Nothing here yet.</td></tr>
+            {!loading && shownRows.length === 0 && (
+              <tr><td style={td} colSpan={5}>{rows.length === 0 ? 'Nothing here yet.' : 'No vendor matches your search.'}</td></tr>
             )}
           </tbody>
         </table>

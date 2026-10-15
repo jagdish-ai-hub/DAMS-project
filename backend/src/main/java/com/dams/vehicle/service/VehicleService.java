@@ -78,6 +78,30 @@ public class VehicleService {
         return new CreateResult(VehicleResponse.of(v, customer.getName()), true);
     }
 
+    /**
+     * Owner correction of a vehicle's number (rev 77). The number is normalised like every other
+     * entry and stays unique per organisation: a number another vehicle already holds is refused.
+     */
+    @Transactional
+    public VehicleResponse rename(Long id, String rawNumber) {
+        Long orgId = TenantContext.requireOrgId();
+        Vehicle v = vehicleRepo.findByIdAndOrgId(id, orgId)
+            .orElseThrow(() -> DamsException.notFound("Vehicle", id));
+        String normalised = Vehicle.normalise(rawNumber);
+        if (normalised == null || normalised.isBlank()) {
+            throw DamsException.badRequest("Vehicle number must contain at least one letter or digit");
+        }
+        Optional<Vehicle> clash = vehicleRepo.findByOrgIdAndVehicleNo(orgId, normalised);
+        if (clash.isPresent() && !clash.get().getId().equals(v.getId())) {
+            throw DamsException.conflict("Vehicle number " + normalised + " already belongs to another vehicle");
+        }
+        String before = v.getVehicleNo();
+        v.setVehicleNo(normalised);
+        v = vehicleRepo.save(v);
+        log.info("Vehicle renamed: orgId={} vehicleId={} {} -> {}", orgId, v.getId(), before, normalised);
+        return VehicleResponse.of(v, customerName(orgId, v.getCustomerId()));
+    }
+
     public record CreateResult(VehicleResponse response, boolean created) {}
 
     private String customerName(Long orgId, Long customerId) {

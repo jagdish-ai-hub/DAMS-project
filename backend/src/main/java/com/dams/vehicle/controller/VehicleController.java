@@ -1,6 +1,7 @@
 package com.dams.vehicle.controller;
 
 import com.dams.common.exception.DamsException;
+import com.dams.vehicle.dto.VehicleRenameRequest;
 import com.dams.vehicle.dto.VehicleRequest;
 import com.dams.vehicle.dto.VehicleResponse;
 import com.dams.vehicle.service.VehicleService;
@@ -9,6 +10,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -33,6 +35,13 @@ public class VehicleController {
     public VehicleResponse byNumber(@RequestParam(name = "vehicle_no") String vehicleNo) {
         return vehicleService.findByNumber(vehicleNo)
             .orElseThrow(() -> DamsException.notFound("Vehicle", "number", vehicleNo));
+    }
+
+    @PatchMapping("/{id}")
+    @PreAuthorize("hasAuthority('OWNER')")
+    @Operation(summary = "Owner: correct a vehicle's number (rev 77) — unique per organisation")
+    public VehicleResponse rename(@PathVariable Long id, @Valid @RequestBody VehicleRenameRequest request) {
+        return vehicleService.rename(id, request.getVehicleNo());
     }
 
     @PostMapping

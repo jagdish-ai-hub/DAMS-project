@@ -182,6 +182,7 @@ public class CustomerService {
         c.setOrgId(orgId);
         c.setName(request.getName().trim());
         c.setPhone(blankToNull(request.getPhone()));
+        c.setAddress(blankToNull(request.getAddress()));
         c.setCreatedBranchId(branchScope.creatingBranchIdOrNull());
         c = customerRepo.save(c);
         log.info("Customer created: orgId={} customerId={}", orgId, c.getId());
@@ -193,9 +194,25 @@ public class CustomerService {
         Customer c = load(id);
         c.setName(request.getName().trim());
         c.setPhone(blankToNull(request.getPhone()));
+        // rev 77 — a cashier's name / phone edit sends no address and must never erase it; "" clears it.
+        if (request.getAddress() != null) {
+            c.setAddress(blankToNull(request.getAddress()));
+        }
         c = customerRepo.save(c);
         return CustomerResponse.of(c, vehiclesFor(c.getOrgId(), List.of(c.getId()))
             .getOrDefault(c.getId(), List.of()));
+    }
+
+    /** Owner's master list (rev 77): every customer of the organisation with their vehicles — not branch-scoped, not capped. */
+    @Transactional(readOnly = true)
+    public List<CustomerResponse> listAll() {
+        Long orgId = TenantContext.requireOrgId();
+        List<Customer> customers = customerRepo.findByOrgIdOrderByNameAsc(orgId);
+        Map<Long, List<CustomerResponse.VehicleRef>> vehiclesByCustomer = vehiclesFor(orgId,
+            customers.stream().map(Customer::getId).toList());
+        return customers.stream()
+            .map(c -> CustomerResponse.of(c, vehiclesByCustomer.getOrDefault(c.getId(), List.of())))
+            .toList();
     }
 
     @Transactional(readOnly = true)

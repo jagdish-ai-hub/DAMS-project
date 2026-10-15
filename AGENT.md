@@ -272,6 +272,16 @@ has `org_id = null`.
    added and mapped to that expense's category automatically; a vendor that
    already exists keeps the mapping the Owner gave it. Vendors already used on
    an expense were mapped to their past categories when this shipped.
+   **Vendor and customer master lists (rev 77).** In Masters, both the
+   **Receivers / vendors** list and the **Customers** list have a **search
+   box** that filters as you type — vendors by name or phone; customers by
+   name, mobile, vehicle number or address. The **Customers** list (Owner)
+   shows name, mobile, vehicles and address; the Owner can add a customer and
+   edit all of it, including renaming a vehicle number or adding a vehicle.
+   **Address** is a new optional customer field that no form asks for yet; it
+   is stored and editable here only. A cashier's later name/phone edit never
+   erases an address. A vehicle number stays unique per organisation (a clash
+   is refused), and vehicles are never deleted — their history is kept.
    Status flow: Open
    → In Progress → Awaiting Receipt → Received Receipt → Closed (or
    Transfer to Claim). **Any expense may be transferred to a claim — it need
