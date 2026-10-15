@@ -130,4 +130,21 @@ describe('Expense form (rev 76)', () => {
     await user.click(screen.getByRole('button', { name: 'Send for Review' }))
     await waitFor(() => expect(requestApproval).toHaveBeenCalledWith(9, 'Tow truck for a stranded customer'))
   })
+
+  it('tells the cashier a pre-approved claim is closed by the Finance Manager after the Accountant verifies', async () => {
+    vi.mocked(expensesApi.get).mockResolvedValue({
+      data: {
+        id: 9, documentNo: null, workflowStatus: 'DRAFT', lines: [], history: [],
+        receiverName: 'Eicher Parts', receiverPhone: null, customerName: null, customerId: null, vehicleNo: null,
+        invoiceNo: null, dbmId: null, expenseCategoryId: 1, businessStatusId: 3, businessStatusTriggersClaim: true,
+        preApprovalStatus: 'APPROVED', preApprovedAmount: 4000, preApprovedByName: 'Rakesh Menon', totalAmount: 0,
+        approvalReason: 'Special part', approvalComment: 'Keep the transport bill', preApprovalCovers: true,
+      },
+    } as never)
+    render(<MemoryRouter initialEntries={['/app/new-expense?editDoc=9']}><NewExpensePage /></MemoryRouter>)
+
+    expect(await screen.findByText(/Approved by Rakesh Menon/)).toBeInTheDocument()
+    expect(screen.getByText(/after the Accountant verifies it the Finance Manager closes the claim/)).toBeInTheDocument()
+    expect(screen.getByText(/Keep the transport bill/)).toBeInTheDocument()
+  })
 })

@@ -7,6 +7,11 @@
 
 ## Revision log
 
+- **rev 78 (2026-10-16)** — **Claim guidance on the approval request, wording only.** A Transfer to Claim expense that
+  needs Finance Manager approval has two Finance Manager steps (approve the request, then Close Claim after the
+  Accountant verifies). The FM's request card and its approve message now say so — the card used to say the request
+  wouldn't come back to them, which is wrong for claims — and the cashier's approved banner says the FM closes the
+  claim after verification. No rule or data change.
 - **rev 77 (2026-10-15)** — **Customer master list and master-list search, decided by the owner.** (1) The Owner's
   Receivers / vendors list gets a search box (name or phone). (2) New Masters → Customers list: name, mobile,
   vehicles, address, with a search box (name, mobile, vehicle, address); the Owner adds and edits everything,

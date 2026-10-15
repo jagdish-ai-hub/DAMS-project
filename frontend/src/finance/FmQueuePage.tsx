@@ -589,8 +589,11 @@ function FmDetail(props: {
           <strong>Approval request from {expense.createdByName ?? 'the cashier'}</strong> — this expense
           {expense.overLimit ? ' is above its sub-category limit' : ` is in the “${expense.businessStatusName ?? ''}” status`},
           so the cashier needs your approval before they can submit it.
-          Approving it lets them submit up to <strong>{inr(expense.totalAmount)}</strong>; after that the
-          Accountant verifies and closes it without coming back to you. Query sends it back with your note.
+          Approving it lets them submit up to <strong>{inr(expense.totalAmount)}</strong>.{' '}
+          {expense.businessStatusTriggersClaim
+            ? <>This is a <strong>Transfer to Claim</strong>: after the Accountant verifies it, <strong>come back to Open claims and press Close Claim</strong> with the amount recovered.</>
+            : <>After that the Accountant verifies and closes it without coming back to you.</>}{' '}
+          Query sends it back with your note.
           {expense.approvalReason && (
             <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--card, #fff)', border: '1px solid var(--line)', borderRadius: 7 }}>
               <strong>Why the cashier needs it:</strong> {expense.approvalReason}
@@ -652,7 +655,7 @@ function FmDetail(props: {
                 style={{ ...ghostBtn, color: 'var(--amber)', minHeight: 36 }}>Query</button>
             )}
             {isApprovalRequest && (
-              <button type="button" onClick={() => run(() => reviewApi.preApproveExpense(doc.id, approveComment), `Request #${doc.id} approved — the cashier can submit it now`)}
+              <button type="button" onClick={() => run(() => reviewApi.preApproveExpense(doc.id, approveComment), `Request #${doc.id} approved — the cashier can submit it now${expense?.businessStatusTriggersClaim ? '. After the Accountant verifies it, come back to Close Claim.' : ''}`)}
                 disabled={busy || box != null} title={box != null ? 'Send or cancel the Query first' : undefined}
                 style={{ ...primaryBtn(busy || box != null), minHeight: 36 }}>Approve</button>
             )}

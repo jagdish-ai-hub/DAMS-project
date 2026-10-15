@@ -775,6 +775,7 @@ export default function NewExpensePage() {
           <strong>✓ Approved by {loadedDoc?.preApprovedByName ?? 'the Finance Manager'} for {inr(approvedAmount)}.</strong>{' '}
           {loadedDoc?.approvalComment && <>Their comment: &ldquo;{loadedDoc.approvalComment}&rdquo;. </>}
           Submit it when you&apos;re ready.
+          {loadedDoc?.businessStatusTriggersClaim && <> It is a claim, so after the Accountant verifies it the Finance Manager closes the claim.</>}
         </div>
       ) : (
         <div role="status" style={{ ...approvalBanner, background: 'var(--amber-bg)', border: '1px solid #EAD3AE', color: 'var(--amber)' }}>
