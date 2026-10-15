@@ -7,6 +7,15 @@
 
 ## Revision log
 
+- **rev 77 (2026-10-15)** — **Customer master list and master-list search, decided by the owner.** (1) The Owner's
+  Receivers / vendors list gets a search box (name or phone). (2) New Masters → Customers list: name, mobile,
+  vehicles, address, with a search box (name, mobile, vehicle, address); the Owner adds and edits everything,
+  including renaming / adding vehicle numbers. `customer.address` (V42) is new and optional — no form asks for it
+  yet; a PATCH without `address` leaves it alone, `""` clears it. Endpoints: `GET /customers/master` (Owner, whole
+  org), Owner added to `POST` / `PATCH /customers`, `PATCH /vehicles/{id}` (Owner, rename, unique per org).
+  (4) Owner can move a vehicle to another customer (`PATCH /vehicles/{id}/customer`, migration V43 adds the
+  `VEHICLE_MOVED` audit event): only the vehicle's owner changes — existing job cards / receipts / expenses stay
+  with the customer they were recorded for.
 - **rev 76 (2026-10-13)** — **Expense approval reason and comment, Transfer to Claim dropdown, vendor mapping and
   search, decided by the owner.** (1) Sending an expense for FM review needs a mandatory reason
   (`expense_document.approval_reason`, `POST /expenses/{id}/request-approval {reason}`); the FM's Approve

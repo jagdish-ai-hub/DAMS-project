@@ -39,6 +39,13 @@ public class CustomerController {
         return customerService.search(q);
     }
 
+    @GetMapping("/master")
+    @Operation(summary = "Owner: every customer of the organisation with vehicles and address (rev 77)")
+    @PreAuthorize("hasAuthority('OWNER')")
+    public List<CustomerResponse> master() {
+        return customerService.listAll();
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Get one customer with their vehicles")
     @PreAuthorize("hasAnyAuthority('OWNER','FINANCE_MANAGER','ACCOUNTANT','CASHIER')")
@@ -70,14 +77,14 @@ public class CustomerController {
 
     @PostMapping
     @Operation(summary = "Create a customer")
-    @PreAuthorize("hasAnyAuthority('CASHIER','ACCOUNTANT','FINANCE_MANAGER')")
+    @PreAuthorize("hasAnyAuthority('OWNER','CASHIER','ACCOUNTANT','FINANCE_MANAGER')")
     public ResponseEntity<CustomerResponse> create(@Valid @RequestBody CustomerRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(customerService.create(request));
     }
 
     @PatchMapping("/{id}")
-    @Operation(summary = "Update a customer's name / phone")
-    @PreAuthorize("hasAnyAuthority('CASHIER','ACCOUNTANT','FINANCE_MANAGER')")
+    @Operation(summary = "Update a customer's name / phone (and, for the Owner, address)")
+    @PreAuthorize("hasAnyAuthority('OWNER','CASHIER','ACCOUNTANT','FINANCE_MANAGER')")
     public CustomerResponse update(@PathVariable Long id, @Valid @RequestBody CustomerRequest request) {
         return customerService.update(id, request);
     }

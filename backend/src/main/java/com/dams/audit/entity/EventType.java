@@ -30,5 +30,7 @@ public enum EventType {
     /** A reviewer changed an expense's business status from the review screen — rev 58. */
     STATUS_CHANGED,
     /** The Owner reopened a closed cash day — the original close is kept in the detail — rev 60. */
-    CASH_REOPENED
+    CASH_REOPENED,
+    /** rev 77 — the Owner moved a vehicle to another customer. */
+    VEHICLE_MOVED
 }

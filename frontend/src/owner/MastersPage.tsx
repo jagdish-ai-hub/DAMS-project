@@ -6,6 +6,7 @@ import {
 } from '../shell/ui'
 import AiMastersStrip from './AiMastersStrip'
 import ReceiversSection from './ReceiversSection'
+import CustomersSection from './CustomersSection'
 
 type Extra = 'mode' | 'sub' | 'upi' | 'roles' | 'estatus' | undefined
 
@@ -205,6 +206,7 @@ export default function MastersPage() {
       </div>
 
       <ReceiversSection />
+      <CustomersSection />
 
       {modal && (
         <MasterModal

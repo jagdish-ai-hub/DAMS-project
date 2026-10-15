@@ -109,6 +109,9 @@ public class DocumentHistoryService {
                 + (d.get("from") != null && d.get("to") != null ? ": " + d.get("from") + " → " + d.get("to") : "");
             case CASH_REOPENED -> "Cash day reopened"
                 + (d.get("closeDate") != null ? " (" + d.get("closeDate") + ")" : "");
+            case VEHICLE_MOVED -> "Vehicle moved"
+                + (d.get("fromCustomerName") != null && d.get("toCustomerName") != null
+                    ? ": " + d.get("fromCustomerName") + " → " + d.get("toCustomerName") : "");
         };
     }
 

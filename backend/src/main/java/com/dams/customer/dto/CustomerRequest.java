@@ -18,4 +18,8 @@ public class CustomerRequest {
 
     @Size(max = 32, message = "Phone must be at most 32 characters")
     private String phone;
+
+    /** rev 77 — null leaves the saved address alone; an empty string clears it. */
+    @Size(max = 500, message = "Address must be at most 500 characters")
+    private String address;
 }

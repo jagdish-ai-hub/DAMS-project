@@ -13,11 +13,15 @@ export interface Customer {
   createdAt: string
   /** The last contact number saved on one of their receipts (rev 68) — prefills the Contact box. */
   lastContactPhone?: string | null
+  /** rev 77 — optional, kept by the Owner in Masters → Customers (no form asks for it yet). */
+  address?: string | null
 }
 
 export interface CustomerRequest {
   name: string
   phone?: string
+  /** Omit to leave the saved address alone; an empty string clears it. */
+  address?: string
 }
 
 export interface JobCardSummary {
@@ -95,6 +99,10 @@ export const customersApi = {
   },
   create(data: CustomerRequest) {
     return api.post<Customer>('/api/v1/customers', data)
+  },
+  /** Owner (rev 77) — every customer of the organisation, with vehicles and address. */
+  master() {
+    return api.get<Customer[]>('/api/v1/customers/master')
   },
   update(id: number, data: CustomerRequest) {
     return api.patch<Customer>(`/api/v1/customers/${id}`, data)
