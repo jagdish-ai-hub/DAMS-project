@@ -7,7 +7,7 @@ import { Badge, ErrorBanner, Modal, Spinner, ghostBtn, primaryBtn } from './ui'
 import { useRoleSwitch } from './useRoleSwitch'
 
 const ROLE_BLURB: Partial<Record<Role, string>> = {
-  FINANCE_MANAGER: 'Give final approval and close claims — across every branch.',
+  FINANCE_MANAGER: 'Give final approval and close claims at assigned branches.',
   ACCOUNTANT: 'Review, verify and close entries at this branch.',
   CASHIER: 'Record receipts, expenses and cash at this branch.',
 }

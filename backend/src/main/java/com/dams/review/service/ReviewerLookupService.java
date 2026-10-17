@@ -25,7 +25,7 @@ import java.util.Set;
  * of leaving a dead end. Names only; no email, no role detail beyond the step asked about.
  *
  * Eligible = an active user in the org who can act in {@code step} at the branch, either by
- * their own role (an accountant needs a branch-access row; a Finance Manager is org-wide) or by
+ * their own role (the role needs a branch-access row) or by
  * an Owner-granted extra role. Owners are not listed: they can act as anyone, but "ask the
  * Owner" is not a useful hint.
  */
@@ -66,34 +66,29 @@ public class ReviewerLookupService {
 
         // Users who hold the step through an Owner-granted extra role.
         Set<Long> viaGrant = new HashSet<>();
-        List<UserRoleGrant> grants = step == Role.FINANCE_MANAGER
-            ? grantRepo.findByRoleAndBranchIdIsNull(step)
-            : grantRepo.findByRoleAndBranchId(step, branchId);
+        List<UserRoleGrant> grants = grantRepo.findByRoleAndBranchId(step, branchId);
         grants.forEach(g -> viaGrant.add(g.getUserId()));
 
-        // Accountants hold the step at a branch only through a branch-access row.
-        Set<Long> accountantsAtBranch = new HashSet<>();
-        if (step == Role.ACCOUNTANT) {
-            branchAccessRepo.findByBranchId(branchId).stream()
-                .map(a -> a.getId().getUserId())
-                .forEach(accountantsAtBranch::add);
-        }
+        Set<Long> usersAssignedAtBranch = new HashSet<>();
+        branchAccessRepo.findByBranchId(branchId).stream()
+            .map(a -> a.getId().getUserId())
+            .forEach(usersAssignedAtBranch::add);
 
         Set<Long> excluded = exclude == null ? Set.of() : new HashSet<>(exclude);
         return userRepo.findByOrganization_Id(orgId).stream()
             .filter(AppUser::isActive)
             .filter(u -> !excluded.contains(u.getId()))
             .filter(u -> u.getRole() != Role.OWNER && u.getRole() != Role.SUPER_ADMIN)
-            .filter(u -> viaGrant.contains(u.getId()) || holdsStepByOwnRole(u, step, accountantsAtBranch))
+            .filter(u -> viaGrant.contains(u.getId()) || holdsStepByOwnRole(u, step, usersAssignedAtBranch))
             .sorted(Comparator.comparing(AppUser::getName, String.CASE_INSENSITIVE_ORDER))
             .map(u -> new ReviewerResponse(u.getId(), u.getName()))
             .toList();
     }
 
-    private static boolean holdsStepByOwnRole(AppUser u, Role step, Set<Long> accountantsAtBranch) {
+    private static boolean holdsStepByOwnRole(AppUser u, Role step, Set<Long> usersAssignedAtBranch) {
         if (u.getRole() != step) {
             return false;
         }
-        return step == Role.FINANCE_MANAGER || accountantsAtBranch.contains(u.getId());
+        return usersAssignedAtBranch.contains(u.getId());
     }
 }

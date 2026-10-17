@@ -26,7 +26,9 @@ To rename a branch, change its code, or deactivate it, click **Edit** on its row
 Some people cover more than one job — an Accountant who also covers the cash counter at one branch, say. Instead of a second login, give them **extra roles**:
 
 1. Click **Edit** on their row and tick **Allow role switching**.
-2. Tick each extra role they may take on. For **Accountant** and **Cashier**, also tick **which branches**; **Finance Manager** works across all branches.
+2. Tick each extra role they may take on. For **Finance Manager**, **Accountant**, and **Cashier**, select the branch or branches where they may use that role.
+
+For a user's primary **Finance Manager** role, select their assigned branches in the same form. Finance Managers can review and report only on those branches. Owners continue to have access to every branch.
 3. Click **Save changes**.
 
 They then see a **⇄ Switch role** button next to **Help**. They pick a branch, then a role, and a bar under the header shows which role they're working in, with one tap to switch back.

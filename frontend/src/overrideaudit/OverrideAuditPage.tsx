@@ -36,24 +36,47 @@ export default function OverrideAuditPage() {
   const [branchId, setBranchId] = useState<number | ''>('')
   const [userId, setUserId] = useState<number | ''>('')
   const { user } = useAuth()
+  const financeManager = user?.role === 'FINANCE_MANAGER'
+  const branchScopeKey = user
+    ? `${user.userId}:${user.role}:${user.actingBranchId ?? ''}:${user.branchIds.join(',')}`
+    : ''
   // The team list is Owner-gated server-side — an FM would get an empty dropdown,
   // so the filter only renders where it can actually list anyone.
   const canFilterByUser = user?.role === 'OWNER'
 
   const [rows, setRows] = useState<OverrideAuditEntry[] | null>(null)
   const [branches, setBranches] = useState<Branch[]>([])
+  const [branchesLoaded, setBranchesLoaded] = useState(false)
   const [users, setUsers] = useState<TeamUser[]>([])
   const [error, setError] = useState('')
   const [tick, setTick] = useState(0)
 
   useEffect(() => {
-    branchesApi.list().then(({ data }) => setBranches(data)).catch(() => {})
+    let live = true
+    setBranchesLoaded(false)
+    branchesApi.list()
+      .then(({ data }) => {
+        if (!live) return
+        setBranches(data)
+        if (financeManager) {
+          setBranchId((current) => data.some((b) => b.id === current) ? current : data[0]?.id ?? '')
+        }
+      })
+      .catch((e) => { if (live) setError(apiError(e, 'Could not load your assigned branches.')) })
+      .finally(() => { if (live) setBranchesLoaded(true) })
     if (canFilterByUser) {
-      usersApi.list().then(({ data }) => setUsers(data)).catch(() => {})
+      usersApi.list().then(({ data }) => { if (live) setUsers(data) }).catch(() => {})
     }
-  }, [canFilterByUser])
+    return () => { live = false }
+  }, [canFilterByUser, financeManager, branchScopeKey])
 
   useEffect(() => {
+    if (!branchesLoaded) return
+    if (financeManager && branchId === '') {
+      setRows(null)
+      setError('No branches are assigned to this Finance Manager account.')
+      return
+    }
     let live = true
     setError('')
     setRows(null)
@@ -65,7 +88,7 @@ export default function OverrideAuditPage() {
       .then(({ data }) => { if (live) setRows(data) })
       .catch((e) => { if (live) setError(apiError(e, 'Could not load the override audit.')) })
     return () => { live = false }
-  }, [from, to, branchId, userId, tick])
+  }, [from, to, branchId, userId, tick, branchesLoaded, financeManager, branchScopeKey])
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto' }}>
@@ -74,7 +97,7 @@ export default function OverrideAuditPage() {
         <HelpButton slug="override-audit" />
       </div>
       <div style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: 16 }}>
-        Every amount override across the organisation — who, when, from what to what, and why.
+        Every amount override in the branches available to you — who, when, from what to what, and why.
       </div>
 
       <div style={{ ...card, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 16 }}>
@@ -91,7 +114,7 @@ export default function OverrideAuditPage() {
         <div style={{ flex: '1 1 160px', minWidth: 150 }}>
           <Field label="Branch">
             <select value={branchId} onChange={(e) => setBranchId(e.target.value === '' ? '' : Number(e.target.value))} style={{ ...inputStyle, width: '100%', minHeight: 38 }}>
-              <option value="">All branches</option>
+              {!financeManager && <option value="">All branches</option>}
               {branches.map((b) => <option key={b.id} value={b.id}>{b.code} — {b.name}</option>)}
             </select>
           </Field>

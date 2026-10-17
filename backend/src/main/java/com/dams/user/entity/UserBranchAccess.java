@@ -7,8 +7,8 @@ import lombok.Setter;
 
 /**
  * Maps a user to specific branch IDs they can access.
- * Only used for ACCOUNTANT and CASHIER roles.
- * FM, OWNER, SUPER_ADMIN have org-wide access by convention — no rows needed.
+ * Used for FINANCE_MANAGER and ACCOUNTANT roles.
+ * CASHIER uses home_branch_id; OWNER and SUPER_ADMIN are org-wide.
  *
  * branch_id is a plain Long here; the Branch entity is created in V2/Stage2.
  * The FK constraint from branch_id to branch.id is added in V2 migration.

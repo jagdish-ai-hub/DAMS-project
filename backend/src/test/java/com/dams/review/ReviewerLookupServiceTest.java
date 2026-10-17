@@ -38,7 +38,7 @@ class ReviewerLookupServiceTest {
     private static final long OOJ = 1L;
     private static final long OOR = 3L;
     private static final long PRIYA = 2L;      // Owner — the maker
-    private static final long RAKESH = 3L;     // Finance Manager, org-wide
+    private static final long RAKESH = 3L;     // Finance Manager at OOJ
     private static final long ANITA = 4L;      // Accountant at OOB, OOJ, OOR
     private static final long DEEPA = 5L;      // Accountant at OOR only
     private static final long ASHA = 6L;       // Cashier granted Accountant at OOJ
@@ -61,9 +61,9 @@ class ReviewerLookupServiceTest {
             user(ANITA, "Anita Rao", Role.ACCOUNTANT, true),
             user(DEEPA, "Deepa Iyer", Role.ACCOUNTANT, true),
             user(ASHA, "Asha Das", Role.CASHIER, true)));
-        lenient().when(branchAccessRepo.findByBranchId(OOJ)).thenReturn(List.of(access(ANITA)));
+        lenient().when(branchAccessRepo.findByBranchId(OOJ)).thenReturn(List.of(access(ANITA), access(RAKESH)));
         lenient().when(grantRepo.findByRoleAndBranchId(Role.ACCOUNTANT, OOJ)).thenReturn(List.of());
-        lenient().when(grantRepo.findByRoleAndBranchIdIsNull(Role.FINANCE_MANAGER)).thenReturn(List.of());
+        lenient().when(grantRepo.findByRoleAndBranchId(Role.FINANCE_MANAGER, OOJ)).thenReturn(List.of());
     }
 
     @AfterEach
@@ -88,8 +88,8 @@ class ReviewerLookupServiceTest {
     }
 
     @Test
-    void financeStep_listsFinanceManagers_andAnyoneGrantedTheOrgWideRole() {
-        lenient().when(grantRepo.findByRoleAndBranchIdIsNull(Role.FINANCE_MANAGER)).thenReturn(List.of(grant(ASHA)));
+    void financeStep_listsFinanceManagersAssignedToTheBranch_andAnyoneGrantedTheRole() {
+        lenient().when(grantRepo.findByRoleAndBranchId(Role.FINANCE_MANAGER, OOJ)).thenReturn(List.of(grant(ASHA)));
 
         List<ReviewerResponse> out = service.reviewersFor(OOJ, Role.FINANCE_MANAGER, List.of(PRIYA));
 

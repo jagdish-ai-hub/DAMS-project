@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useContext, useEffect, useMemo, useState } from 'react'
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid,
   PieChart, Pie, Cell,
@@ -19,6 +19,7 @@ import ExportModal from '../shared/ExportModal'
 import MoneyBreakdownModal, { type BreakdownRow, moneyMovementsToRows } from '../shell/MoneyBreakdownModal'
 import { useNavigate } from 'react-router-dom'
 import { CountUp } from '../shell/motion'
+import { AuthContext } from '../auth/AuthContext'
 
 /**
  * Owner dashboard (intial ui prototypes/owner-dashboard.html, dashboard tab). Read-only
@@ -35,9 +36,15 @@ const DONUT_COLORS = ['#2E5395', '#1E7F4F', '#B45309', '#6B3FA0', '#0E7490', '#B
 
 export default function DashboardPage() {
   const navigate = useNavigate()
+  const auth = useContext(AuthContext)
+  const financeManager = auth?.user?.role === 'FINANCE_MANAGER'
+  const branchScopeKey = auth?.user
+    ? `${auth.user.userId}:${auth.user.role}:${auth.user.actingBranchId ?? ''}:${auth.user.branchIds.join(',')}`
+    : ''
   const [branchId, setBranchId] = useState<number | ''>('')
   const [period, setPeriod] = useState<DashboardPeriod>('mtd')
   const [branches, setBranches] = useState<Branch[]>([])
+  const [branchesLoaded, setBranchesLoaded] = useState(false)
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [outstanding, setOutstanding] = useState<OutstandingItem[]>([])
   const [activity, setActivity] = useState<ActivityItem[]>([])
@@ -47,10 +54,29 @@ export default function DashboardPage() {
   const [breakdown, setBreakdown] = useState<{ title: string; subtitle: string; rows: BreakdownRow[] | null; error?: string } | null>(null)
 
   useEffect(() => {
-    branchesApi.list().then(({ data }) => setBranches(data.filter((b) => b.active))).catch(() => {})
-  }, [])
+    let live = true
+    setBranchesLoaded(false)
+    branchesApi.list()
+      .then(({ data }) => {
+        if (!live) return
+        const visible = data.filter((b) => financeManager || b.active)
+        setBranches(visible)
+        if (financeManager) {
+          setBranchId((current) => visible.some((b) => b.id === current) ? current : visible[0]?.id ?? '')
+        }
+      })
+      .catch((e) => { if (live) setError(apiError(e, 'Could not load your assigned branches.')) })
+      .finally(() => { if (live) setBranchesLoaded(true) })
+    return () => { live = false }
+  }, [financeManager, branchScopeKey])
 
   useEffect(() => {
+    if (!branchesLoaded) return
+    if (financeManager && branchId === '') {
+      setSummary(null)
+      setError('No active branches are assigned to this Finance Manager account.')
+      return
+    }
     let live = true
     setError('')
     const b = branchId === '' ? undefined : branchId
@@ -67,7 +93,7 @@ export default function DashboardPage() {
       })
       .catch((e) => { if (live) setError(apiError(e, 'Could not load the dashboard.')) })
     return () => { live = false }
-  }, [branchId, period])
+  }, [branchId, period, branchesLoaded, financeManager, branchScopeKey])
 
   const donut = useMemo(() => (summary?.byMode ?? []).filter((m) => m.amount > 0), [summary])
   const donutTotal = donut.reduce((a, m) => a + m.amount, 0)
@@ -75,6 +101,8 @@ export default function DashboardPage() {
   const negativeSlices = useMemo(() => (summary?.byMode ?? []).filter((m) => m.amount < 0), [summary])
   const maxCat = Math.max(1, ...(summary?.byCategory ?? []).map((c) => c.amount))
   const scopeLabel = branchId === '' ? 'All branches' : (branches.find((x) => x.id === branchId)?.code ?? 'Branch')
+  const branchOptions: { v: number | ''; label: string }[] = branches.map((b) => ({ v: b.id, label: b.code }))
+  if (!financeManager) branchOptions.unshift({ v: '', label: 'All branches' })
 
   const cashAlerts = useMemo(() => {
     if (!summary) return []
@@ -180,7 +208,7 @@ export default function DashboardPage() {
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', margin: '12px 0 18px' }}>
         <Seg
-          options={[{ v: '', label: 'All branches' }, ...branches.map((b) => ({ v: b.id, label: b.code }))]}
+          options={branchOptions}
           value={branchId}
           onChange={(v) => setBranchId(v as number | '')}
         />

@@ -13,22 +13,25 @@ The goal:
 Decisions confirmed by the user:
 1. **Owner ticks roles.** Extra roles are assigned per user, each with its own branches, like branch assignment today.
 2. **Owner can act as any role at any branch.** The Owner always has the button. AGENT.md's "Owner is read-only" becomes "read-only while acting as Owner".
-3. **Scope is the picked branch only.** Acting as Accountant or Cashier at OOR shows and posts OOR only.
+3. **Scope is the picked branch only.** Acting as Finance Manager, Accountant or Cashier at OOR shows and posts OOR only.
 4. **Attribution shows name + "as Cashier".** The acting role is stored on audit events and shown in history.
+
+### Current branch-access amendment (V44)
+Finance Manager access is branch-scoped for both primary roles and extra switchable grants. Existing primary Finance Managers and org-wide extra grants are migrated to all branches that existed at migration time, preserving their current access; Owners can then narrow the assignments in Team & Branches. New Finance Manager assignments require at least one branch. A switched Finance Manager session is scoped to its selected, granted branch.
 
 ## Step -1: Save this plan in the project
 Copy this plan file to `plans/multi-role-switch.md` at the repo root, creating the new `plans/` folder.
 
 ## Step 0: Spec first (AGENT.md, then plan.md)
 - **AGENT.md, Role hierarchy:** add an "Acting roles" subsection covering:
-  - A primary role, plus Owner-granted extra roles (FINANCE_MANAGER org-wide; ACCOUNTANT/CASHIER per branch).
+  - A primary role, plus Owner-granted extra roles (FINANCE_MANAGER, ACCOUNTANT and CASHIER per branch).
   - The Owner can act as any role at any branch.
   - An acting session is scoped to the one branch picked.
   - Maker-checker is **per person**, not per role. Ajay's cashier entry can never be approved by Ajay acting as Accountant (the existing rule at L57 already keys on user id).
 - **AGENT.md, Auth UI notes:** replace "no role-switch toggle anywhere" with: the role switch is server-issued (a new JWT from `/auth/switch-role`), never a client-side choice. The review-close.html demo toggle is still not built.
 - **plan.md:**
   - Add a rev 55 entry.
-  - Locked Decisions: `UserBranchAccess` stays ACCOUNTANT-primary only; add a `user_role_grant` row.
+  - Original V33 used `UserBranchAccess` for ACCOUNTANT-primary only; V44 extends it to primary FINANCE_MANAGER assignments and makes all extra role grants branch-specific.
   - Entity List: add UserRoleGrant.
   - Add migration V33 and the new endpoints.
 
@@ -57,7 +60,7 @@ The key idea: the JWT `role` claim becomes the **acting role**. `@PreAuthorize`,
   - If the grant has been revoked, it returns 401 with "Your acting role was removed — sign in again". This keeps the existing "read fresh from DB" principle; the axios 401 handler already sends the user to login.
   - Register it in `SecurityConfig.java:79-80`.
 - **`common/security/BranchScope.java`:**
-  - `allowedBranchIds()` switches on `currentRole()` (acting), not `user.getRole()`. When switched, ACCOUNTANT returns `Set.of(actingBranchId)`; CASHIER returns `Set.of(actingBranchId)`, with the org multi-branch toggle still applying.
+  - `allowedBranchIds()` switches on the acting role, not `user.getRole()`. A primary Finance Manager / Accountant returns their assigned branches. When switched, Finance Manager / Accountant / Cashier returns `Set.of(actingBranchId)`; the org multi-branch toggle still applies to Cashier.
   - Add `isActing()`, `actingBranchId()`, and `cashierBranchId(AppUser me)`, which returns the acting branch when switched and otherwise `me.getHomeBranchId()`.
 
 ### Fix the rule everywhere
@@ -78,7 +81,7 @@ Leave `UserService` alone, because it reads the *stored* role on purpose. `creat
 - `GET /api/v1/auth/switch-options` returns `{ primaryRole, branches: [{branchId, code, name, roles:[...]}] }`:
   - An Owner gets every active branch × {FINANCE_MANAGER, ACCOUNTANT, CASHIER}.
   - Everyone else gets their grants.
-  - FINANCE_MANAGER is listed under every branch and labelled org-wide.
+  - Every grant, including FINANCE_MANAGER, is listed only under its assigned branches.
 - `POST /api/v1/auth/switch-role {role, branchId}`:
   - Validates the grant.
   - Issues a new token through the refactored `buildLoginResponse`.
@@ -92,10 +95,10 @@ Leave `UserService` alone, because it reads the *stored* role on purpose. `creat
 
 ### User management
 - `UserRequest` / `UserResponse` gain `roleGrants: [{role, branchIds[]}]`. The response also gains a label such as "+ Cashier (OOR)".
-- `UserService.create/update` gets a new `resolveRoleGrants` that rebuilds the rows after the existing branch logic:
+- `UserService.create/update` resolves branch assignments for Finance Manager and Accountant primary roles and rebuilds extra grants:
   - Grants are not allowed for OWNER or SUPER_ADMIN.
   - A grant can't be for the user's primary role.
-  - ACCOUNTANT and CASHIER grants need at least one branch; FINANCE_MANAGER needs none.
+  - FINANCE_MANAGER, ACCOUNTANT and CASHIER grants need at least one branch.
   - Every branch must be in the org.
 - Changing the primary role drops any grant for the new primary role.
 

@@ -6,6 +6,7 @@ import com.dams.branch.entity.Branch;
 import com.dams.branch.repository.BranchRepository;
 import com.dams.branch.service.BranchService;
 import com.dams.common.exception.DamsException;
+import com.dams.common.security.BranchScope;
 import com.dams.config.TenantContext;
 import com.dams.user.repository.AppUserRepository;
 import com.dams.user.repository.UserBranchAccessRepository;
@@ -17,6 +18,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,12 +34,13 @@ class BranchServiceTest {
     @Mock private BranchRepository branchRepo;
     @Mock private AppUserRepository userRepo;
     @Mock private UserBranchAccessRepository branchAccessRepo;
+    @Mock private BranchScope branchScope;
 
     private BranchService service;
 
     @BeforeEach
     void setUp() {
-        service = new BranchService(branchRepo, userRepo, branchAccessRepo);
+        service = new BranchService(branchRepo, userRepo, branchAccessRepo, branchScope);
         TenantContext.setOrgId(ORG);
     }
 
@@ -86,5 +89,27 @@ class BranchServiceTest {
         assertThatThrownBy(() -> service.get(99L))
             .isInstanceOf(DamsException.class)
             .hasMessageContaining("Branch");
+    }
+
+    @Test
+    void list_returnsOnlyBranchesInCallersScope() {
+        Branch allowed = branch(2L, "OOB");
+        Branch outside = branch(3L, "OOR");
+        when(branchRepo.findByOrgIdOrderByCodeAsc(ORG)).thenReturn(List.of(allowed, outside));
+        when(branchScope.allowedBranchIds()).thenReturn(Optional.of(java.util.Set.of(2L)));
+        when(userRepo.countByHomeBranchGrouped(ORG)).thenReturn(List.of());
+        when(branchAccessRepo.countByBranchIdGrouped(List.of(2L))).thenReturn(List.of());
+
+        assertThat(service.list()).extracting(BranchResponse::id).containsExactly(2L);
+    }
+
+    private static Branch branch(long id, String code) {
+        Branch branch = new Branch();
+        org.springframework.test.util.ReflectionTestUtils.setField(branch, "id", id);
+        branch.setOrgId(ORG);
+        branch.setCode(code);
+        branch.setName(code);
+        branch.setActive(true);
+        return branch;
     }
 }

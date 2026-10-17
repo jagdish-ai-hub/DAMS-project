@@ -38,8 +38,8 @@ import java.util.stream.Collectors;
 /**
  * Owner-managed team CRUD, org-scoped. Creating a user issues an invite (no password is
  * set here — the user sets their own via the accept-invite link, same as the Owner flow).
- * Branch binding follows the role: OWNER/FM are org-wide, ACCOUNTANT gets access rows,
- * CASHIER gets exactly one home branch. Extra switchable roles (rev 55) are stored as
+ * Branch binding follows the role: OWNER is org-wide, FINANCE_MANAGER / ACCOUNTANT get access
+ * rows, CASHIER gets exactly one home branch. Extra switchable roles (rev 55) are stored as
  * user_role_grant rows and replaced wholesale on every save. See AGENT.md / plan.md.
  */
 @Service
@@ -126,7 +126,7 @@ public class UserService {
         user.setInviteExpiresAt(Instant.now().plus(INVITE_EXPIRY_DAYS, ChronoUnit.DAYS));
         user = userRepo.save(user);
 
-        if (role == Role.ACCOUNTANT) {
+        if (role == Role.ACCOUNTANT || role == Role.FINANCE_MANAGER) {
             replaceBranchAccess(user.getId(), branchIds);
         }
         grants = saveRoleGrants(user.getId(), grants);
@@ -170,7 +170,7 @@ public class UserService {
 
         // Rebuild branch-access rows to match the (possibly new) role
         branchAccessRepo.deleteByUserId(user.getId());
-        if (newRole == Role.ACCOUNTANT) {
+        if (newRole == Role.ACCOUNTANT || newRole == Role.FINANCE_MANAGER) {
             replaceBranchAccess(user.getId(), branchIds);
         }
         // The submitted list replaces the user's grants wholesale (rev 55)
@@ -199,7 +199,7 @@ public class UserService {
 
     /** Validates and returns the branch ids this role needs (empty for org-wide roles). */
     private List<Long> resolveBranchIds(Long orgId, Role role, UserRequest request) {
-        if (role == Role.OWNER || role == Role.FINANCE_MANAGER) {
+        if (role == Role.OWNER) {
             return List.of();
         }
         if (role == Role.CASHIER) {
@@ -210,10 +210,10 @@ public class UserService {
             requireBranchInOrg(orgId, branchId);
             return List.of(branchId);
         }
-        // ACCOUNTANT
+        // FINANCE_MANAGER / ACCOUNTANT
         List<Long> ids = request.getBranchIds() == null ? List.of() : request.getBranchIds();
         if (ids.isEmpty()) {
-            throw DamsException.badRequest("An accountant needs at least one assigned branch");
+            throw DamsException.badRequest("A " + roleLabel(role).toLowerCase() + " needs at least one assigned branch");
         }
         List<Long> distinct = ids.stream().distinct().toList();
         distinct.forEach(bid -> requireBranchInOrg(orgId, bid));
@@ -223,8 +223,7 @@ public class UserService {
     /**
      * Validates the extra switchable roles (rev 55) and returns the rows to store. An OWNER gets
      * none (the Owner can already act as any role); a grant equal to the user's own role is
-     * dropped; FINANCE_MANAGER is org-wide (one row, no branch); ACCOUNTANT / CASHIER need at
-     * least one branch of this org.
+     * dropped; every extra role grant needs at least one branch of this org.
      */
     private List<UserRoleGrant> resolveRoleGrants(Long orgId, Role primary, UserRequest request) {
         List<RoleGrantDto> requested = request.getRoleGrants();
@@ -241,23 +240,17 @@ public class UserService {
                 throw DamsException.badRequest("A user cannot be given the " + roleLabel(role) + " role to switch into");
             }
             Set<Long> ids = branchesByRole.computeIfAbsent(role, r -> new java.util.LinkedHashSet<>());
-            if (role != Role.FINANCE_MANAGER) {
-                if (dto.branchIds() != null) {
-                    ids.addAll(dto.branchIds());
-                }
-                if (ids.isEmpty()) {
-                    throw DamsException.badRequest("Pick at least one branch for the extra " + roleLabel(role) + " role");
-                }
-                ids.forEach(bid -> requireBranchInOrg(orgId, bid));
+            if (dto.branchIds() != null) {
+                ids.addAll(dto.branchIds());
             }
+            if (ids.isEmpty()) {
+                throw DamsException.badRequest("Pick at least one branch for the extra " + roleLabel(role) + " role");
+            }
+            ids.forEach(bid -> requireBranchInOrg(orgId, bid));
         }
         List<UserRoleGrant> grants = new ArrayList<>();
         branchesByRole.forEach((role, ids) -> {
-            if (role == Role.FINANCE_MANAGER) {
-                grants.add(newGrant(orgId, role, null));
-            } else {
-                ids.forEach(bid -> grants.add(newGrant(orgId, role, bid)));
-            }
+            ids.forEach(bid -> grants.add(newGrant(orgId, role, bid)));
         });
         return grants;
     }
@@ -296,7 +289,7 @@ public class UserService {
         if (user.getRole() == Role.CASHIER) {
             return user.getHomeBranchId() == null ? List.of() : List.of(user.getHomeBranchId());
         }
-        if (user.getRole() == Role.ACCOUNTANT) {
+        if (user.getRole() == Role.ACCOUNTANT || user.getRole() == Role.FINANCE_MANAGER) {
             return branchAccessRepo.findByUserId(user.getId()).stream()
                 .map(UserBranchAccess::getBranchId)
                 .toList();
@@ -362,7 +355,7 @@ public class UserService {
     }
 
     private String branchAccessLabel(Role role, List<Long> branchIds, Map<Long, Branch> branchesById) {
-        if (role == Role.OWNER || role == Role.FINANCE_MANAGER) {
+        if (role == Role.OWNER) {
             return "All branches";
         }
         if (branchIds.isEmpty()) {

@@ -55,7 +55,7 @@ public interface ReceiveDocumentRepository extends JpaRepository<ReceiveDocument
     List<ReceiveDocument> findByOrgIdAndWorkflowStatusInAndBranchIdInOrderBySubmittedAtDescIdDesc(
         Long orgId, Collection<WorkflowStatus> workflowStatuses, Collection<Long> branchIds);
 
-    /** FM open claims — documents in any live workflow state org-wide, oldest first (claim aging). */
+    /** FM open claims — documents in any live workflow state, oldest first (claim aging); service applies branch scope. */
     List<ReceiveDocument> findByOrgIdAndWorkflowStatusInOrderBySubmittedAtAscIdAsc(
         Long orgId, Collection<WorkflowStatus> workflowStatuses);
 

@@ -9,7 +9,7 @@ import {
 
 const ROLE_OPTS: { value: Role; label: string; branchMode: 'none' | 'single' | 'multi' }[] = [
   { value: 'OWNER', label: 'Owner', branchMode: 'none' },
-  { value: 'FINANCE_MANAGER', label: 'Finance Manager', branchMode: 'none' },
+  { value: 'FINANCE_MANAGER', label: 'Finance Manager', branchMode: 'multi' },
   { value: 'ACCOUNTANT', label: 'Accountant', branchMode: 'multi' },
   { value: 'CASHIER', label: 'Cashier', branchMode: 'single' },
 ]
@@ -225,7 +225,7 @@ function UserModal(props: { editing: TeamUser | null; branches: Branch[]; onClos
   const [branchIds, setBranchIds] = useState<number[]>(props.editing?.branchIds ?? [])
   const [active, setActive] = useState(props.editing?.active ?? true)
   // Extra roles the user may switch into (plan.md rev 55). A key present = that role is ticked;
-  // its value is the branches it's granted at (unused for the org-wide Finance Manager).
+  // its value is the branches it's granted at.
   const [grants, setGrants] = useState<Partial<Record<Role, number[]>>>(
     () => Object.fromEntries((props.editing?.roleGrants ?? []).map((g) => [g.role, g.branchIds])),
   )
@@ -239,15 +239,19 @@ function UserModal(props: { editing: TeamUser | null; branches: Branch[]; onClos
   async function submit(e: FormEvent) {
     e.preventDefault()
     setError('')
+    if (branchMode === 'multi' && branchIds.length === 0) {
+      setError(`Select at least one branch for the ${ROLE_OPTS.find((r) => r.value === role)?.label} role.`)
+      return
+    }
     // An Owner already switches freely; anyone else sends exactly the ticked extra roles
     // (an empty list clears them — the server replaces the whole set on every save).
     const roleGrants: RoleGrant[] = role === 'OWNER' || !allowSwitch
       ? []
       : SWITCH_ROLES.filter((r) => r.value !== role && r.value in grants).map((r) => ({
           role: r.value,
-          branchIds: r.value === 'FINANCE_MANAGER' ? [] : grants[r.value] ?? [],
+          branchIds: grants[r.value] ?? [],
         }))
-    const missing = roleGrants.find((g) => g.role !== 'FINANCE_MANAGER' && g.branchIds.length === 0)
+    const missing = roleGrants.find((g) => g.branchIds.length === 0)
     if (missing) {
       setError(`Pick at least one branch for the extra ${ROLE_OPTS.find((r) => r.value === missing.role)?.label} role.`)
       return
@@ -314,7 +318,7 @@ function UserModal(props: { editing: TeamUser | null; branches: Branch[]; onClos
 
         {branchMode === 'none' && (
           <div style={{ fontSize: '0.8rem', color: 'var(--muted)', background: 'var(--navy3)', borderRadius: 8, padding: '9px 11px' }}>
-            This role has access to all branches — no selection needed.
+            Owners have access to all branches — no selection needed.
           </div>
         )}
         {branchMode === 'single' && (
@@ -379,12 +383,7 @@ function UserModal(props: { editing: TeamUser | null; branches: Branch[]; onClos
                       />
                       {r.label}
                     </label>
-                    {ticked && r.value === 'FINANCE_MANAGER' && (
-                      <div style={{ fontSize: '0.76rem', color: 'var(--muted)', marginTop: 6 }}>
-                        Works across all branches — no selection needed.
-                      </div>
-                    )}
-                    {ticked && r.value !== 'FINANCE_MANAGER' && (
+                    {ticked && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 8, paddingLeft: 4 }}>
                         <div style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>At which branches?</div>
                         {activeBranches.map((b) => (

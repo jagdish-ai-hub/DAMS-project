@@ -17,8 +17,8 @@ import org.springframework.stereotype.Component;
  *     branch. There is no branch field on the write requests;
  *   - <b>the opening</b> — ACCOUNTANT only, for a branch within their access;
  *   - <b>reads</b> (drawer, movement list, close lookup) — the caller's branch scope:
- *     a CASHIER sees only their home branch, an ACCOUNTANT their assigned branches,
- *     OWNER / FINANCE_MANAGER any branch.
+ *     a CASHIER sees only their home branch, an ACCOUNTANT / FINANCE_MANAGER their assigned
+ *     branches, and an OWNER any branch.
  */
 @Component
 public class CashPostingGuard {

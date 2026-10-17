@@ -72,6 +72,8 @@ export interface CustomerExpenseEntry {
   /** null for an expense linked to the customer without a job card. */
   jobCardId: number | null
   jobCardReference: string | null
+  /** Numbered Ooriba Receive IDs linked to the job card, newest first. */
+  receiveDocumentNos: string[]
   branchCode: string | null
   categoryName: string
   receiverName: string

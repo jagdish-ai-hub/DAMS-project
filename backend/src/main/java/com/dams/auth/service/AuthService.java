@@ -172,9 +172,7 @@ public class AuthService {
             rolesByBranch.values().forEach(r -> r.addAll(SWITCHABLE_ROLES));
         } else {
             for (UserRoleGrant grant : grantRepo.findByUserId(userId)) {
-                if (grant.getRole() == Role.FINANCE_MANAGER) {
-                    rolesByBranch.values().forEach(r -> r.add(Role.FINANCE_MANAGER)); // org-wide
-                } else if (rolesByBranch.containsKey(grant.getBranchId())) {
+                if (rolesByBranch.containsKey(grant.getBranchId())) {
                     rolesByBranch.get(grant.getBranchId()).add(grant.getRole());
                 }
             }
@@ -240,9 +238,7 @@ public class AuthService {
         if (user.getRole() == Role.OWNER) {
             return true; // the Owner may act as any role at any branch of their org
         }
-        return target == Role.FINANCE_MANAGER
-            ? grantRepo.existsByUserIdAndRoleAndBranchIdIsNull(user.getId(), target)
-            : grantRepo.existsByUserIdAndRoleAndBranchId(user.getId(), target, branchId);
+        return grantRepo.existsByUserIdAndRoleAndBranchId(user.getId(), target, branchId);
     }
 
     private void auditSwitch(AppUser user, Role from, Role to, Long branchId) {
@@ -276,7 +272,8 @@ public class AuthService {
         // While switched, the token's branch claims describe the ACTING role at the picked branch,
         // so the frontend's existing branchIds / homeBranchId reads stay correct.
         List<Long> branchIds = switched
-            ? (actingRole == Role.ACCOUNTANT ? List.of(actingBranchId) : List.of())
+            ? (actingRole == Role.ACCOUNTANT || actingRole == Role.FINANCE_MANAGER
+                ? List.of(actingBranchId) : List.of())
             : loadBranchIds(user);
         Long homeBranchId = switched
             ? (actingRole == Role.CASHIER ? actingBranchId : null)
@@ -293,6 +290,9 @@ public class AuthService {
     }
 
     private List<Long> loadBranchIds(AppUser user) {
+        if (user.getRole() != Role.ACCOUNTANT && user.getRole() != Role.FINANCE_MANAGER) {
+            return List.of();
+        }
         return branchAccessRepo.findByUserId(user.getId()).stream()
             .map(access -> access.getBranchId())
             .toList();

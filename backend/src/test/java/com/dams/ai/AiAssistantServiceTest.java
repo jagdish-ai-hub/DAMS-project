@@ -38,11 +38,14 @@ import org.mockito.quality.Strictness;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 /**
@@ -216,5 +219,18 @@ class AiAssistantServiceTest {
 
         assertThat(answer.answer()).contains("Check the number or your branch filter");
         assertThat(answer.citedDocs()).isEmpty();
+    }
+
+    @Test
+    void benchmark_usesOnlyAssignedBranchesForBranchScopedRoles() {
+        when(branchScope.allowedBranchIds()).thenReturn(Optional.of(Set.of(10L, 12L)));
+        when(dashboardService.summary(10L, "mtd")).thenReturn(summary());
+        when(dashboardService.summary(12L, "mtd")).thenReturn(summary());
+
+        service.benchmark();
+
+        verify(dashboardService).summary(10L, "mtd");
+        verify(dashboardService).summary(12L, "mtd");
+        verify(dashboardService, never()).summary(null, "mtd");
     }
 }

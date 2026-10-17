@@ -257,8 +257,11 @@ public class ReviewService {
         Long orgId = TenantContext.requireOrgId();
         guard.requireFinanceManager();
 
+        Set<Long> allowedBranchIds = branchScope.allowedBranchIds().orElse(null);
         List<ReviewQueueItem> awaiting = toReceiptItems(orgId, receiveDocumentRepo
-            .findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(orgId, WorkflowStatus.VERIFIED));
+            .findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(orgId, WorkflowStatus.VERIFIED).stream()
+            .filter(d -> allowedBranchIds == null || allowedBranchIds.contains(d.getBranchId()))
+            .toList());
 
         // Open claims: a claim-type job card whose receipt has entered the review workflow and
         // has not been closed (AGENT.md closing-rule #3 — visibility starts at submission, while
@@ -268,7 +271,9 @@ public class ReviewService {
         List<ReceiveDocument> live = receiveDocumentRepo
             .findByOrgIdAndWorkflowStatusInOrderBySubmittedAtAscIdAsc(orgId, List.of(
                 WorkflowStatus.SUBMITTED, WorkflowStatus.QUERIED, WorkflowStatus.FM_QUERIED,
-                WorkflowStatus.VERIFIED, WorkflowStatus.APPROVED));
+                WorkflowStatus.VERIFIED, WorkflowStatus.APPROVED)).stream()
+            .filter(d -> allowedBranchIds == null || allowedBranchIds.contains(d.getBranchId()))
+            .toList();
         Map<Long, JobCard> jcById = jobCardsById(orgId, live.stream().map(ReceiveDocument::getJobCardId).toList());
         Set<Long> closedJcIds = new java.util.HashSet<>(claimCloseRepo.findJobCardIdsByOrgId(orgId));
         Set<Long> seenJobCards = new LinkedHashSet<>();
@@ -284,7 +289,9 @@ public class ReviewService {
         }
         List<ReviewQueueItem> openClaims = toReceiptItems(orgId, openClaimDocs);
 
-        List<ReviewQueueItem> recentlyClosed = recentlyClosedClaims(orgId);
+        List<ReviewQueueItem> recentlyClosed = recentlyClosedClaims(orgId).stream()
+            .filter(item -> allowedBranchIds == null || allowedBranchIds.contains(item.branchId()))
+            .toList();
 
         return new FmQueue(awaiting, openClaims, recentlyClosed);
     }
@@ -293,9 +300,12 @@ public class ReviewService {
     public FmQueue fmExpenseQueue() {
         Long orgId = TenantContext.requireOrgId();
         guard.requireFinanceManager();
+        Set<Long> allowedBranchIds = branchScope.allowedBranchIds().orElse(null);
         Set<Long> claimStatusIds = expenseDocumentService.claimStatusIds(orgId);
         List<ExpenseDocument> verified = expenseDocumentRepo
-            .findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(orgId, ExpenseWorkflowStatus.VERIFIED);
+            .findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(orgId, ExpenseWorkflowStatus.VERIFIED).stream()
+            .filter(d -> allowedBranchIds == null || allowedBranchIds.contains(d.getBranchId()))
+            .toList();
 
         // rev 61: an expense marked Transfer to Claim is closed by the FM, once the Accountant has
         // verified it (so VERIFIED — or APPROVED, if it was approved before being marked a claim).
@@ -305,7 +315,8 @@ public class ReviewService {
         if (!claimStatusIds.isEmpty()) {
             claimDocs.addAll(expenseDocumentRepo
                 .findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(orgId, ExpenseWorkflowStatus.APPROVED).stream()
-                .filter(d -> claimStatusIds.contains(d.getBusinessStatusId())).toList());
+                .filter(d -> (allowedBranchIds == null || allowedBranchIds.contains(d.getBranchId()))
+                    && claimStatusIds.contains(d.getBusinessStatusId())).toList());
             claimDocs.sort(Comparator.comparing(ExpenseDocument::getSubmittedAt, Comparator.nullsLast(Comparator.naturalOrder())));
         }
         List<ReviewQueueItem> openClaims = toExpenseItems(orgId, claimDocs);
@@ -323,7 +334,9 @@ public class ReviewService {
             .stream().filter(it -> !it.preApproved()).toList();
 
         List<ReviewQueueItem> recentlyClosed = toExpenseItems(orgId, expenseDocumentRepo
-            .findByOrgIdAndClaimClosedAtIsNotNullOrderByClaimClosedAtDesc(orgId, Limit.of(RECENTLY_CLOSED_LIMIT)));
+            .findByOrgIdAndClaimClosedAtIsNotNullOrderByClaimClosedAtDesc(orgId, Limit.of(RECENTLY_CLOSED_LIMIT)))
+            .stream().filter(item -> allowedBranchIds == null || allowedBranchIds.contains(item.branchId()))
+            .toList();
         return new FmQueue(awaiting, openClaims, recentlyClosed);
     }
 
@@ -359,8 +372,11 @@ public class ReviewService {
     public FmQueue fmCashQueue() {
         Long orgId = TenantContext.requireOrgId();
         guard.requireFinanceManager();
+        Set<Long> allowedBranchIds = branchScope.allowedBranchIds().orElse(null);
         List<ReviewQueueItem> awaiting = toCashItems(orgId, cashDocumentRepo
-            .findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(orgId, CashWorkflowStatus.VERIFIED));
+            .findByOrgIdAndWorkflowStatusOrderBySubmittedAtAscIdAsc(orgId, CashWorkflowStatus.VERIFIED).stream()
+            .filter(d -> allowedBranchIds == null || allowedBranchIds.contains(d.getBranchId()))
+            .toList());
         return new FmQueue(awaiting, List.of(), List.of());
     }
 

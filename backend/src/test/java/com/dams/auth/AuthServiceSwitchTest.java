@@ -120,13 +120,14 @@ class AuthServiceSwitchTest {
     }
 
     @Test
-    void switchRole_toFinanceManager_needsTheOrgWideGrant() {
+    void switchRole_toFinanceManager_needsTheGrantAtThatBranch() {
         user(Role.ACCOUNTANT);
-        lenient().when(grantRepo.existsByUserIdAndRoleAndBranchIdIsNull(USER, Role.FINANCE_MANAGER)).thenReturn(true);
+        lenient().when(grantRepo.existsByUserIdAndRoleAndBranchId(USER, Role.FINANCE_MANAGER, OOR)).thenReturn(true);
 
         LoginResponse resp = service.switchRole(USER, req(Role.FINANCE_MANAGER, OOR));
 
         assertThat(resp.getRole()).isEqualTo(Role.FINANCE_MANAGER);
+        assertThat(jwtUtil.getBranchIds(jwtUtil.parseToken(resp.getAccessToken()))).containsExactly(OOR);
     }
 
     @Test
@@ -210,14 +211,16 @@ class AuthServiceSwitchTest {
     }
 
     @Test
-    void switchOptions_anOrgWideFinanceManagerGrant_isOfferedAtEveryBranch() {
+    void switchOptions_financeManagerGrantIsOfferedOnlyAtItsBranch() {
         user(Role.CASHIER);
-        lenient().when(grantRepo.findByUserId(USER)).thenReturn(List.of(grant(Role.FINANCE_MANAGER, null)));
+        lenient().when(grantRepo.findByUserId(USER)).thenReturn(List.of(grant(Role.FINANCE_MANAGER, OOR)));
 
         SwitchOptionsResponse options = service.switchOptions(USER);
 
-        assertThat(options.branches()).hasSize(2);
-        assertThat(options.branches()).allSatisfy(b -> assertThat(b.roles()).containsExactly(Role.FINANCE_MANAGER));
+        assertThat(options.branches()).singleElement().satisfies(b -> {
+            assertThat(b.code()).isEqualTo("OOR");
+            assertThat(b.roles()).containsExactly(Role.FINANCE_MANAGER);
+        });
     }
 
     // --- fixtures ---

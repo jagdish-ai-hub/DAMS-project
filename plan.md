@@ -7,6 +7,8 @@
 
 ## Revision log
 
+- **rev 82 (2026-10-17)** — **Finance Manager branch access and cashier entry improvements, requested by the owner.** Finance Managers can be assigned selected branches. Receive Entry fields were rearranged, with Customer Type below Job ID and a Clear button for new entries. Expense Entry fields were rearranged, with Clear for new entries and saved receiver contact autofill. Customer-linked expenses show the Job Card, Expense ID and Ooriba ID together in a consistent small font.
+- **rev 81 (2026-10-17)** — **Finance Manager branch access.** Primary Finance Managers and extra Finance Manager grants are assigned to one or more branches. V44 preserves existing access by expanding existing primary and extra Finance Manager access to all branches in their organization at migration time; Owners can then narrow assignments in Team & Branches. Acting Finance Manager sessions, review queues, dashboards, branch listings, claim closing, Override Audit, and AI branch summaries follow the same scope.
 - **rev 80 (2026-10-16)** — **Document-flow help pages with Mermaid diagrams, and a database diagram at the project
   root, requested by the owner.** (1) Every role (cashier, accountant, finance manager, owner) gets a *Where is it — and
   what's next?* Help page: receipt, expense and cash diagrams (expense split into "getting it submitted" and "after it
@@ -424,8 +426,8 @@
     `ActingRoleBanner`, Team & Branches extra-role picker. History / Override Audit show
     "Ajay · as Cashier" from `actorRole` (claim-close overrides carry none — they don't go
     through `audit_event`).
-  - Decision made while building: a session acting as **Finance Manager stays org-wide**
-    (FM is an org-wide role); the picked branch is display-only there. AGENT.md updated.
+  - Decision made while building (superseded by V44): a session acting as **Finance Manager stayed org-wide**
+    (FM was an org-wide role); the picked branch was display-only there.
   Verified: `mvn test` 301 green (261 existing + 40 new: `AuthServiceSwitchTest`,
   `ActingRoleScopeTest`, `ActingRoleFilterTest`, `UserServiceTest` +7; 4 Docker-only skips);
   frontend `tsc`, `eslint`, `vitest` (9) clean; production build has the button, banner text
@@ -1768,7 +1770,8 @@
      `invoice_amount` moved from `ReceiveDocument` → `JobCard`. Pending
      Amount is now job-card-wide. `ClaimClose` keyed by `job_card_id`.
   4. **Structural:** `User.home_branch_id` added (Cashier posts here, always).
-     `UserBranchAccess` join table is ACCOUNTANT-only. The
+     `UserBranchAccess` join table was initially ACCOUNTANT-only; V44 also uses it for
+     FINANCE_MANAGER primary-role branch assignments. The
      `multi_branch_cashier_access` toggle changes search/visibility scope
      only, never the posting branch.
   Plus plan-review findings folded in (cash model, attachments,
@@ -1790,7 +1793,7 @@
 | Receipt open vs settled | `ReceiveDocument.settled` — a computed boolean, flips `true` in two ways: (1) automatically when the owning job card's Pending Amount reaches 0; (2) forced `true` by the close-claim transaction on every still-open ReceiveDocument of that job card (a shortfall-accepted claim never hits `pending = 0` exactly). It is **independent of** `workflow_status` and of `JobCard.business_status`; the "two status columns are never derived from each other" rule is untouched — this is a third, explicitly-computed flag (named `settled`, not `closed`, to avoid clashing with the "Close" business-status value). |
 | One open receive document per job card | Partial unique index `(org_id, job_card_id) WHERE settled = false`. "Add Payment" appends a settlement line to that one open document; it can never create a second document for the same job card. |
 | Cashier posting branch | `User.home_branch_id` — exactly one, mandatory for every CASHIER, fixed. **Every** document a cashier creates posts under this branch, with no exception and regardless of any toggle. |
-| `UserBranchAccess` join table | ACCOUNTANT only. FM/Owner are always org-wide. Cashier uses `home_branch_id`, not this table. |
+| `UserBranchAccess` join table | FINANCE_MANAGER and ACCOUNTANT use assigned branch rows. OWNER is org-wide. Cashier uses `home_branch_id`, not this table. |
 | `multi_branch_cashier_access` toggle | Org-level, default OFF. Changes **only** what a cashier can search / see (own branch vs org-wide customers & job cards). Never changes which branch their own documents post under. |
 | Maker-checker identity | Every document carries `created_by` **and** `last_modified_by`. A user may not verify or approve a document on which they are either — **except a user whose own role is Owner (rev 59).** |
 | Attachments | Separate `attachment` table, polymorphic `(parent_type, parent_id)`, **0..n** per settlement line / expense line / parent document. `frozen = true` once the parent is Approved or Closed — no replace, no delete. Served only via short-lived signed URLs. |
@@ -1860,11 +1863,11 @@
 **User** (`app_user` in DB — `user` is reserved in Postgres)
 `id` BIGINT PK, `org_id` BIGINT nullable (null = SUPER_ADMIN), `home_branch_id` BIGINT nullable (**NOT NULL in practice for CASHIER**, null for every other role — the branch every document this cashier creates posts under), `name`, `email` UNIQUE, `password_hash` nullable (null until invite accepted), `role` ENUM(SUPER_ADMIN / OWNER / FINANCE_MANAGER / ACCOUNTANT / CASHIER), `active` BOOL, `invite_token` nullable, `invite_expires_at` nullable, `created_at`
 
-**UserBranchAccess** *(join table — ACCOUNTANT only)*
+**UserBranchAccess** *(join table — FINANCE_MANAGER and ACCOUNTANT)*
 `user_id` BIGINT, `branch_id` BIGINT — PK `(user_id, branch_id)`
 
 **UserRoleGrant** *(rev 55 — extra roles a user may switch into)*
-`id` BIGINT PK, `org_id`, `user_id` → `app_user`, `role` ∈ {FINANCE_MANAGER, ACCOUNTANT, CASHIER}, `branch_id` nullable → `branch` (null only for FINANCE_MANAGER) — UNIQUE `(user_id, role, branch_id)`. Never for OWNER/SUPER_ADMIN or the user's primary role.
+`id` BIGINT PK, `org_id`, `user_id` → `app_user`, `role` ∈ {FINANCE_MANAGER, ACCOUNTANT, CASHIER}, `branch_id` NOT NULL → `branch` — UNIQUE `(user_id, role, branch_id)`. Never for OWNER/SUPER_ADMIN or the user's primary role.
 
 **PlatformSetting** *(rev 50 — platform-wide key/value, Super Admin-owned)*
 `key` VARCHAR PK, `value` VARCHAR NOT NULL, `updated_at`, `updated_by` BIGINT nullable → `app_user`. Only key today: `ui.font` ∈ {`plex`, `inter`} (default `plex`).
@@ -2022,6 +2025,7 @@ Flyway callback / profile guard and instead runs a masters-only seed.
 | V41 | `receiver_category` (vendor ↔ expense category, many-to-many, backfilled from past expenses); `expense_document.approval_reason` / `approval_comment` *(rev 76)* | vendor mapping; reason and FM comment |
 | V42 | `customer.address` (500), nullable *(rev 77)* | Owner-kept customer address |
 | V43 | `audit_event` CHECK += `VEHICLE_MOVED` *(rev 77)* | Owner moves a vehicle to another customer |
+| V44 | migrates primary Finance Managers and legacy extra Finance Manager grants to explicit branch assignments; `user_role_grant.branch_id` becomes NOT NULL | branch-scoped Finance Manager access *(rev 81)* |
 | V37 | `audit_event` CHECK += `CASH_REOPENED` *(rev 60; V35 repair and V36 `STATUS_CHANGED` precede it)* | Owner reopen of a closed cash day |
 
 ---
@@ -2159,7 +2163,7 @@ GET    /api/v1/cash/close-day?branch_id=&date=
 ```
 GET    /api/v1/search?q=                     # matches customer name/phone, vehicle_no, job-card id, job_card.invoice_no, document_no
 GET    /api/v1/my-entries                    # today + recent, workflow badges, queried highlighted
-GET    /api/v1/audit/overrides               # Owner + FM, org-wide, filter by user/branch/date
+GET    /api/v1/audit/overrides               # Owner org-wide; FM by assigned branch, filter by user/date
 GET    /api/v1/dashboard/kpis
 GET    /api/v1/dashboard/trend
 GET    /api/v1/dashboard/collections-by-mode
@@ -2195,7 +2199,7 @@ Each stage adds its own indexes for the query paths it introduces (search, my-en
 
 - V2 (Branch, DocumentSequence, deferred FKs) · V3 (8 master tables) · V4 (Receiver) · V5 seed (demo org, OOJ/OOB/OOR, default masters matching the mockups, one login per role — README)
 - Branch CRUD, Receiver CRUD, Masters CRUD (one `/api/v1/masters/{type}` controller for all 8; reads open to any org user, writes OWNER-only, deactivate-never-delete)
-- User CRUD (`/api/v1/users`, OWNER-only) — role-driven branch binding (OWNER/FM org-wide, ACCOUNTANT `branchIds[]` → `user_branch_access`, CASHIER one `home_branch_id`), creating a user issues an invite, last-active-Owner guard, self-lockout guard
+- User CRUD (`/api/v1/users`, OWNER-only) — role-driven branch binding (OWNER org-wide; FINANCE_MANAGER/ACCOUNTANT `branchIds[]` → `user_branch_access`; CASHIER one `home_branch_id`), creating a user issues an invite, last-active-Owner guard, self-lockout guard. V44 migrates existing Finance Managers to all branches they previously accessed; Owners may narrow those assignments.
 - Org settings (`GET/PATCH /api/v1/organization`) — name + `multi_branch_cashier_access` toggle
 - `@Filter(orgFilter)` on every tenant entity — `TenantFilterActivator` now enables it before every repository call; `CrossOrgIsolationTest` (Testcontainers Postgres, skips without Docker, runs in CI)
 - Frontend: Owner **Team & Branches** (branches + users tables + add/edit modals), **Masters** (left rail + per-type table/modal), **Settings** (change password; Owner also gets org settings); Super Admin **Delete organization** (type-name-to-confirm)
@@ -2284,7 +2288,7 @@ Each stage adds its own indexes for the query paths it introduces (search, my-en
 - Tests: backend 102 pass / 2 skipped (`ReviewGuardTest`, `ReviewServiceTest`). Frontend tsc · lint · vitest · build green.
 
 ### Stage 8 — FM approval, claim closing, Override Audit ✅ (verified on Neon)
-**Demo:** FM approves / queries / rejects. FM closes Warranty/AMC/CG claims via `POST /job-cards/{id}/close-claim` with an optional final override ("Overridden · Final" everywhere after). Owner/FM see the org-wide Override Audit screen. Matches `review-close.html` FM view.
+**Demo:** FM approves / queries / rejects. FM closes Warranty/AMC/CG claims via `POST /job-cards/{id}/close-claim` with an optional final override ("Overridden · Final" everywhere after). Owner sees the org-wide Override Audit; Finance Managers see assigned branches. Matches `review-close.html` FM view.
 
 - **V19** — `audit_event.branch_id` (nullable), backfilled; index for the override-audit query. See rev 14.
 - **FM queue = every VERIFIED receipt and expense** ("Awaiting Final Approval"), plus (receipts) open claims + recently closed. `GET /api/v1/review/fm/{receipts,expenses}`.
@@ -2311,7 +2315,7 @@ Each stage adds its own indexes for the query paths it introduces (search, my-en
 - **No migration** — `CashWorkflowStatus` and the `audit_event` CHECK already cover all six.
 - `CashDocumentService` gains `verify` (ACCOUNTANT, SUBMITTED→VERIFIED), `approve` (FM, VERIFIED→APPROVED), and role-dispatched `query` / `reject` (Accountant from SUBMITTED, FM from VERIFIED → QUERIED / REJECTED) — reusing `ReviewGuard` (role + branch scope + maker-checker). Cash has no lines, so no override. Audit each transition with `branch_id`.
 - Endpoints: `POST /api/v1/cash-documents/{id}/verify` · `/approve` · `/query` · `/reject`.
-- Queue: a **Cash** tab in `ReviewQueuePage` (Accountant) and `FmQueuePage` (FM) alongside Receipts / Expenses — `GET /api/v1/review/cash` (SUBMITTED, in the accountant's branches) and the cash arm of `GET /api/v1/review/fm/cash` (VERIFIED, org-wide). A lightweight cash detail panel (direction / date / amount / bank / ref / remark + History + action bar) — `RecordCard` is line-oriented, cash gets its own compact view.
+- Queue: a **Cash** tab in `ReviewQueuePage` (Accountant) and `FmQueuePage` (FM) alongside Receipts / Expenses — `GET /api/v1/review/cash` (SUBMITTED, in the accountant's branches) and the cash arm of `GET /api/v1/review/fm/cash` (VERIFIED, in the Finance Manager's assigned branches). A lightweight cash detail panel (direction / date / amount / bank / ref / remark + History + action bar) — `RecordCard` is line-oriented, cash gets its own compact view.
 - Cashier side already works: the Cash page movements table shows the status badge and "Fix & Resubmit" on QUERIED; add the query-note banner to the movement modal (parity with New Receipt / New Expense).
 - Tests: `CashDocumentServiceTest` gains verify / approve / query / reject cases (maker-checker, wrong-state, role).
 

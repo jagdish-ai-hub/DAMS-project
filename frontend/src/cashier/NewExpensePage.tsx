@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { mastersApi, type MasterRow } from '../api/masters'
 import { customersApi } from '../api/customers'
@@ -79,6 +79,7 @@ export default function NewExpensePage() {
   const editDocId = params.get('editDoc') ? Number(params.get('editDoc')) : null
   const prefillCustomerId = params.get('customerId') ? Number(params.get('customerId')) : null
   const prefillJobCardId = params.get('jobCardId') ? Number(params.get('jobCardId')) : null
+  const clearRequested = useRef(false)
 
   const [categories, setCategories] = useState<MasterRow[]>([])
   const [subCats, setSubCats] = useState<MasterRow[]>([])
@@ -176,6 +177,7 @@ export default function NewExpensePage() {
     if (!prefillCustomerId || editDocId) return
     customersApi.get(prefillCustomerId)
       .then(({ data }) => {
+        if (clearRequested.current) return
         setCustomerId(data.id)
         setCustomerName(data.name)
         setNotice(`New expense in ${data.name}'s context — pick the job card it belongs to, or leave it as branch overhead.`)
@@ -187,7 +189,9 @@ export default function NewExpensePage() {
   useEffect(() => {
     if (!prefillJobCardId || editDocId) return
     jobCardsApi.get(prefillJobCardId)
-      .then(({ data }) => pickJobCard(hitFromJobCard(data)))
+      .then(({ data }) => {
+        if (!clearRequested.current) pickJobCard(hitFromJobCard(data))
+      })
       .catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefillJobCardId, editDocId])
@@ -307,6 +311,31 @@ export default function NewExpensePage() {
   }
   function removeLine(i: number) {
     setLines((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : [freshLine()]))
+  }
+
+  function clearForm() {
+    if (editDocId || loadedDoc || busy) return
+    clearRequested.current = true
+    setReceiverName('')
+    setReceiverPhone('')
+    setReceiverLinked(false)
+    setApprovalReason('')
+    setPlainStatusId(null)
+    setCustomerName('')
+    setCustomerId(null)
+    setVehicleNo('')
+    setVehicleId(null)
+    setJcPick(null)
+    setNewJc(false)
+    setJcCategoryId('')
+    setJcStatusId('')
+    setDbmId('')
+    setInvoiceNo('')
+    setExpenseCategoryId(categories[0]?.id ?? '')
+    setBusinessStatusId(statuses[0]?.id ?? '')
+    setLines([freshLine()])
+    setError('')
+    setNotice('')
   }
 
   function buildLines() {
@@ -811,6 +840,14 @@ export default function NewExpensePage() {
               style={{ ...inputStyle, width: 190, background: 'var(--bg)', color: 'var(--muted)', fontFamily: 'Consolas, monospace' }}
             />
           </label>
+          <button
+            type="button"
+            onClick={clearForm}
+            disabled={Boolean(editDocId || loadedDoc || busy)}
+            style={{ ...ghostBtn, minHeight: 32, padding: '4px 10px', fontSize: '0.78rem' }}
+          >
+            Clear
+          </button>
           <span style={{
             fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em',
             padding: '2px 9px', borderRadius: 999,
@@ -840,14 +877,9 @@ export default function NewExpensePage() {
                   onChange={(name, picked) => {
                     setReceiverName(name)
                     setReceiverLinked(picked != null)
-                    if (picked) setReceiverPhone(picked.phone ?? '')
+                    setReceiverPhone(picked?.phone ?? '')
                   }}
                 />
-              </Row>
-              <Row label="Expenses Category">
-                <select value={expenseCategoryId} onChange={(e) => setExpenseCategoryId(Number(e.target.value))} style={inputStyle}>
-                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
               </Row>
               <Row label="Receiver Contact">
                 <input
@@ -857,66 +889,10 @@ export default function NewExpensePage() {
                   autoComplete="off"
                   value={receiverPhone}
                   onChange={(e) => setReceiverPhone(e.target.value)}
-                  placeholder="Optional — mobile number"
+                  placeholder="Mobile number"
                   style={inputStyle}
                 />
               </Row>
-              <Row label="Vehicle #">
-                <VehicleCombobox
-                  vehicleNo={vehicleNo}
-                  vehicleId={vehicleId}
-                  customerId={customerId}
-                  locked={jcPick?.vehicleId != null}
-                  onChange={(no, id) => { setVehicleNo(no); setVehicleId(id) }}
-                  onOwnerFound={(v) => { setCustomerId(v.customerId); setCustomerName(v.customerName ?? '') }}
-                />
-              </Row>
-              <Row label="Customer Name">
-                <CustomerCombobox
-                  name={customerName}
-                  customerId={customerId}
-                  locked={jcPick?.customerId != null}
-                  onChange={(name, id) => {
-                    setCustomerName(name)
-                    if (id !== customerId) { setVehicleId(null); if (id != null) setVehicleNo('') }
-                    setCustomerId(id)
-                  }}
-                />
-              </Row>
-              <Row label="Job ID / PO / SO">
-                <input value={dbmId} onChange={(e) => setDbmId(e.target.value)} placeholder="4009941587" style={inputStyle} />
-              </Row>
-            </div>
-
-            {/* right column */}
-            <div>
-              <Row label="Total Expenses">
-                <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--red)' }}>{inr(total)}</span>
-              </Row>
-              <Row label="Status">
-                <select
-                  value={claimYes ? '' : businessStatusId}
-                  disabled={claimYes}
-                  onChange={(e) => setBusinessStatusId(Number(e.target.value))}
-                  style={inputStyle}
-                >
-                  {claimYes && <option value="">{claimStatus?.name}</option>}
-                  {plainStatuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </Row>
-              {claimStatus && (
-                <Row label="Transfer to Claim">
-                  <select
-                    aria-label="Transfer to Claim"
-                    value={claimYes ? 'yes' : 'no'}
-                    onChange={(e) => setTransferToClaim(e.target.value === 'yes')}
-                    style={inputStyle}
-                  >
-                    <option value="no">No</option>
-                    <option value="yes">Yes — the manufacturer will repay it</option>
-                  </select>
-                </Row>
-              )}
               <Row label="Job Card (Ooriba ID)">
                 <div>
                   <JobCardSearch
@@ -950,6 +926,67 @@ export default function NewExpensePage() {
                     </div>
                   )}
                 </div>
+              </Row>
+              <Row label="Vehicle #">
+                <VehicleCombobox
+                  vehicleNo={vehicleNo}
+                  vehicleId={vehicleId}
+                  customerId={customerId}
+                  locked={jcPick?.vehicleId != null}
+                  onChange={(no, id) => { setVehicleNo(no); setVehicleId(id) }}
+                  onOwnerFound={(v) => { setCustomerId(v.customerId); setCustomerName(v.customerName ?? '') }}
+                />
+              </Row>
+              <Row label="Customer Name">
+                <CustomerCombobox
+                  name={customerName}
+                  customerId={customerId}
+                  locked={jcPick?.customerId != null}
+                  onChange={(name, id) => {
+                    setCustomerName(name)
+                    if (id !== customerId) { setVehicleId(null); if (id != null) setVehicleNo('') }
+                    setCustomerId(id)
+                  }}
+                />
+              </Row>
+              <Row label="Job ID / PO / SO">
+                <input value={dbmId} onChange={(e) => setDbmId(e.target.value)} placeholder="4009941587" style={inputStyle} />
+              </Row>
+            </div>
+
+            {/* right column */}
+            <div>
+              <Row label="Total Expenses">
+                <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--red)' }}>{inr(total)}</span>
+              </Row>
+              {claimStatus && (
+                <Row label="Transfer to Claim">
+                  <select
+                    aria-label="Transfer to Claim"
+                    value={claimYes ? 'yes' : 'no'}
+                    onChange={(e) => setTransferToClaim(e.target.value === 'yes')}
+                    style={inputStyle}
+                  >
+                    <option value="no">No</option>
+                    <option value="yes">Yes — the manufacturer will repay it</option>
+                  </select>
+                </Row>
+              )}
+              <Row label="Expenses Category">
+                <select value={expenseCategoryId} onChange={(e) => setExpenseCategoryId(Number(e.target.value))} style={inputStyle}>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </Row>
+              <Row label="Status">
+                <select
+                  value={claimYes ? '' : businessStatusId}
+                  disabled={claimYes}
+                  onChange={(e) => setBusinessStatusId(Number(e.target.value))}
+                  style={inputStyle}
+                >
+                  {claimYes && <option value="">{claimStatus?.name}</option>}
+                  {plainStatuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
               </Row>
               <Row label="Invoice #">
                 <input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="7731122600388" style={inputStyle} />

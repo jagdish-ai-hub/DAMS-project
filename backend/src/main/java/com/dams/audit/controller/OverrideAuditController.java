@@ -3,6 +3,7 @@ package com.dams.audit.controller;
 import com.dams.audit.dto.OverrideAuditEntry;
 import com.dams.audit.service.OverrideAuditService;
 import com.dams.common.time.OrgTime;
+import com.dams.common.security.BranchScope;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -18,9 +19,8 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * Org-wide Override Audit — every amount override across the organisation (Accountant line
- * overrides + Finance Manager claim-close overrides), newest first. Owner and Finance
- * Manager only.
+ * Override Audit — every amount override across the organisation for Owners, and within the
+ * caller's assigned branch for Finance Managers.
  *
  * {@code from} / {@code to} are inclusive calendar dates in the org timezone; both default
  * to the last 90 days.
@@ -33,9 +33,11 @@ import java.util.List;
 public class OverrideAuditController {
 
     private final OverrideAuditService overrideAuditService;
+    private final BranchScope branchScope;
 
-    public OverrideAuditController(OverrideAuditService overrideAuditService) {
+    public OverrideAuditController(OverrideAuditService overrideAuditService, BranchScope branchScope) {
         this.overrideAuditService = overrideAuditService;
+        this.branchScope = branchScope;
     }
 
     @GetMapping
@@ -45,6 +47,7 @@ public class OverrideAuditController {
             @RequestParam(required = false) Long branchId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        branchScope.requireBranchIfRestricted(branchId);
 
         LocalDate toDate = to != null ? to : OrgTime.today();
         LocalDate fromDate = from != null ? from : toDate.minusDays(90);

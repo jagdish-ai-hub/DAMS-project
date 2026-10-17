@@ -27,7 +27,7 @@ accountants, plus the owner's live window into branch operations.
   Adds branches, adds users, assigns roles, extra roles and branch access.
   Read-only on transactions while acting as Owner; never edits them (may
   switch into another role — see "Acting roles").
-- **FINANCE_MANAGER** — all branches within their org. Final approval on
+- **FINANCE_MANAGER** — assigned branches within their org. Final approval on
   every entry, **except** the carve-out below. Closes Warranty/AMC/CG
   claims, with override authority that is final and locked once used.
   **Close Claim is itself the approval for a claim receipt (rev 49)** —
@@ -75,8 +75,8 @@ still blocked from their own entries.
 One person can hold more than one job. Each user has a **primary role**
 (above) plus optional **extra roles** the Owner grants in Team & Branches:
 
-- Extra roles are `FINANCE_MANAGER` (org-wide, no branches), `ACCOUNTANT` or
-  `CASHIER` (each granted for specific branches). An Owner or Super Admin
+- Extra roles are `FINANCE_MANAGER`, `ACCOUNTANT` or `CASHIER` (each granted
+  for specific branches). An Owner or Super Admin
   cannot be granted extra roles; a grant can't repeat the primary role.
 - A **Switch role** button beside Help lets the user pick a branch, then a
   role available at that branch. The server issues a new JWT whose `role`
@@ -89,7 +89,7 @@ One person can hold more than one job. Each user has a **primary role**
   Cashier at OOR posts to OOR; acting as Accountant at OOR sees OOR only.
   To work another branch, switch again. **Exception:** Finance Manager is
   an org-wide role, so a session acting as Finance Manager still sees every
-  branch (the picked branch is only shown in the banner).
+  branch.
 - **Attribution never changes.** `created_by` / `last_modified_by` remain the
   real user's id, so Ajay's entries show "Ajay". Audit events additionally
   store `actor_role` while acting ("Ajay · as Cashier"), and each switch is
@@ -591,8 +591,8 @@ flag the conflict and ask rather than silently working around it.
 2. **Multi-branch cashier access** — an org-level setting in Owner
    masters, **default OFF**. OFF: a cashier searches, sees, and posts
    against only their own branch's customers and job cards. ON:
-   org-wide. (FM/Owner are always org-wide; Accountant follows assigned
-   branches — unchanged.)
+   org-wide. (Owner is org-wide; Finance Manager and Accountant follow
+   assigned branches.)
 3. **Full masters management in the Owner dashboard** — CRUD (deactivate,
    never delete) for: receipt categories, expense categories and
    sub-categories, settlement/payment modes, expense limits, business
