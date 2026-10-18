@@ -9,10 +9,9 @@ import org.hibernate.annotations.Filter;
 import java.time.Instant;
 
 /**
- * An extra role the Owner lets a user switch into (plan.md rev 55). FINANCE_MANAGER is org-wide
- * ({@code branchId} null); ACCOUNTANT / CASHIER name the one branch they may act at, so a user
- * granted Cashier at two branches has two rows. The user's own primary role lives on
- * {@link AppUser#getRole()} and never appears here.
+ * An extra role the Owner lets a user switch into (plan.md rev 55). Every grant names a branch,
+ * so a user granted a role at multiple branches has one row per branch. The user's own primary
+ * role lives on {@link AppUser#getRole()} and never appears here.
  */
 @Entity
 @Table(name = "user_role_grant")
@@ -36,8 +35,8 @@ public class UserRoleGrant {
     @Column(nullable = false, length = 50)
     private Role role;
 
-    /** Null only for FINANCE_MANAGER (org-wide). */
-    @Column(name = "branch_id")
+    /** The branch where the user may act in this role. */
+    @Column(name = "branch_id", nullable = false)
     private Long branchId;
 
     @Column(name = "created_at", nullable = false, updatable = false)

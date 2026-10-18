@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { mastersApi, type MasterRow } from '../api/masters'
 import { customersApi } from '../api/customers'
@@ -53,6 +53,7 @@ export default function NewReceiptPage() {
   const [params] = useSearchParams()
   const editDocId = params.get('editDoc') ? Number(params.get('editDoc')) : null
   const prefillCustomerId = params.get('customerId') ? Number(params.get('customerId')) : null
+  const clearRequested = useRef(false)
 
   const [categories, setCategories] = useState<MasterRow[]>([])
   const [statuses, setStatuses] = useState<MasterRow[]>([])
@@ -133,6 +134,7 @@ export default function NewReceiptPage() {
     if (prefillCustomerId && !editDocId) {
       customersApi.get(prefillCustomerId)
         .then(({ data }) => {
+          if (clearRequested.current) return
           setCustomerName(data.name)
           setVehicleNo(data.vehicles[0]?.vehicleNo ?? '')
           setContactPhone(data.lastContactPhone ?? data.phone ?? '')
@@ -254,6 +256,35 @@ export default function NewReceiptPage() {
   }
   function removeLine(i: number) {
     setLines((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : [freshLine('')]))
+  }
+
+  function clearForm() {
+    if (editDocId || loadedDoc || busy) return
+    clearRequested.current = true
+    setCustomerId(null)
+    setCustomerName('')
+    setVehicleNo('')
+    setVehicleId(null)
+    setVehicleTouched(false)
+    setContactPhone('')
+    setContactTouched(false)
+    setChassisNo('')
+    setJcContact(null)
+    setJcChassis(null)
+    setJcPick(null)
+    setLinkOpen(false)
+    setLinkedStatusName(null)
+    setDbmId('')
+    setInvoiceNo('')
+    setInvoiceAmount('')
+    setCategoryId(categories[0]?.id ?? '')
+    setClaimTypeId('')
+    setBusinessStatusId(statuses[0]?.id ?? '')
+    setB2b(false)
+    setGstNo('')
+    setLines([freshLine(modes.find((m) => m.active)?.id ?? '')])
+    setError('')
+    setNotice('')
   }
 
   // A Warranty/AMC/CGW claim may have nothing collected from the customer at all — the
@@ -639,6 +670,14 @@ export default function NewReceiptPage() {
               style={{ ...inputStyle, width: 190, background: 'var(--bg)', color: 'var(--muted)', fontFamily: 'Consolas, monospace' }}
             />
           </label>
+          <button
+            type="button"
+            onClick={clearForm}
+            disabled={Boolean(editDocId || loadedDoc || busy)}
+            style={{ ...ghostBtn, minHeight: 32, padding: '4px 10px', fontSize: '0.78rem' }}
+          >
+            Clear
+          </button>
           {loadedDoc?.documentNo && (
             <button
               type="button"
@@ -663,6 +702,36 @@ export default function NewReceiptPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-y-0 gap-x-8">
             {/* left column */}
             <div>
+              {/* rev 64 — linking an existing job card fills and locks its customer, vehicle, and job fields. */}
+              {!inEditMode && !jcPick && !linkOpen && (
+                <button type="button" onClick={() => setLinkOpen(true)}
+                  style={{ background: 'none', border: 'none', padding: '6px 0 10px', color: 'var(--navy2)', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>
+                  ＋ Link an existing job (optional)
+                </button>
+              )}
+              {!inEditMode && (jcPick || linkOpen) && (
+                <Row label="Existing job">
+                  <div>
+                    <JobCardSearch
+                      selected={jcPick}
+                      customerId={customerId}
+                      onPick={pickJobCard}
+                      partyFirst
+                      placeholder="Search by customer, vehicle no, Job Card / DBM or invoice"
+                    />
+                    {!jcPick && (
+                      <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: 4 }}>
+                        Only to attach this receipt to a job that already exists (for example one opened from an expense).
+                        Leave it closed to open a new job.{' '}
+                        <button type="button" onClick={() => setLinkOpen(false)}
+                          style={{ background: 'none', border: 'none', padding: 0, color: 'var(--navy2)', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>
+                          Hide
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </Row>
+              )}
               <Row label="Customer Name" req>
                 <CustomerCombobox
                   name={customerName}
@@ -729,41 +798,6 @@ export default function NewReceiptPage() {
               <Row label="Job ID / PO / SO">
                 <input value={dbmId} disabled={jcLinked} onChange={(e) => setDbmId(e.target.value)} placeholder="4009941587" style={inputStyle} />
               </Row>
-              <Row label="Invoice #">
-                <input value={invoiceNo} disabled={jcLinked} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="7731122600388" style={inputStyle} />
-              </Row>
-              <Row label="Claim Type">
-                <select value={claimTypeId} disabled={jcLinked} onChange={(e) => setClaimTypeId(e.target.value === '' ? '' : Number(e.target.value))} style={inputStyle}>
-                  <option value="">— Not a claim —</option>
-                  {claimTypes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </Row>
-            </div>
-
-            {/* right column */}
-            <div>
-              <Row label="Pending Amount">
-                <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: pending > 0 ? 'var(--amber)' : 'var(--faint)' }}>
-                  {invoiceAmount ? inr(pending) : 'Zero (no invoice yet)'}
-                </span>
-              </Row>
-              <Row label="Status">
-                <BusinessStatusSelect
-                  statuses={statuses}
-                  value={businessStatusId}
-                  onChange={setBusinessStatusId}
-                  disabled={jcLinked}
-                  currentName={loadedDoc?.businessStatusName ?? linkedStatusName}
-                />
-              </Row>
-              <Row label="Transaction Type">
-                <select value={categoryId} disabled={jcLinked} onChange={(e) => setCategoryId(Number(e.target.value))} style={inputStyle}>
-                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </Row>
-              <Row label="Invoice Amount">
-                <input type="number" value={invoiceAmount} disabled={jcLinked} onChange={(e) => setInvoiceAmount(e.target.value)} placeholder="Total amount" style={inputStyle} />
-              </Row>
               <Row label="Customer Type">
                 <div style={{ display: 'flex', border: '1.5px solid var(--line)', borderRadius: 7, overflow: 'hidden', width: 'fit-content' }}>
                   {(['B2C', 'B2B'] as const).map((t) => {
@@ -790,38 +824,41 @@ export default function NewReceiptPage() {
                   <input value={gstNo} disabled={jcLinked} onChange={(e) => setGstNo(e.target.value)} placeholder="21ABCDE1234F1Z5" style={inputStyle} />
                 </Row>
               )}
+            </div>
 
-              {/* rev 64 — linking an existing job card is the exception, so it stays out of the way: a small
-                  link just above Documents. Picked, it fills (and locks) the customer / vehicle / job fields. */}
-              {!inEditMode && !jcPick && !linkOpen && (
-                <button type="button" onClick={() => setLinkOpen(true)}
-                  style={{ background: 'none', border: 'none', padding: '6px 0 10px', color: 'var(--navy2)', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>
-                  ＋ Link an existing job (optional)
-                </button>
-              )}
-              {!inEditMode && (jcPick || linkOpen) && (
-                <Row label="Existing job">
-                  <div>
-                    <JobCardSearch
-                      selected={jcPick}
-                      customerId={customerId}
-                      onPick={pickJobCard}
-                      partyFirst
-                      placeholder="Search by customer, vehicle no, Job Card / DBM or invoice"
-                    />
-                    {!jcPick && (
-                      <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: 4 }}>
-                        Only to attach this receipt to a job that already exists (for example one opened from an expense).
-                        Leave it closed to open a new job.{' '}
-                        <button type="button" onClick={() => setLinkOpen(false)}
-                          style={{ background: 'none', border: 'none', padding: 0, color: 'var(--navy2)', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>
-                          Hide
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </Row>
-              )}
+            {/* right column */}
+            <div>
+              <Row label="Pending Amount">
+                <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: pending > 0 ? 'var(--amber)' : 'var(--faint)' }}>
+                  {invoiceAmount ? inr(pending) : 'Zero (no invoice yet)'}
+                </span>
+              </Row>
+              <Row label="Claim Type">
+                <select value={claimTypeId} disabled={jcLinked} onChange={(e) => setClaimTypeId(e.target.value === '' ? '' : Number(e.target.value))} style={inputStyle}>
+                  <option value="">— Not a claim —</option>
+                  {claimTypes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </Row>
+              <Row label="Transaction Type">
+                <select value={categoryId} disabled={jcLinked} onChange={(e) => setCategoryId(Number(e.target.value))} style={inputStyle}>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </Row>
+              <Row label="Status">
+                <BusinessStatusSelect
+                  statuses={statuses}
+                  value={businessStatusId}
+                  onChange={setBusinessStatusId}
+                  disabled={jcLinked}
+                  currentName={loadedDoc?.businessStatusName ?? linkedStatusName}
+                />
+              </Row>
+              <Row label="Invoice #">
+                <input value={invoiceNo} disabled={jcLinked} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="7731122600388" style={inputStyle} />
+              </Row>
+              <Row label="Invoice Amount">
+                <input type="number" value={invoiceAmount} disabled={jcLinked} onChange={(e) => setInvoiceAmount(e.target.value)} placeholder="Total amount" style={inputStyle} />
+              </Row>
 
               {/* Documents live in the space under the ID field, in this column. */}
               <AttachmentsPanel

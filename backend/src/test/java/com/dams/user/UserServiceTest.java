@@ -6,6 +6,7 @@ import com.dams.organization.entity.Organization;
 import com.dams.user.dto.RoleGrantDto;
 import com.dams.user.dto.UserResponse;
 import com.dams.user.entity.UserRoleGrant;
+import com.dams.user.entity.UserBranchAccess;
 import org.mockito.ArgumentCaptor;
 import com.dams.common.exception.DamsException;
 import com.dams.config.TenantContext;
@@ -92,6 +93,30 @@ class UserServiceTest {
     }
 
     @Test
+    void create_financeManagerWithoutBranches_throwsBadRequest() {
+        lenient().when(userRepo.existsByEmailIgnoreCase("fm@demo")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.create(request("fm@demo", Role.FINANCE_MANAGER)))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("assigned branch");
+    }
+
+    @Test
+    void create_financeManagerWithBranches_persistsEachAssignment() {
+        stubHappyCreate();
+        UserRequest req = request("fm@demo", Role.FINANCE_MANAGER);
+        req.setBranchIds(List.of(2L, 3L));
+
+        UserResponse response = service.create(req);
+
+        ArgumentCaptor<UserBranchAccess> saved = ArgumentCaptor.forClass(UserBranchAccess.class);
+        verify(branchAccessRepo, org.mockito.Mockito.times(2)).save(saved.capture());
+        assertThat(saved.getAllValues()).extracting(a -> a.getId().getBranchId()).containsExactly(2L, 3L);
+        assertThat(response.branchIds()).containsExactly(2L, 3L);
+        assertThat(response.branchAccessLabel()).isEqualTo("OOB branch, OOR branch");
+    }
+
+    @Test
     void create_duplicateEmail_throwsConflict() {
         lenient().when(userRepo.existsByEmailIgnoreCase("dup@demo")).thenReturn(true);
 
@@ -144,11 +169,11 @@ class UserServiceTest {
     }
 
     @Test
-    void create_extraFinanceManagerRole_isOrgWideSoItStoresNoBranch() {
+    void create_extraFinanceManagerRole_storesItsAssignedBranch() {
         stubHappyCreate();
         UserRequest req = request("a@demo", Role.ACCOUNTANT);
         req.setBranchIds(List.of(2L));
-        req.setRoleGrants(List.of(new RoleGrantDto(Role.FINANCE_MANAGER, List.of(3L))));   // branch ignored
+        req.setRoleGrants(List.of(new RoleGrantDto(Role.FINANCE_MANAGER, List.of(3L))));
 
         service.create(req);
 
@@ -157,7 +182,7 @@ class UserServiceTest {
         verify(grantRepo).saveAll(saved.capture());
         assertThat(saved.getValue()).singleElement().satisfies(g -> {
             assertThat(g.getRole()).isEqualTo(Role.FINANCE_MANAGER);
-            assertThat(g.getBranchId()).isNull();
+            assertThat(g.getBranchId()).isEqualTo(3L);
         });
     }
 

@@ -618,7 +618,7 @@ function CustomerHistoryView(props: {
                     type="button"
                     onClick={() => navigate(`/app/new-expense?editDoc=${e.id}`)}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', width: '100%',
+                      display: 'flex', alignItems: 'flex-start', gap: 12, padding: '9px 0', width: '100%',
                       border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer',
                       borderBottom: '1px dashed var(--line)', fontSize: '0.83rem',
                     }}
@@ -626,8 +626,13 @@ function CustomerHistoryView(props: {
                     <span style={{ width: 96, color: 'var(--faint)', fontSize: '0.76rem', flexShrink: 0 }}>
                       {fmtDateShort(e.date)}
                     </span>
-                    <span style={{ flex: 1, minWidth: 0, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {e.categoryName} · {e.receiverName} · <span style={{ fontFamily: 'Consolas, monospace', fontSize: '0.72rem' }}>{e.documentNo ?? 'draft'}</span>
+                    <span style={{ flex: 1, minWidth: 0, color: 'var(--muted)' }}>
+                      {e.categoryName} · {e.receiverName}
+                      <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--faint)', overflowWrap: 'anywhere' }}>
+                        {e.jobCardReference && <>Job Card: {e.jobCardReference} · </>}
+                        Expense ID: {e.documentNo ?? 'draft'}
+                        {(e.receiveDocumentNos?.length ?? 0) > 0 && <> · Ooriba ID: {e.receiveDocumentNos?.join(', ')}</>}
+                      </span>
                     </span>
                     <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--red)' }}>
                       {inr(e.amount)}

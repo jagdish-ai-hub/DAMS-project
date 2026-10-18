@@ -329,6 +329,13 @@ public class CustomerService {
             .filter(j -> allowed.map(set -> set.contains(j.getBranchId())).orElse(true))
             .toList();
         List<Long> jobCardIds = jobCards.stream().map(JobCard::getId).toList();
+        Map<Long, List<String>> receiveNumbersByJobCard = new HashMap<>();
+        if (!jobCardIds.isEmpty()) {
+            for (Object[] row : jobCardRepo.receiveNumbersFor(orgId, jobCardIds)) {
+                receiveNumbersByJobCard.computeIfAbsent((Long) row[0], key -> new java.util.ArrayList<>())
+                    .add((String) row[1]);
+            }
+        }
 
         // Expenses reach a customer two ways: tagged to one of their job cards, or linked to the
         // customer directly (rev 56 — an expense may carry a customer with no job card at all).
@@ -371,6 +378,7 @@ public class CustomerService {
                 d.getDocumentNo(),
                 d.getJobCardId(),
                 jc != null && b != null ? JobCardResponse.reference(b.getCode(), jc.getId()) : null,
+                jc != null ? receiveNumbersByJobCard.getOrDefault(jc.getId(), List.of()) : List.of(),
                 b != null ? b.getCode() : null,
                 categoryNames.getOrDefault(d.getExpenseCategoryId(), "—"),
                 receiverNames.getOrDefault(d.getReceiverId(), "—"),

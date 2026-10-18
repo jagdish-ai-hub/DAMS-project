@@ -19,10 +19,10 @@ import java.util.stream.Collectors;
 
 /**
  * Resolves which branches the signed-in user may see, for reads that span branches
- * (universal search, and later the review queues / dashboard):
+ * (universal search, review queues, and dashboard):
  *
- *   OWNER / FINANCE_MANAGER  — every branch in the org (no restriction)
- *   ACCOUNTANT               — exactly their user_branch_access branches
+ *   OWNER                    — every branch in the org (no restriction)
+ *   FINANCE_MANAGER / ACCOUNTANT — exactly their user_branch_access branches
  *   CASHIER                  — their home branch only, UNLESS the org's
  *                              multi_branch_cashier_access toggle is ON, then org-wide
  *
@@ -30,10 +30,11 @@ import java.util.stream.Collectors;
  * they can search and see. See AGENT.md / plan.md locked decisions.
  *
  * While the caller has switched into another role (plan.md rev 55) the scope is that ACTING
- * role at the one branch picked — the Owner acting as Accountant at OOR sees OOR only.
+ * role at the one branch picked — the Owner acting as Finance Manager or Accountant at OOR
+ * sees OOR only.
  *
- * Reads the user and toggle fresh from the DB (not the JWT) so a change to an accountant's
- * branch access or the org toggle takes effect without waiting for the ~8h token to expire.
+ * Reads the user, branch assignments and toggle fresh from the DB (not the JWT) so changes take
+ * effect without waiting for the ~8h token to expire.
  */
 @Component
 public class BranchScope {
@@ -66,8 +67,8 @@ public class BranchScope {
         Long actingBranch = ActingDetails.actingBranch();
 
         return switch (ActingDetails.effectiveRole(user)) {
-            case OWNER, FINANCE_MANAGER -> Optional.empty();
-            case ACCOUNTANT -> Optional.of(acting
+            case OWNER -> Optional.empty();
+            case FINANCE_MANAGER, ACCOUNTANT -> Optional.of(acting
                 ? (actingBranch == null ? Set.<Long>of() : Set.of(actingBranch))
                 : branchAccessRepo.findByUserId(user.getId()).stream()
                     .map(UserBranchAccess::getBranchId)
@@ -87,7 +88,7 @@ public class BranchScope {
 
     /**
      * The branch a new record created by the caller belongs to: a cashier's (acting) home branch,
-     * else null (owner / FM / accountant create no branch-owned customers).
+     * else null (owner / Finance Manager / accountant create no branch-owned customers).
      */
     public Long creatingBranchIdOrNull() {
         Long orgId = TenantContext.requireOrgId();
@@ -101,6 +102,17 @@ public class BranchScope {
     /** True when {@code branchId} is within the caller's allowed set. */
     public boolean canSeeBranch(Long branchId) {
         return allowedBranchIds().map(set -> set.contains(branchId)).orElse(true);
+    }
+
+    /** Dashboard endpoints aggregate one branch at a time for branch-restricted roles. */
+    public void requireBranchIfRestricted(Long branchId) {
+        Optional<Set<Long>> allowed = allowedBranchIds();
+        if (allowed.isPresent() && branchId == null) {
+            throw DamsException.badRequest("Select one of your assigned branches");
+        }
+        if (allowed.isPresent() && !allowed.get().contains(branchId)) {
+            throw DamsException.forbidden("You do not have access to this branch");
+        }
     }
 
     public Long currentUserId() {

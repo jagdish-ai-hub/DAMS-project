@@ -2,6 +2,7 @@ package com.dams.customer.dto;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 /**
  * One expense tagged to a customer's job card — the "Expenses" section on the customer
@@ -13,6 +14,7 @@ public record CustomerExpenseEntry(
     String documentNo,
     Long jobCardId,
     String jobCardReference,
+    List<String> receiveDocumentNos,
     String branchCode,
     String categoryName,
     String receiverName,

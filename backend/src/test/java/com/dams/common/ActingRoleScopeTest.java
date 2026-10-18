@@ -112,11 +112,27 @@ class ActingRoleScopeTest {
     }
 
     @Test
-    void anAccountantActingAsFinanceManager_isOrgWide() {
+    void anAccountantActingAsFinanceManager_seesOnlyThePickedBranch() {
         user(Role.ACCOUNTANT, null);
         actAs(Role.FINANCE_MANAGER, Role.ACCOUNTANT, OOR);
 
-        assertThat(branchScope.allowedBranchIds()).isEmpty();
+        assertThat(branchScope.allowedBranchIds()).contains(Set.of(OOR));
+    }
+
+    @Test
+    void aFinanceManagerInTheirOwnRole_seesOnlyTheirAssignedBranches() {
+        user(Role.FINANCE_MANAGER, null);
+        lenient().when(branchAccessRepo.findByUserId(USER)).thenReturn(List.of(access(OOB)));
+        actAs(Role.FINANCE_MANAGER, Role.FINANCE_MANAGER, null);
+
+        assertThat(branchScope.allowedBranchIds()).contains(Set.of(OOB));
+        assertThatThrownBy(() -> branchScope.requireBranchIfRestricted(OOR))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("access");
+        assertThatThrownBy(() -> branchScope.requireBranchIfRestricted(null))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("Select");
+        branchScope.requireBranchIfRestricted(OOB);
     }
 
     // --- Cash posting ---

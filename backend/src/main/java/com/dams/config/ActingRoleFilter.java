@@ -96,9 +96,7 @@ public class ActingRoleFilter extends OncePerRequestFilter {
             // The Owner may act as any role, at any branch of their own org.
             return branchRepo.findByIdAndOrgId(branchId, orgId).isPresent();
         }
-        return acting == Role.FINANCE_MANAGER
-            ? grantRepo.existsByUserIdAndRoleAndBranchIdIsNull(userId, acting)
-            : grantRepo.existsByUserIdAndRoleAndBranchId(userId, acting, branchId);
+        return grantRepo.existsByUserIdAndRoleAndBranchId(userId, acting, branchId);
     }
 
     private void writeUnauthorized(HttpServletResponse response) throws IOException {

@@ -102,6 +102,9 @@ public class ClaimCloseService {
 
         JobCard jc = jobCardRepo.findByIdAndOrgId(jobCardId, orgId)
             .orElseThrow(() -> DamsException.notFound("Job card", jobCardId));
+        if (!branchScope.canSeeBranch(jc.getBranchId())) {
+            throw DamsException.forbidden("You do not have access to this branch");
+        }
         String ref = reference(orgId, jc);
 
         if (jc.getClaimTypeId() == null) {

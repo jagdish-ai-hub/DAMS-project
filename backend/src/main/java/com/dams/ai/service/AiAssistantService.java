@@ -31,6 +31,8 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -95,9 +97,7 @@ public class AiAssistantService {
         if (question.length() > 500) {
             throw DamsException.badRequest("Question is too long (max 500 characters)");
         }
-        if (branchId != null && !branchScope.canSeeBranch(branchId)) {
-            throw DamsException.forbidden("Branch " + branchId + " is outside your access");
-        }
+        branchScope.requireBranchIfRestricted(branchId);
 
         // H2/H3/L6: resolve a named document first so a doc question never pays
         // for the aggregates — and a miss cites nothing instead of a phantom number.
@@ -134,9 +134,7 @@ public class AiAssistantService {
     public AiBrief brief(String period, Long branchId) {
         Long orgId = TenantContext.requireOrgId();
         String safePeriod = "today".equals(period) ? "today" : "mtd";
-        if (branchId != null && !branchScope.canSeeBranch(branchId)) {
-            throw DamsException.forbidden("Branch " + branchId + " is outside your access");
-        }
+        branchScope.requireBranchIfRestricted(branchId);
         DashboardSummary summary = dashboardService.summary(branchId, safePeriod);
         List<OutstandingItem> outstanding = dashboardService.outstanding(branchId);
         List<String> bullets = buildBriefBullets(branchId, summary, outstanding);
@@ -153,8 +151,14 @@ public class AiAssistantService {
     @Transactional(readOnly = true)
     public BenchmarkNarrative benchmark() {
         Long orgId = TenantContext.requireOrgId();
-        DashboardSummary summary = dashboardService.summary(null, "mtd");
-        List<BranchComparisonRow> rows = new ArrayList<>(summary.branchComparison());
+        Optional<Set<Long>> allowedBranchIds = branchScope.allowedBranchIds();
+        List<BranchComparisonRow> rows = new ArrayList<>();
+        if (allowedBranchIds.isEmpty()) {
+            rows.addAll(dashboardService.summary(null, "mtd").branchComparison());
+        } else {
+            allowedBranchIds.get().stream().sorted()
+                .forEach(branchId -> rows.addAll(dashboardService.summary(branchId, "mtd").branchComparison()));
+        }
         rows.sort(Comparator.comparing(BranchComparisonRow::collections).reversed());
 
         List<String> lines = new ArrayList<>();

@@ -15,8 +15,8 @@ import java.util.List;
  * Create/update payload for a team member.
  *
  * Branch binding depends on {@code role}:
- *   OWNER / FINANCE_MANAGER — org-wide, no branch fields
- *   ACCOUNTANT              — {@code branchIds} (one or more)
+ *   OWNER                   — org-wide, no branch fields
+ *   FINANCE_MANAGER / ACCOUNTANT — {@code branchIds} (one or more)
  *   CASHIER                 — {@code homeBranchId} (exactly one)
  *
  * {@code email} is set on create only (it's the login) and ignored on update.

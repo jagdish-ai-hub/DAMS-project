@@ -78,6 +78,7 @@ class ClaimCloseServiceTest {
             branchRepo, userRepo, branchScope, attachmentService, auditService, jobCardService, reviewService);
         TenantContext.setOrgId(ORG);
         lenient().when(branchScope.currentUserId()).thenReturn(FM_ID);
+        lenient().when(branchScope.canSeeBranch(BRANCH)).thenReturn(true);
         lenient().when(userRepo.findByIdAndOrganization_Id(FM_ID, ORG)).thenReturn(Optional.of(user(Role.FINANCE_MANAGER)));
         lenient().when(jobCardRepo.findByIdAndOrgId(JC_ID, ORG)).thenReturn(Optional.of(jobCard(CLAIM_TYPE)));
         lenient().when(claimCloseRepo.existsByOrgIdAndJobCardId(ORG, JC_ID)).thenReturn(false);

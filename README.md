@@ -102,20 +102,21 @@ flowchart LR
 
 ## 3. Roles & what each role sees
 
-Five levels, no role-switch toggle anywhere. JWT role + `org_id` drives every view.
+Five roles. Each user has a primary role and may have Owner-granted extra roles to switch into.
+The active JWT role + `org_id` drives every view.
 `/login` is the only unauthenticated route (plus `/accept-invite`).
 
 | Role | Scope | Can do | Cannot do | Lands on |
 |---|---|---|---|---|
 | `SUPER_ADMIN` | Platform, `org_id = null` | List orgs, onboard org + first Owner via email invite, activate/deactivate, delete org (+ all data) | See any org's transactions by default | `/app/organizations` |
 | `OWNER` | One org, all its branches | All branches read; add branches/users, assign roles + branch access; Masters CRUD; org settings; dashboards; Override Audit | Edit transactions (read-only) | Dashboard |
-| `FINANCE_MANAGER` | One org, all branches | Final approval on every entry; close Warranty/AMC/CG claims with final override (locked, permanent) | — | Approvals & Claims |
+| `FINANCE_MANAGER` | One or more assigned branches | Final approval on entries in assigned branches; close Warranty/AMC/CG claims with final override (locked, permanent) | — | Approvals & Claims |
 | `ACCOUNTANT` | Assigned branches only | Verify submitted entries; provisional amount overrides; query/reject with reason; close Expense docs explicitly; set a branch's first-ever cash opening | Verify/approve anything they created or last modified | Review Queue |
 | `CASHIER` | Exactly one home branch | Create Receive + Expense entries; Add Payment to existing job cards; cash In/Out; daily cash closing; fix-and-resubmit queried entries | Post outside home branch; verify/approve | Cashier home |
 
 Role → branch visibility is enforced server-side by `BranchScope` (DB-fresh, not JWT):
 
-- Owner / FM → all branches (org-wide, always).
+- Owner → all branches; Finance Manager → branches selected by the Owner.
 - Accountant → `user_branch_access` set only.
 - Cashier → home branch only, **unless** org setting `multi_branch_cashier_access = ON`
   (default OFF) widens *search/visibility* — posting still stays on the home branch.
@@ -777,7 +778,7 @@ curl -s http://localhost:8080/api/v1/auth/login \
 | Email                        | Password         | Role            | Branch access        |
 |------------------------------|------------------|-----------------|----------------------|
 | `owner@jjmotors.demo`        | `owner123`       | OWNER           | org-wide             |
-| `finance@jjmotors.demo`      | `finance123`     | FINANCE_MANAGER | org-wide             |
+| `finance@jjmotors.demo`      | `finance123`     | FINANCE_MANAGER | all demo branches     |
 | `accountant@jjmotors.demo`   | `accountant123`  | ACCOUNTANT      | Berhampur, Rayagada  |
 | `cashier@jjmotors.demo`      | `cashier123`     | CASHIER         | home branch: Rayagada|
 

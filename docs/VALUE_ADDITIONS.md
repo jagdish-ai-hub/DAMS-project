@@ -72,7 +72,7 @@
   - `frontend/src/shared/ExportModal.tsx` *(Created)*: Modal dialog for selecting date range (7d, 30d, 90d, custom) and branch filter.
   - `frontend/src/accountant/ReviewQueuePage.tsx` *(Modified)*: Added "Export to Tally/Excel" action button in header.
   - `frontend/src/owner/DashboardPage.tsx` *(Modified)*: Added "Export Ledger" action button in header.
-- **Details:** Strictly branch-scoped via `BranchScope`: Accountants can only export branches they are assigned to; Owners and Finance Managers can export org-wide. Includes customer phone, vehicle registration number, canonical job card ref (`{branchCode}-JC-{id}`), DBM ID, mode, bank, transaction ref, and amounts.
+- **Details:** Strictly branch-scoped via `BranchScope`: Accountants and Finance Managers can only export branches assigned to them; Owners can export org-wide. Includes customer phone, vehicle registration number, canonical job card ref (`{branchCode}-JC-{id}`), DBM ID, mode, bank, transaction ref, and amounts.
 
 ### FEAT-05: Multi-Select Bulk Verification for Clean Entries
 - **Dealership Context:** Accountants reviewing 50+ entries a day waste substantial time clicking into individual entries when standard receipts match the invoice with no anomalies.

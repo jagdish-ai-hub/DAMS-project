@@ -134,6 +134,8 @@ class CustomerHistoryBranchScopeTest {
         doc.setWorkflowStatus(ExpenseWorkflowStatus.APPROVED);
         when(expenseDocumentRepo.findByOrgIdAndJobCardIdInOrderByCreatedAtDesc(ORG, List.of(21L)))
             .thenReturn(List.of(doc));
+        when(jobCardRepo.receiveNumbersFor(ORG, List.of(21L)))
+            .thenReturn(List.<Object[]>of(new Object[]{21L, "OOK-SEP26-R-001"}));
 
         ExpenseLine l1 = new ExpenseLine();
         l1.setOrgId(ORG);
@@ -153,6 +155,7 @@ class CustomerHistoryBranchScopeTest {
         assertThat(entries).hasSize(1);
         CustomerExpenseEntry entry = entries.get(0);
         assertThat(entry.jobCardId()).isEqualTo(21L);
+        assertThat(entry.receiveDocumentNos()).containsExactly("OOK-SEP26-R-001");
         assertThat(entry.amount()).isEqualByComparingTo(new BigDecimal("550"));
         assertThat(entry.workflowStatus()).isEqualTo("APPROVED");
     }

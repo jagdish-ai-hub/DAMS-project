@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
  *
  *   - the caller must hold the right role (ACCOUNTANT, or FINANCE_MANAGER for approval);
  *   - the document must sit in a branch the caller can see ({@link BranchScope} — an
- *     accountant's assigned branches; FM / Owner are org-wide so this never restricts them);
+ *     caller's assigned branches; Owner is org-wide);
  *   - maker-checker (AGENT.md): a user never reviews or approves an entry they created or
  *     last modified — someone else must. The one exception is a user whose OWN role is Owner
  *     ({@link #mayReviewOwnEntries}, plan.md rev 59): the Owner can act as every role, so they

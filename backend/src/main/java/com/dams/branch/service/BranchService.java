@@ -5,6 +5,7 @@ import com.dams.branch.dto.BranchResponse;
 import com.dams.branch.entity.Branch;
 import com.dams.branch.repository.BranchRepository;
 import com.dams.common.exception.DamsException;
+import com.dams.common.security.BranchScope;
 import com.dams.config.TenantContext;
 import com.dams.user.repository.AppUserRepository;
 import com.dams.user.repository.UserBranchAccessRepository;
@@ -29,19 +30,28 @@ public class BranchService {
     private final BranchRepository branchRepo;
     private final AppUserRepository userRepo;
     private final UserBranchAccessRepository branchAccessRepo;
+    private final BranchScope branchScope;
 
     public BranchService(BranchRepository branchRepo,
                          AppUserRepository userRepo,
-                         UserBranchAccessRepository branchAccessRepo) {
+                         UserBranchAccessRepository branchAccessRepo,
+                         BranchScope branchScope) {
         this.branchRepo = branchRepo;
         this.userRepo = userRepo;
         this.branchAccessRepo = branchAccessRepo;
+        this.branchScope = branchScope;
     }
 
     @Transactional(readOnly = true)
     public List<BranchResponse> list() {
         Long orgId = TenantContext.requireOrgId();
         List<Branch> branches = branchRepo.findByOrgIdOrderByCodeAsc(orgId);
+        var allowedBranchIds = branchScope.allowedBranchIds();
+        if (allowedBranchIds.isPresent()) {
+            branches = branches.stream()
+                .filter(branch -> allowedBranchIds.get().contains(branch.getId()))
+                .toList();
+        }
         if (branches.isEmpty()) {
             return List.of();
         }
@@ -68,6 +78,9 @@ public class BranchService {
     @Transactional(readOnly = true)
     public BranchResponse get(Long id) {
         Branch branch = load(id);
+        if (!branchScope.canSeeBranch(branch.getId())) {
+            throw DamsException.notFound("Branch", id);
+        }
         return BranchResponse.of(branch, assignedUserCount(branch.getId()));
     }
 

@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * Branch management. Reads are open to any authenticated org user (dropdowns need them);
+ * Branch management. Reads are limited to the caller's branch scope (dropdowns need them);
  * writes are OWNER-only. All actions are org-scoped by the service.
  */
 @RestController

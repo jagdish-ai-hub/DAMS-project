@@ -73,7 +73,19 @@ describe('Expense form (rev 76)', () => {
     await user.click(mapped)
     expect(screen.getByRole('textbox', { name: 'Receiver name' })).toHaveValue('Sharma Auto Spares')
     expect(screen.getByText('Existing vendor linked.')).toBeInTheDocument()
-    expect(screen.getByPlaceholderText(/Optional — mobile number/)).toHaveValue('98765 43210')
+    expect(screen.getByPlaceholderText('Mobile number')).toHaveValue('98765 43210')
+  })
+
+  it('clears the linked receiver contact when the selected name is changed', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('textbox', { name: 'Receiver name' }))
+    await user.click(await screen.findByRole('button', { name: /Sharma Auto Spares/ }))
+    const name = screen.getByRole('textbox', { name: 'Receiver name' })
+    await user.clear(name)
+    await user.type(name, 'New Vendor')
+
+    expect(screen.getByPlaceholderText('Mobile number')).toHaveValue('')
   })
 
   it('treats a typed name as a new vendor', async () => {
@@ -81,6 +93,21 @@ describe('Expense form (rev 76)', () => {
     renderPage()
     await user.type(await screen.findByRole('textbox', { name: 'Receiver name' }), 'Brand New Garage')
     expect(await screen.findByText(/New vendor — will be added when you save/)).toBeInTheDocument()
+  })
+
+  it('clears the new expense fields and expense rows', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await user.type(await screen.findByRole('textbox', { name: 'Receiver name' }), 'Sharma Auto Spares')
+    await user.type(screen.getByPlaceholderText('Mobile number'), '9876543210')
+    await user.type(screen.getByRole('spinbutton'), '300')
+
+    await user.click(screen.getByRole('button', { name: 'Clear' }))
+
+    expect(screen.getByRole('textbox', { name: 'Receiver name' })).toHaveValue('')
+    expect(screen.getByPlaceholderText('Mobile number')).toHaveValue('')
+    expect(screen.getByRole('spinbutton')).toHaveValue(null)
+    expect(screen.getAllByRole('row')).toHaveLength(2)
   })
 
   it('Transfer to Claim is a Yes / No dropdown that moves the expense onto the claim status', async () => {

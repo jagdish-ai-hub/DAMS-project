@@ -15,7 +15,7 @@ export interface AuthUser {
   /** The ACTING role — what every screen and gate follows. Equals `primaryRole` unless switched. */
   role: Role
   name: string
-  /** ACCOUNTANT's assigned branches (empty for other roles). */
+  /** Branches assigned to branch-scoped roles (empty for Owner / Super Admin). */
   branchIds: number[]
   /** CASHIER's single posting branch (null for other roles). */
   homeBranchId: number | null

@@ -69,6 +69,23 @@ describe('New Receipt: Contact and Chassis # (rev 68)', () => {
     expect(labels).toEqual(['Customer Name', 'Contact', 'Vehicle #', 'Chassis #'])
   })
 
+  it('clears the new receipt fields and settlement rows', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await user.type(screen.getByLabelText('Customer name'), 'Acme Transport')
+    await user.type(screen.getByLabelText('Contact number'), '9876543210')
+    const numbers = screen.getAllByRole('spinbutton')
+    await user.type(numbers[0], '1200')
+    await user.type(numbers[1], '500')
+
+    await user.click(screen.getByRole('button', { name: 'Clear' }))
+
+    expect(screen.getByLabelText('Customer name')).toHaveValue('')
+    expect(screen.getByLabelText('Contact number')).toHaveValue('')
+    expect(screen.getAllByRole('spinbutton').map((input) => (input as HTMLInputElement).value)).toEqual(['', ''])
+    expect(screen.getAllByRole('row')).toHaveLength(2)
+  })
+
   it('fills Contact with the number last saved for the picked customer', async () => {
     const user = userEvent.setup()
     renderPage()

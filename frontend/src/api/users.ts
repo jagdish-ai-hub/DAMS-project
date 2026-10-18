@@ -2,8 +2,8 @@ import api from './axios'
 import type { Role } from '../auth/AuthContext'
 
 /**
- * An extra role a user may switch into (plan.md rev 55). FINANCE_MANAGER is org-wide, so its
- * `branchIds` is empty; ACCOUNTANT / CASHIER list every branch the role is granted at.
+ * An extra role a user may switch into (plan.md rev 55). `branchIds` lists every branch
+ * the role is granted at.
  */
 export interface RoleGrant {
   role: Role

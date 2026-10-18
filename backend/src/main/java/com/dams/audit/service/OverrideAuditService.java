@@ -32,10 +32,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The org-wide Override Audit (AGENT.md decision #4): every amount override across the
- * organisation in one feed — the Accountant's provisional line overrides (OVERRIDE audit
- * rows) AND the Finance Manager's final claim-close overrides ({@code claim_close.overridden}).
- * Filterable by branch, actor and date.
+ * The Override Audit (AGENT.md decision #4): amount overrides in one feed — the Accountant's
+ * provisional line overrides (OVERRIDE audit rows) and the Finance Manager's final claim-close
+ * overrides ({@code claim_close.overridden}). Filterable by branch, actor and date.
  */
 @Service
 public class OverrideAuditService {

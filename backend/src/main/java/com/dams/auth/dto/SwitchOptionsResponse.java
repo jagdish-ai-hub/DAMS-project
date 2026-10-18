@@ -17,8 +17,7 @@ public record SwitchOptionsResponse(
 ) {
 
     /**
-     * One branch and the roles the caller may take there. {@code FINANCE_MANAGER} is org-wide, so
-     * it is listed under every branch — the Finance Manager still sees all branches while acting.
+     * One branch and the roles the caller may take there.
      */
     public record BranchOption(Long branchId, String code, String name, List<Role> roles) {
     }
