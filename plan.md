@@ -7,6 +7,11 @@
 
 ## Revision log
 
+- **rev 84 (2026-10-20)** — **GST No on the customer master, requested by the owner.** `customer.gst_no` (V45, VARCHAR(15),
+  nullable) — optional, kept by the Owner in Masters → Customers (column, add/edit field, included in the search). Free text up to
+  15 characters, stored trimmed and upper-cased, no GSTIN format check (job cards accept any too). Same rule as address: omitted
+  leaves it alone (a cashier's name / phone edit never erases it), `""` clears it. Standalone — it does not pre-fill or change the
+  job card's own `gst_no`.
 - **rev 83 (2026-10-20)** — **A claim expense may be entered at ₹0, requested by the owner.** Receipts already allowed a
   ₹0 line on a claim (rev 33); expenses blocked it (`@Positive`, and the cashier form dropped ₹0 rows). Now an
   expense line may be ₹0 when the expense is a claim: its job card has a Claim Type (anything but None) **or** its
@@ -2034,6 +2039,7 @@ Flyway callback / profile guard and instead runs a masters-only seed.
 | V42 | `customer.address` (500), nullable *(rev 77)* | Owner-kept customer address |
 | V43 | `audit_event` CHECK += `VEHICLE_MOVED` *(rev 77)* | Owner moves a vehicle to another customer |
 | V44 | migrates primary Finance Managers and legacy extra Finance Manager grants to explicit branch assignments; `user_role_grant.branch_id` becomes NOT NULL | branch-scoped Finance Manager access *(rev 81)* |
+| V45 | `customer.gst_no` VARCHAR(15), nullable *(rev 84)* | Owner-kept customer GST No |
 | V37 | `audit_event` CHECK += `CASH_REOPENED` *(rev 60; V35 repair and V36 `STATUS_CHANGED` precede it)* | Owner reopen of a closed cash day |
 
 ---

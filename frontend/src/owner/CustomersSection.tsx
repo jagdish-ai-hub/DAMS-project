@@ -16,7 +16,7 @@ const digitsOf = (s: string) => s.replace(/\D/g, '')
 
 /**
  * Customers master (rev 77, Owner). The whole organisation's customers with their mobile,
- * vehicles and address, searchable by any of them. Address is optional and no form asks for
+ * vehicles, GST No (rev 84) and address, searchable by any of them. Address is optional and no form asks for
  * it yet — it is kept here only. Vehicles are never deleted (their history is kept); the
  * Owner can correct a number or add one.
  */
@@ -47,6 +47,7 @@ export default function CustomersSection() {
   const shown = needle === '' ? rows : rows.filter((c) =>
     c.name.toLowerCase().includes(needle)
     || (c.address ?? '').toLowerCase().includes(needle)
+    || (c.gstNo ?? '').toLowerCase().includes(needle)
     || (needleDigits.length > 0 && digitsOf(c.phone ?? '').includes(needleDigits))
     || (needleVehicle.length > 0 && c.vehicles.some((v) => v.vehicleNo.includes(needleVehicle))))
 
@@ -62,15 +63,15 @@ export default function CustomersSection() {
         aria-label="Search customers"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search by name, mobile, vehicle number or address"
+        placeholder="Search by name, mobile, vehicle number, GST No or address"
         style={{ ...inputStyle, marginBottom: 12, maxWidth: 420 }}
       />
       <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720, fontSize: '0.84rem' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 820, fontSize: '0.84rem' }}>
           <thead>
             <tr>
               <th style={th}>Name</th><th style={th}>Mobile</th><th style={th}>Vehicles</th>
-              <th style={th}>Address</th><th style={th}></th>
+              <th style={th}>GST No</th><th style={th}>Address</th><th style={th}></th>
             </tr>
           </thead>
           <tbody>
@@ -85,6 +86,7 @@ export default function CustomersSection() {
                       <Badge key={v.id}>{v.vehicleNo}</Badge>
                     ))}
                 </td>
+                <td style={td}>{c.gstNo ?? '—'}</td>
                 <td style={td}>{c.address ?? '—'}</td>
                 <td style={{ ...td, textAlign: 'right' }}>
                   <button style={{ ...ghostBtn, minHeight: 36, padding: '4px 12px' }} onClick={() => setModal({ editing: c })}>Edit</button>
@@ -92,7 +94,7 @@ export default function CustomersSection() {
               </tr>
             ))}
             {!loading && shown.length === 0 && (
-              <tr><td style={td} colSpan={5}>{rows.length === 0 ? 'Nothing here yet.' : 'No customer matches your search.'}</td></tr>
+              <tr><td style={td} colSpan={6}>{rows.length === 0 ? 'Nothing here yet.' : 'No customer matches your search.'}</td></tr>
             )}
           </tbody>
         </table>
@@ -116,6 +118,7 @@ function CustomerModal(props: { editing: Customer | null; allCustomers: Customer
   const [name, setName] = useState(editing?.name ?? '')
   const [phone, setPhone] = useState(editing?.phone ?? '')
   const [address, setAddress] = useState(editing?.address ?? '')
+  const [gstNo, setGstNo] = useState(editing?.gstNo ?? '')
   const [vehicles, setVehicles] = useState<VehicleDraft[]>(
     (editing?.vehicles ?? []).map((v) => ({ id: v.id, original: v.vehicleNo, value: v.vehicleNo })))
   const [error, setError] = useState('')
@@ -134,7 +137,7 @@ function CustomerModal(props: { editing: Customer | null; allCustomers: Customer
     setError('')
     setSaving(true)
     try {
-      const body = { name: name.trim(), phone: phone.trim() === '' ? undefined : phone.trim(), address: address.trim() }
+      const body = { name: name.trim(), phone: phone.trim() === '' ? undefined : phone.trim(), address: address.trim(), gstNo: gstNo.trim().toUpperCase() }
       const customerId = editing == null ? (await customersApi.create(body)).data.id : (await customersApi.update(editing.id, body)).data.id
       for (const v of vehicles) {
         const next = normaliseVehicleNo(v.value)
@@ -163,6 +166,9 @@ function CustomerModal(props: { editing: Customer | null; allCustomers: Customer
         </Field>
         <Field label="Mobile (optional)">
           <TextInput value={phone} onChange={setPhone} placeholder="Mobile number" maxLength={32} />
+        </Field>
+        <Field label="GST No (optional)" hint="15-character GSTIN, e.g. 21ABCDE1234F1Z5. Kept on the customer; job cards keep their own.">
+          <TextInput value={gstNo} onChange={(v) => setGstNo(v.toUpperCase())} placeholder="GST No" maxLength={15} />
         </Field>
         <Field label="Address (optional)" hint="Not asked on any form yet — kept here for now.">
           <textarea

@@ -15,6 +15,8 @@ export interface Customer {
   lastContactPhone?: string | null
   /** rev 77 — optional, kept by the Owner in Masters → Customers (no form asks for it yet). */
   address?: string | null
+  /** rev 84 — optional GST No, kept by the Owner in Masters → Customers. */
+  gstNo?: string | null
 }
 
 export interface CustomerRequest {
@@ -22,6 +24,8 @@ export interface CustomerRequest {
   phone?: string
   /** Omit to leave the saved address alone; an empty string clears it. */
   address?: string
+  /** Omit to leave the saved GST No alone; an empty string clears it. */
+  gstNo?: string
 }
 
 export interface JobCardSummary {

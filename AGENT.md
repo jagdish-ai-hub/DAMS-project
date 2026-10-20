@@ -275,12 +275,16 @@ has `org_id = null`.
    **Vendor and customer master lists (rev 77).** In Masters, both the
    **Receivers / vendors** list and the **Customers** list have a **search
    box** that filters as you type — vendors by name or phone; customers by
-   name, mobile, vehicle number or address. The **Customers** list (Owner)
-   shows name, mobile, vehicles and address; the Owner can add a customer and
+   name, mobile, vehicle number, GST No or address. The **Customers** list (Owner)
+   shows name, mobile, vehicles, GST No and address; the Owner can add a customer and
    edit all of it, including renaming a vehicle number or adding a vehicle.
    **Address** is a new optional customer field that no form asks for yet; it
    is stored and editable here only. A cashier's later name/phone edit never
-   erases an address. A vehicle number stays unique per organisation (a clash
+   erases an address. **GST No (rev 84)** is another optional customer field,
+   shown and searchable in the Customers list: up to 15 characters, stored
+   upper-cased, not format-checked, cleared by saving it empty, and never
+   erased by a cashier's name/phone edit. It is standalone — the job card keeps
+   its own GST No and the customer's is not copied onto it. A vehicle number stays unique per organisation (a clash
    is refused), and vehicles are never deleted — their history is kept.
    **Moving a vehicle to another customer** (Owner) changes who owns it from
    then on: new job cards and expenses for that number go under the new

@@ -16,8 +16,8 @@ vi.mock('../api/vehicles', () => ({ vehiclesApi: { rename: vi.fn(), create: vi.f
 
 const vendor = (id: number, name: string, phone: string | null) =>
   ({ id, name, phone, active: true, createdAt: '', categoryIds: [] })
-const customer = (id: number, name: string, phone: string | null, address: string | null, vehicles: [number, string][]) =>
-  ({ id, name, phone, address, createdAt: '', vehicles: vehicles.map(([vid, no]) => ({ id: vid, vehicleNo: no })) })
+const customer = (id: number, name: string, phone: string | null, address: string | null, vehicles: [number, string][], gstNo: string | null = null) =>
+  ({ id, name, phone, address, gstNo, createdAt: '', vehicles: vehicles.map(([vid, no]) => ({ id: vid, vehicleNo: no })) })
 
 describe('Vendor list search (rev 77)', () => {
   beforeEach(() => {
@@ -62,7 +62,7 @@ describe('Customers master (rev 77)', () => {
     vi.clearAllMocks()
     vi.mocked(customersApi.master).mockResolvedValue({
       data: [
-        customer(1, 'Sumati Sahoo', '98765 43210', '12 Station Road, Rayagada', [[10, 'OD05CA4177'], [11, 'OD33AB1234']]),
+        customer(1, 'Sumati Sahoo', '98765 43210', '12 Station Road, Rayagada', [[10, 'OD05CA4177'], [11, 'OD33AB1234']], '21ABCDE1234F1Z5'),
         customer(2, 'Kalaivani Logistics', '94370 11111', null, [[12, 'TN09ZZ0001']]),
         customer(3, 'Walk-in', null, null, []),
       ],
@@ -81,6 +81,7 @@ describe('Customers master (rev 77)', () => {
     expect(within(row).getByText('OD05CA4177')).toBeInTheDocument()
     expect(within(row).getByText('OD33AB1234')).toBeInTheDocument()
     expect(within(row).getByText('12 Station Road, Rayagada')).toBeInTheDocument()
+    expect(within(row).getByText('21ABCDE1234F1Z5')).toBeInTheDocument()
   })
 
   it('searches by name, mobile, a vehicle number typed with spaces, and address', async () => {
@@ -112,6 +113,8 @@ describe('Customers master (rev 77)', () => {
     await user.type(d.getByPlaceholderText('Customer name'), 'Sumati S. Sahoo')
     await user.clear(d.getByPlaceholderText('Street, town, PIN'))
     await user.type(d.getByPlaceholderText('Street, town, PIN'), 'New address')
+    await user.clear(d.getByPlaceholderText('GST No'))
+    await user.type(d.getByPlaceholderText('GST No'), '27aaapl1234c1zv')
     await user.clear(d.getByLabelText('Vehicle OD05CA4177'))
     await user.type(d.getByLabelText('Vehicle OD05CA4177'), 'od05 ca 9999')
     await user.click(d.getByRole('button', { name: '+ Add vehicle' }))
@@ -119,7 +122,7 @@ describe('Customers master (rev 77)', () => {
     await user.click(d.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => expect(customersApi.update).toHaveBeenCalledWith(1, {
-      name: 'Sumati S. Sahoo', phone: '98765 43210', address: 'New address',
+      name: 'Sumati S. Sahoo', phone: '98765 43210', address: 'New address', gstNo: '27AAAPL1234C1ZV',
     }))
     expect(vehiclesApi.rename).toHaveBeenCalledTimes(1)
     expect(vehiclesApi.rename).toHaveBeenCalledWith(10, 'OD05CA9999')
@@ -136,7 +139,7 @@ describe('Customers master (rev 77)', () => {
     await user.click(screen.getByRole('button', { name: 'Add customer' }))
 
     await waitFor(() => expect(customersApi.create).toHaveBeenCalledWith({
-      name: 'New Customer', phone: undefined, address: '5 Market Road',
+      name: 'New Customer', phone: undefined, address: '5 Market Road', gstNo: '',
     }))
   })
 

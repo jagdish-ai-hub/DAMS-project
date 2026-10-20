@@ -22,4 +22,8 @@ public class CustomerRequest {
     /** rev 77 — null leaves the saved address alone; an empty string clears it. */
     @Size(max = 500, message = "Address must be at most 500 characters")
     private String address;
+
+    /** rev 84 — null leaves the saved GST No alone; an empty string clears it. Stored trimmed and upper-cased. */
+    @Size(max = 15, message = "GST No must be at most 15 characters")
+    private String gstNo;
 }

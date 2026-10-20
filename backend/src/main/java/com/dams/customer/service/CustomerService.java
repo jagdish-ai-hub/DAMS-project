@@ -183,6 +183,7 @@ public class CustomerService {
         c.setName(request.getName().trim());
         c.setPhone(blankToNull(request.getPhone()));
         c.setAddress(blankToNull(request.getAddress()));
+        c.setGstNo(normaliseGst(request.getGstNo()));
         c.setCreatedBranchId(branchScope.creatingBranchIdOrNull());
         c = customerRepo.save(c);
         log.info("Customer created: orgId={} customerId={}", orgId, c.getId());
@@ -197,6 +198,10 @@ public class CustomerService {
         // rev 77 — a cashier's name / phone edit sends no address and must never erase it; "" clears it.
         if (request.getAddress() != null) {
             c.setAddress(blankToNull(request.getAddress()));
+        }
+        // rev 84 — same rule for the GST No: omitted leaves it alone, "" clears it.
+        if (request.getGstNo() != null) {
+            c.setGstNo(normaliseGst(request.getGstNo()));
         }
         c = customerRepo.save(c);
         return CustomerResponse.of(c, vehiclesFor(c.getOrgId(), List.of(c.getId()))
@@ -452,6 +457,12 @@ public class CustomerService {
             .collect(Collectors.groupingBy(Vehicle::getCustomerId,
                 Collectors.mapping(v -> new CustomerResponse.VehicleRef(v.getId(), v.getVehicleNo()),
                     Collectors.toList())));
+    }
+
+    /** rev 84 — GST No is stored trimmed and upper-cased; blank means none. */
+    private static String normaliseGst(String s) {
+        String t = blankToNull(s);
+        return t == null ? null : t.toUpperCase(java.util.Locale.ROOT);
     }
 
     private static String blankToNull(String s) {
