@@ -294,6 +294,12 @@ has `org_id = null`.
    CGW claim** (e.g. promotional activities the OEM reimburses have no job
    card). Only a REJECTED / CLOSED document, or one awaiting FM approval,
    cannot be transferred.
+   **A claim expense line may be ₹0 (rev 83).** When the expense's job card has
+   a Claim Type (anything but None), or the expense is on Transfer to Claim, the
+   Cashier can enter and submit a line at ₹0 — the OEM may cover it all and the
+   real figure is set at Close Claim. A plain expense must still be above ₹0, and
+   an expense holding a ₹0 line cannot be moved off the claim until it has an
+   amount. The Accountant's line override stays above ₹0.
    **A "Transfer to Claim" expense is closed by the Finance Manager, not the
    Accountant (rev 61).** It goes Cashier → Accountant (verify, or query back
    to the Cashier) → **Finance Manager**, who presses **Close Claim**: they

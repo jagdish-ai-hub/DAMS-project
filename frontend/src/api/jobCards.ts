@@ -55,6 +55,8 @@ export interface JobCardSearchHit {
   createdAt: string
   /** Numbered DAMS-Receive-IDs ("Ooriba ID"), newest first; empty until a receipt is submitted. */
   receiveDocumentNos: string[]
+  /** Claim type set (anything but None) — an expense on it may be entered at ₹0 (rev 83). */
+  claim?: boolean
 }
 
 export interface AttachCustomerRequest {

@@ -471,6 +471,7 @@ public class ExpenseDocumentService {
             ExpenseBusinessStatus next = requireActiveStatus(orgId, request.getBusinessStatusId());
             doc.setBusinessStatusId(next.getId());
         }
+        requireNoZeroLinesUnlessClaim(orgId, doc);
         doc.setLastModifiedBy(me.getId());
         recomputeOverLimit(orgId, doc);
         expenseDocumentRepo.save(doc);
@@ -494,7 +495,8 @@ public class ExpenseDocumentService {
         cashDateLock.requireCashLineDateOpen(orgId, doc.getBranchId(), line.getTransactionDate(),
             existingMode != null && existingMode.isCash(), "expense");
 
-        applyLineInput(orgId, doc.getBranchId(), line, input, doc.getExpenseCategoryId());
+        applyLineInput(orgId, doc.getBranchId(), line, input, doc.getExpenseCategoryId(),
+            allowsZeroAmount(orgId, doc));
         expenseLineRepo.save(line);
         doc.setLastModifiedBy(me.getId());
         recomputeOverLimit(orgId, doc);
@@ -587,6 +589,7 @@ public class ExpenseDocumentService {
         }
         ExpenseBusinessStatus before = statusRepo.findByIdAndOrgId(doc.getBusinessStatusId(), orgId).orElse(null);
         doc.setBusinessStatusId(next.getId());
+        requireNoZeroLinesUnlessClaim(orgId, doc);
         expenseDocumentRepo.save(doc);
 
         Map<String, Object> detail = new LinkedHashMap<>();
@@ -647,6 +650,7 @@ public class ExpenseDocumentService {
         }
         // Monotonic counter, never max(line_no)+1 — see ReceiveDocumentService.appendLines.
         int nextLineNo = doc.getLineNoSeq() + 1;
+        boolean allowZero = allowsZeroAmount(orgId, doc);
         List<ExpenseLine> saved = new ArrayList<>();
         for (ExpenseLineInput input : inputs) {
             ExpenseLine line = new ExpenseLine();
@@ -657,7 +661,7 @@ public class ExpenseDocumentService {
                 line.setLineId(doc.getDocumentNo() + "-L" + nextLineNo);
             }
             line.setCreatedBy(createdByUserId);
-            applyLineInput(orgId, doc.getBranchId(), line, input, expenseCategoryId);
+            applyLineInput(orgId, doc.getBranchId(), line, input, expenseCategoryId, allowZero);
             saved.add(expenseLineRepo.save(line));
             nextLineNo++;
         }
@@ -665,7 +669,34 @@ public class ExpenseDocumentService {
         return saved;
     }
 
-    private void applyLineInput(Long orgId, Long branchId, ExpenseLine line, ExpenseLineInput input, Long expenseCategoryId) {
+    /**
+     * rev 83 — a claim expense may carry a ₹0 line: the OEM can cover the whole amount and the real
+     * figure is only known at Close Claim. A claim is a job card with a claim type (anything but
+     * None) or an expense on the "Transfer to Claim" status. A plain expense still must be &gt; 0.
+     */
+    private boolean allowsZeroAmount(Long orgId, ExpenseDocument doc) {
+        JobCard jc = jobCardOrNull(orgId, doc);
+        return (jc != null && jc.getClaimTypeId() != null) || statusTriggersClaim(orgId, doc);
+    }
+
+    /** Refuse to leave ₹0 lines on an expense that stops being a claim (job card or status changed). */
+    private void requireNoZeroLinesUnlessClaim(Long orgId, ExpenseDocument doc) {
+        if (allowsZeroAmount(orgId, doc)) {
+            return;
+        }
+        boolean hasZero = expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(orgId, doc.getId()).stream()
+            .anyMatch(l -> l.getAmount().signum() <= 0);
+        if (hasZero) {
+            throw DamsException.conflict("Document " + describe(doc) + " has a ₹0 line, which only a claim expense"
+                + " may carry — give those lines an amount first, or keep the claim job card / Transfer to Claim");
+        }
+    }
+
+    private void applyLineInput(Long orgId, Long branchId, ExpenseLine line, ExpenseLineInput input, Long expenseCategoryId,
+                                boolean allowZero) {
+        if (!allowZero && input.getAmount().signum() <= 0) {
+            throw DamsException.badRequest("amount must be greater than 0");
+        }
         ExpenseSubCategory sub = subCategoryRepo.findByIdAndOrgId(input.getSubCategoryId(), orgId)
             .orElseThrow(() -> DamsException.notFound("Expense sub-category", input.getSubCategoryId()));
         if (!sub.isActive()) {

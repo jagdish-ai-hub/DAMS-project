@@ -70,7 +70,7 @@ const hitFromJobCard = (j: JobCard): JobCardSearchHit => ({
   id: j.id, reference: j.reference, branchId: j.branchId, branchCode: j.branchCode ?? '',
   customerId: j.customerId, customerName: j.customerName, vehicleId: j.vehicleId, vehicleNo: j.vehicleNo,
   dbmId: j.dbmId, invoiceNo: j.invoiceNo, categoryId: j.categoryId, createdAt: j.createdAt,
-  receiveDocumentNos: j.receiveDocumentNos ?? [],
+  receiveDocumentNos: j.receiveDocumentNos ?? [], claim: j.claimTypeId != null,
 })
 
 export default function NewExpensePage() {
@@ -338,9 +338,17 @@ export default function NewExpensePage() {
     setNotice('')
   }
 
+  // rev 83 — a claim expense (job card with a claim type, or Transfer to Claim = Yes) may carry a
+  // ₹0 line: the OEM covers it and the real figure is only known at Close Claim. A plain one must be > 0.
+  function lineHasAmount(l: LineRow) {
+    if (l.amount === '') return false
+    const n = Number(l.amount)
+    return isClaimExpense ? n >= 0 : n > 0
+  }
+
   function buildLines() {
     return lines
-      .filter((l) => Number(l.amount) > 0 && l.subCategoryId !== '' && l.expenseModeId !== '')
+      .filter((l) => lineHasAmount(l) && l.subCategoryId !== '' && l.expenseModeId !== '')
       .map((l) => ({
         transactionDate: l.transactionDate,
         subCategoryId: Number(l.subCategoryId),
@@ -358,8 +366,10 @@ export default function NewExpensePage() {
     if (newJc && !jcPick && (jcCategoryId === '' || jcStatusId === '')) return 'Pick the new job card\'s category and status'
     if (requireLine && buildLines().length === 0) return 'Add at least one expense row with an amount'
     for (const l of lines) {
-      if (l.amount !== '' && !(Number(l.amount) > 0)) return 'Line amount must be greater than 0'
-      if (Number(l.amount) > 0) {
+      if (l.amount !== '' && !lineHasAmount(l)) {
+        return isClaimExpense ? 'Line amount cannot be negative' : 'Line amount must be greater than 0'
+      }
+      if (lineHasAmount(l)) {
         if (l.subCategoryId === '') return 'Select a sub-category for each expense row with an amount'
         if (l.expenseModeId === '') return 'Select a payment mode for each expense row with an amount'
         const m = modeById(l.expenseModeId)
@@ -539,7 +549,7 @@ export default function NewExpensePage() {
             remark: current.remark || undefined,
           })
         }
-      } else if (Number(current.amount) > 0 && current.subCategoryId !== '' && current.expenseModeId !== '') {
+      } else if (lineHasAmount(current) && current.subCategoryId !== '' && current.expenseModeId !== '') {
         // A row added on this visit — never sent to the server before. Always allowed
         // (this is "Add Expense"), even once the document is verified/approved.
         await expensesApi.addLine(docId, {
@@ -750,6 +760,7 @@ export default function NewExpensePage() {
   // rev 76 — "Transfer to Claim" is a Yes / No dropdown. Yes puts the expense on the claim status behind the scenes.
   const claimStatus = statuses.find((x) => x.triggersClaim === true) ?? null
   const claimYes = claimStatus != null && businessStatusId === claimStatus.id
+  const isClaimExpense = claimYes || jcPick?.claim === true
   const plainStatuses = statuses.filter((x) => x.triggersClaim !== true)
   function setTransferToClaim(yes: boolean) {
     if (!claimStatus) return

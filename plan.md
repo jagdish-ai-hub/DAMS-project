@@ -7,6 +7,14 @@
 
 ## Revision log
 
+- **rev 83 (2026-10-20)** — **A claim expense may be entered at ₹0, requested by the owner.** Receipts already allowed a
+  ₹0 line on a claim (rev 33); expenses blocked it (`@Positive`, and the cashier form dropped ₹0 rows). Now an
+  expense line may be ₹0 when the expense is a claim: its job card has a Claim Type (anything but None) **or** its
+  status is Transfer to Claim. A plain expense still must be > 0 and negatives are always refused. Backend:
+  `ExpenseLineInput.amount` is `@PositiveOrZero`; `ExpenseDocumentService.applyLineInput` enforces the real rule via
+  `allowsZeroAmount`; `patch` and the reviewer status change refuse to take an expense off the claim while it holds a
+  ₹0 line. `JobCardSearchHit` gains `claim` so the form knows the picked job card is a claim. `NewExpensePage.lineHasAmount()`
+  mirrors it. The Accountant's line-override stays > 0. No migration.
 - **rev 82 (2026-10-17)** — **Finance Manager branch access and cashier entry improvements, requested by the owner.** Finance Managers can be assigned selected branches. Receive Entry fields were rearranged, with Customer Type below Job ID and a Clear button for new entries. Expense Entry fields were rearranged, with Clear for new entries and saved receiver contact autofill. Customer-linked expenses show the Job Card, Expense ID and Ooriba ID together in a consistent small font.
 - **rev 81 (2026-10-17)** — **Finance Manager branch access.** Primary Finance Managers and extra Finance Manager grants are assigned to one or more branches. V44 preserves existing access by expanding existing primary and extra Finance Manager access to all branches in their organization at migration time; Owners can then narrow assignments in Team & Branches. Acting Finance Manager sessions, review queues, dashboards, branch listings, claim closing, Override Audit, and AI branch summaries follow the same scope.
 - **rev 80 (2026-10-16)** — **Document-flow help pages with Mermaid diagrams, and a database diagram at the project

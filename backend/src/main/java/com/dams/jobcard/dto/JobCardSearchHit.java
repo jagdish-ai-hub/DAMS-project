@@ -22,6 +22,7 @@ public record JobCardSearchHit(
     String invoiceNo,
     Long categoryId,
     Instant createdAt,
-    List<String> receiveDocumentNos   // numbered DAMS-Receive-IDs ("Ooriba ID"), newest first; empty if none yet
+    List<String> receiveDocumentNos,  // numbered DAMS-Receive-IDs ("Ooriba ID"), newest first; empty if none yet
+    boolean claim                     // claim type set (anything but None) -- an expense on it may be entered at 0 (rev 83)
 ) {
 }

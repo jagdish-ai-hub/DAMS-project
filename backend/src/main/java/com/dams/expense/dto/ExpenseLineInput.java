@@ -1,7 +1,7 @@
 package com.dams.expense.dto;
 
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -26,7 +26,7 @@ public class ExpenseLineInput {
     private Long expenseModeId;
 
     @NotNull(message = "amount is required")
-    @Positive(message = "amount must be greater than 0")
+    @PositiveOrZero(message = "amount cannot be negative")
     private BigDecimal amount;
 
     private Long bankId;
