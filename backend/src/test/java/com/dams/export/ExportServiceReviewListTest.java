@@ -5,6 +5,7 @@ import com.dams.cash.repository.CashDocumentRepository;
 import com.dams.common.exception.DamsException;
 import com.dams.common.security.BranchScope;
 import com.dams.config.TenantContext;
+import com.dams.customer.entity.Customer;
 import com.dams.customer.repository.CustomerRepository;
 import com.dams.expense.repository.ExpenseDocumentRepository;
 import com.dams.expense.repository.ExpenseLineRepository;
@@ -101,15 +102,28 @@ class ExportServiceReviewListTest {
         ReceiveDocument paid = receipt(1L, "RCV-0012", WorkflowStatus.SUBMITTED, BRANCH, 100L);
         ReceiveDocument noLines = receipt(2L, "RCV-0015", WorkflowStatus.VERIFIED, BRANCH, 200L);
         when(receiveDocumentRepo.findByOrgIdAndIdIn(eq(ORG), any())).thenReturn(List.of(paid, noLines));
-        when(jobCardRepo.findByOrgIdAndIdIn(eq(ORG), any())).thenReturn(List.of(jobCard(100L, "DBM-1"), jobCard(200L, "DBM-2")));
+        JobCard withCustomer = jobCard(100L, "DBM-1");
+        withCustomer.setCustomerId(55L);
+        when(jobCardRepo.findByOrgIdAndIdIn(eq(ORG), any())).thenReturn(List.of(withCustomer, jobCard(200L, "DBM-2")));
+        Customer gstCustomer = new Customer();
+        gstCustomer.setId(55L);
+        gstCustomer.setName("Kalaivani Logistics");
+        gstCustomer.setPhone("94370 11111");
+        gstCustomer.setGstNo("21ABCDE1234F1Z5");
+        when(customerRepo.findByOrgIdAndIdInOrderByNameAsc(eq(ORG), any())).thenReturn(List.of(gstCustomer));
         when(settlementLineRepo.findByOrgIdAndReceiveDocumentIdInOrderByLineNoAsc(eq(ORG), any())).thenReturn(List.of(
             line(1L, 1, "15000"), line(1L, 2, "5000")));
 
         List<List<String>> rows = csv(service.exportReviewListCsv("receipt", List.of(2L, 1L)));
         List<String> h = rows.get(0);
-        int status = h.indexOf("Status"), doc = h.indexOf("Document No"), txn = h.indexOf("Transaction Amount"),
-            lineId = h.indexOf("Line ID"), lineAmt = h.indexOf("Line Amount"), dbm = h.indexOf("DBM ID"),
-            submitted = h.indexOf("Submitted On");
+        // rev 85 — the accounts team's layout: coded headers in this exact order (TRNSCREF appears twice).
+        assertThat(h).containsExactly("TRNSCDT", "TRNSCREF", "BRNCD", "CUSTNM", "VHCLNO", "DBMSID", "INVCNO",
+            "INVCAMT", "TRNSCCTG", "TRNSCAMT", "LNID", "LNDT", "LNMODE", "BNKNM", "TRNSCREF", "LMAMT", "BFROVRDAMT",
+            "OVRDRMRK", "LNRMRK", "TRNSCSTS", "WRKFLWSTS", "CLMCTG", "CUSTGST");
+        int status = h.indexOf("TRNSCSTS"), doc = h.indexOf("TRNSCREF"), txn = h.indexOf("TRNSCAMT"),
+            lineId = h.indexOf("LNID"), lineAmt = h.indexOf("LMAMT"), dbm = h.indexOf("DBMSID"),
+            submitted = h.indexOf("TRNSCDT"), gst = h.indexOf("CUSTGST"), claim = h.indexOf("CLMCTG"),
+            workflow = h.indexOf("WRKFLWSTS");
 
         assertThat(rows).hasSize(5); // header, RCV-0015 (no lines), RCV-0012 ×2 lines, total
         // Screen order: the caller sent 2 before 1.
@@ -118,6 +132,9 @@ class ExportServiceReviewListTest {
         assertThat(rows.get(1).get(txn)).isEqualTo("8000");
         assertThat(rows.get(1).get(lineId)).isEmpty();
         assertThat(rows.get(1).get(dbm)).isEqualTo("DBM-2");
+        assertThat(rows.get(1).get(gst)).isEmpty();
+        assertThat(rows.get(1).get(workflow)).isEqualTo("VERIFIED");
+        assertThat(rows.get(1).get(claim)).isNotEmpty();
         // Submitted 20:00 UTC on the 3rd is the 4th in IST.
         assertThat(rows.get(1).get(submitted)).isEqualTo("2026-10-04");
 
@@ -125,6 +142,8 @@ class ExportServiceReviewListTest {
         assertThat(rows.get(2).get(status)).isEqualTo("Pending");
         assertThat(rows.get(2).get(txn)).isEqualTo("20000");
         assertThat(rows.get(2).get(lineAmt)).isEqualTo("15000");
+        assertThat(rows.get(2).get(gst)).isEqualTo("21ABCDE1234F1Z5");
+        assertThat(rows.get(3).get(gst)).isEqualTo("21ABCDE1234F1Z5");
         assertThat(rows.get(3).get(doc)).isEqualTo("RCV-0012");
         assertThat(rows.get(3).get(txn)).isEmpty();
         assertThat(rows.get(3).get(lineAmt)).isEqualTo("5000");
@@ -146,7 +165,7 @@ class ExportServiceReviewListTest {
         when(jobCardRepo.findByOrgIdAndIdIn(eq(ORG), any())).thenReturn(List.of(jobCard(100L, null)));
 
         List<List<String>> rows = csv(service.exportReviewListCsv("receipt", List.of(3L, 4L, 1L)));
-        int doc = rows.get(0).indexOf("Document No");
+        int doc = rows.get(0).indexOf("TRNSCREF");
 
         assertThat(rows).hasSize(3); // header, RCV-0012, total
         assertThat(rows.get(1).get(doc)).isEqualTo("RCV-0012");

@@ -631,6 +631,13 @@ flag the conflict and ask rather than silently working around it.
    repeated, a transaction with no lines still gets one row, and the
    transaction amount is written once per transaction so the column sums to
    the window's total. It is a copy of the screen, not a ledger or Tally feed.
+   **Receipt export layout (rev 85):** the receipts file follows the accounts
+   team's import layout (DAMS_Accounts_Export_Layout) — coded headers TRNSCDT,
+   TRNSCREF, BRNCD, CUSTNM, VHCLNO, DBMSID, INVCNO, INVCAMT, TRNSCCTG, TRNSCAMT,
+   LNID, LNDT, LNMODE, BNKNM, TRNSCREF, LMAMT, BFROVRDAMT, OVRDRMRK, LNRMRK, then
+   TRNSCSTS (status), WRKFLWSTS (workflow status), CLMCTG (claim) and CUSTGST
+   (the customer's GST No from the customer master). Customer Phone and Job Card
+   Ref are no longer exported. Expense and cash exports are unchanged.
 6. **Post-approval reversal/correction: deferred beyond v1.** V1 relies on
    the maker-checker flow catching errors before approval.
 7. **Universal search for every role**, results always scoped by that

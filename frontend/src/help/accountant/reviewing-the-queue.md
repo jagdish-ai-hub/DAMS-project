@@ -29,6 +29,6 @@ Clicking a count box opens the **Pending & closed** window — a full list you c
 
 ## Exporting a list to Excel
 
-In the Pending & closed window, **Export to Excel** (bottom-right) downloads exactly the rows the window is showing, in the same order. Change the filters first and the file changes with them; if you don't touch them, you get what the box you clicked opened with.
+In the Pending & closed window, **Export to Excel** (bottom-right) downloads exactly the rows the window is showing, in the same order. Change the filters first and the file changes with them; if you don't touch them, you get what the box you clicked opened with. The receipts file uses the accounts team's import layout: coded column headers (TRNSCDT, TRNSCREF, BRNCD, CUSTNM …), status, workflow status and claim at the end, then the customer's GST No (CUSTGST). Customer phone and job card ref are not in it.
 
 For example: you open *Pending*, pick branch PUN and 1–7 Oct, and see 3 receipts worth ₹45,000. The file has one row per payment line — receipt RCV-0012, paid ₹15,000 cash and ₹5,000 UPI, appears on two rows, with the customer, vehicle, job card and invoice repeated on each. The **Transaction Amount** column is filled only on each receipt's first row, so it adds up to ₹45,000 — the same total as the window — and a **Total** row at the bottom shows it.

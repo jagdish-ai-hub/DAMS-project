@@ -7,6 +7,14 @@
 
 ## Revision log
 
+- **rev 85 (2026-10-31)** — **Accountant receipt export in the accounts team's layout, requested by the owner** (from
+  `DAMS_Accounts_Export_Layout.xlsx`). The Pending & closed receipts CSV (`ExportService.receiptListCsv`) now writes the coded
+  headers TRNSCDT … LNRMRK in the new order, then TRNSCSTS / WRKFLWSTS / CLMCTG moved to the end and a new CUSTGST column
+  (`customer.gst_no`, rev 84). Customer Phone and Job Card Ref are dropped. Row rules are unchanged (one row per line, transaction
+  amount once per transaction, closing Total row — now placed by column position, since the old code found columns by header
+  name). The expense and cash list exports and the two older receipt exports (date window, by ids) keep their layouts. No
+  migration. Left exactly as written in the sheet: TRNSCREF is used for both Document No and Transaction Ref, and the line amount
+  code is LMAMT.
 - **rev 84 (2026-10-20)** — **GST No on the customer master, requested by the owner.** `customer.gst_no` (V45, VARCHAR(15),
   nullable) — optional, kept by the Owner in Masters → Customers (column, add/edit field, included in the search). Free text up to
   15 characters, stored trimmed and upper-cased, no GSTIN format check (job cards accept any too). Same rule as address: omitted
