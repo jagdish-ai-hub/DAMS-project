@@ -129,3 +129,15 @@ describe('review card: GST (rev 72)', () => {
     expect(screen.queryByText('GST #')).not.toBeInTheDocument()
   })
 })
+
+describe('review card: Invoice # (rev 86)', () => {
+  it('shows the invoice number on a receipt, and a dash when there is none', async () => {
+    const { unmount } = renderCard(receipt({ invoiceNo: '7730122600953' }))
+    await screen.findByText('Invoice #')
+    expect(screen.getByText('7730122600953')).toBeInTheDocument()
+    unmount()
+
+    renderCard(receipt({ invoiceNo: null }))
+    expect((await screen.findByText('Invoice #')).parentElement).toHaveTextContent('—')
+  })
+})

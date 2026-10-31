@@ -7,6 +7,10 @@
 
 ## Revision log
 
+- **rev 86 (2026-11-02)** — **Invoice # on the review details, bug report from the Accountant.** The shared review card
+  (`review/reviewShared.tsx`, used by the Accountant, Finance Manager and Owner) showed the invoice *amount* but never the
+  invoice *number*, although both receipt and expense responses carry `invoiceNo`. It now shows an "Invoice #" row beside
+  Job card / DBM (a dash when empty). Frontend only; test added in `documentsAndGst.test.tsx`.
 - **rev 85 (2026-10-31)** — **Accountant receipt export in the accounts team's layout, requested by the owner** (from
   `DAMS_Accounts_Export_Layout.xlsx`). The Pending & closed receipts CSV (`ExportService.receiptListCsv`) now writes the coded
   headers TRNSCDT … LNRMRK in the new order, then TRNSCSTS / WRKFLWSTS / CLMCTG moved to the end and a new CUSTGST column
