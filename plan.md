@@ -7,6 +7,31 @@
 
 ## Revision log
 
+- **rev 86 (2026-11-02)** — **Invoice # on the review details, bug report from the Accountant.** The shared review card
+  (`review/reviewShared.tsx`, used by the Accountant, Finance Manager and Owner) showed the invoice *amount* but never the
+  invoice *number*, although both receipt and expense responses carry `invoiceNo`. It now shows an "Invoice #" row beside
+  Job card / DBM (a dash when empty). Frontend only; test added in `documentsAndGst.test.tsx`.
+- **rev 85 (2026-10-31)** — **Accountant receipt export in the accounts team's layout, requested by the owner** (from
+  `DAMS_Accounts_Export_Layout.xlsx`). The Pending & closed receipts CSV (`ExportService.receiptListCsv`) now writes the coded
+  headers TRNSCDT … LNRMRK in the new order, then TRNSCSTS / WRKFLWSTS / CLMCTG moved to the end and a new CUSTGST column
+  (`customer.gst_no`, rev 84). Customer Phone and Job Card Ref are dropped. Row rules are unchanged (one row per line, transaction
+  amount once per transaction, closing Total row — now placed by column position, since the old code found columns by header
+  name). The expense and cash list exports and the two older receipt exports (date window, by ids) keep their layouts. No
+  migration. Left exactly as written in the sheet: TRNSCREF is used for both Document No and Transaction Ref, and the line amount
+  code is LMAMT.
+- **rev 84 (2026-10-20)** — **GST No on the customer master, requested by the owner.** `customer.gst_no` (V45, VARCHAR(15),
+  nullable) — optional, kept by the Owner in Masters → Customers (column, add/edit field, included in the search). Free text up to
+  15 characters, stored trimmed and upper-cased, no GSTIN format check (job cards accept any too). Same rule as address: omitted
+  leaves it alone (a cashier's name / phone edit never erases it), `""` clears it. Standalone — it does not pre-fill or change the
+  job card's own `gst_no`.
+- **rev 83 (2026-10-20)** — **A claim expense may be entered at ₹0, requested by the owner.** Receipts already allowed a
+  ₹0 line on a claim (rev 33); expenses blocked it (`@Positive`, and the cashier form dropped ₹0 rows). Now an
+  expense line may be ₹0 when the expense is a claim: its job card has a Claim Type (anything but None) **or** its
+  status is Transfer to Claim. A plain expense still must be > 0 and negatives are always refused. Backend:
+  `ExpenseLineInput.amount` is `@PositiveOrZero`; `ExpenseDocumentService.applyLineInput` enforces the real rule via
+  `allowsZeroAmount`; `patch` and the reviewer status change refuse to take an expense off the claim while it holds a
+  ₹0 line. `JobCardSearchHit` gains `claim` so the form knows the picked job card is a claim. `NewExpensePage.lineHasAmount()`
+  mirrors it. The Accountant's line-override stays > 0. No migration.
 - **rev 82 (2026-10-17)** — **Finance Manager branch access and cashier entry improvements, requested by the owner.** Finance Managers can be assigned selected branches. Receive Entry fields were rearranged, with Customer Type below Job ID and a Clear button for new entries. Expense Entry fields were rearranged, with Clear for new entries and saved receiver contact autofill. Customer-linked expenses show the Job Card, Expense ID and Ooriba ID together in a consistent small font.
 - **rev 81 (2026-10-17)** — **Finance Manager branch access.** Primary Finance Managers and extra Finance Manager grants are assigned to one or more branches. V44 preserves existing access by expanding existing primary and extra Finance Manager access to all branches in their organization at migration time; Owners can then narrow assignments in Team & Branches. Acting Finance Manager sessions, review queues, dashboards, branch listings, claim closing, Override Audit, and AI branch summaries follow the same scope.
 - **rev 80 (2026-10-16)** — **Document-flow help pages with Mermaid diagrams, and a database diagram at the project
@@ -2026,6 +2051,7 @@ Flyway callback / profile guard and instead runs a masters-only seed.
 | V42 | `customer.address` (500), nullable *(rev 77)* | Owner-kept customer address |
 | V43 | `audit_event` CHECK += `VEHICLE_MOVED` *(rev 77)* | Owner moves a vehicle to another customer |
 | V44 | migrates primary Finance Managers and legacy extra Finance Manager grants to explicit branch assignments; `user_role_grant.branch_id` becomes NOT NULL | branch-scoped Finance Manager access *(rev 81)* |
+| V45 | `customer.gst_no` VARCHAR(15), nullable *(rev 84)* | Owner-kept customer GST No |
 | V37 | `audit_event` CHECK += `CASH_REOPENED` *(rev 60; V35 repair and V36 `STATUS_CHANGED` precede it)* | Owner reopen of a closed cash day |
 
 ---

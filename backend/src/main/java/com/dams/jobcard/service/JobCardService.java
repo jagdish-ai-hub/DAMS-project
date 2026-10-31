@@ -542,7 +542,7 @@ public class JobCardService {
                 j.getCustomerId(), c != null ? c.getName() : null,
                 j.getVehicleId(), v != null ? v.getVehicleNo() : j.getVehicleNoText(),
                 j.getDbmId(), j.getInvoiceNo(), j.getCategoryId(), j.getCreatedAt(),
-                receiveNos.getOrDefault(j.getId(), List.of()));
+                receiveNos.getOrDefault(j.getId(), List.of()), j.getClaimTypeId() != null);
         }).toList();
     }
 

@@ -13,6 +13,7 @@ import com.dams.config.TenantContext;
 import com.dams.customer.repository.CustomerRepository;
 import com.dams.expense.dto.CreateExpenseRequest;
 import com.dams.expense.dto.ExpenseLineInput;
+import com.dams.expense.dto.ExpensePatchRequest;
 import com.dams.expense.entity.ExpenseDocument;
 import com.dams.expense.entity.ExpenseLine;
 import com.dams.expense.entity.ExpenseWorkflowStatus;
@@ -255,6 +256,55 @@ class ExpenseDocumentServiceTest {
         assertThat(l1.getLineId()).isEqualTo("OOR-AUG26-E-001-L1");
         verify(auditService).recordUserEvent(eq("ExpenseDocument"), eq(DOC_ID), any(), eq(EventType.SUBMITTED),
             eq(CASHIER_ID), any());
+    }
+
+    @Test
+    void addLine_aZeroAmount_isAllowed_whenTheJobCardIsAClaim_rev83() {
+        ExpenseDocument doc = draftDoc();
+        doc.setJobCardId(JC_CLAIM);
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(doc));
+
+        service.addLine(DOC_ID, lineInput(BigDecimal.ZERO));
+
+        verify(expenseLineRepo).save(any(ExpenseLine.class));
+    }
+
+    @Test
+    void addLine_aZeroAmount_isAllowed_whenTheExpenseIsOnTransferToClaim_rev83() {
+        ExpenseDocument doc = draftDoc();
+        doc.setBusinessStatusId(CLAIM_STATUS_ID);
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(doc));
+
+        service.addLine(DOC_ID, lineInput(BigDecimal.ZERO));
+
+        verify(expenseLineRepo).save(any(ExpenseLine.class));
+    }
+
+    @Test
+    void addLine_aZeroAmount_isRejected_onANonClaimExpense_rev83() {
+        ExpenseDocument doc = draftDoc();
+        doc.setJobCardId(JC_PLAIN);
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(doc));
+
+        assertThatThrownBy(() -> service.addLine(DOC_ID, lineInput(BigDecimal.ZERO)))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("amount must be greater than 0");
+        verify(expenseLineRepo, never()).save(any());
+    }
+
+    @Test
+    void patch_cannotMoveAnExpenseOffTheClaim_whileItHoldsAZeroLine_rev83() {
+        ExpenseDocument doc = draftDoc();
+        doc.setBusinessStatusId(CLAIM_STATUS_ID);
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(doc));
+        when(expenseLineRepo.findByOrgIdAndExpenseDocumentIdOrderByLineNoAsc(ORG, DOC_ID))
+            .thenReturn(List.of(persistedLine(1, BigDecimal.ZERO)));
+        ExpensePatchRequest req = new ExpensePatchRequest();
+        req.setBusinessStatusId(STATUS_ID);
+
+        assertThatThrownBy(() -> service.patch(DOC_ID, req))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("₹0 line");
     }
 
     @Test

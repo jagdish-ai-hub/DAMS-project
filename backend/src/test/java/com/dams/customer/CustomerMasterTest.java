@@ -117,6 +117,35 @@ class CustomerMasterTest {
     }
 
     @Test
+    void create_storesTheGstNo_trimmedAndUpperCased_orNullWhenBlank_rev84() {
+        CustomerRequest r = request("Kalaivani Logistics", "94370 11111", null);
+        r.setGstNo("  21abcde1234f1z5 ");
+        assertThat(service.create(r).gstNo()).isEqualTo("21ABCDE1234F1Z5");
+
+        CustomerRequest blank = request("No Gst", null, null);
+        blank.setGstNo("   ");
+        assertThat(service.create(blank).gstNo()).isNull();
+    }
+
+    @Test
+    void update_withNoGstNo_neverErasesTheSavedOne_andAnEmptyOneClearsIt_rev84() {
+        Customer c = customer(7L, "Name", "111", null);
+        c.setGstNo("21ABCDE1234F1Z5");
+        when(customerRepo.findByIdAndOrgId(7L, ORG)).thenReturn(Optional.of(c));
+
+        // a cashier's name / phone edit sends no gstNo
+        assertThat(service.update(7L, request("New Name", "222", null)).gstNo()).isEqualTo("21ABCDE1234F1Z5");
+
+        CustomerRequest change = request("New Name", "222", null);
+        change.setGstNo("27aaapl1234c1zv");
+        assertThat(service.update(7L, change).gstNo()).isEqualTo("27AAAPL1234C1ZV");
+
+        CustomerRequest clear = request("New Name", "222", null);
+        clear.setGstNo("");
+        assertThat(service.update(7L, clear).gstNo()).isNull();
+    }
+
+    @Test
     void listAll_isTheWholeOrganisation_withVehicles_notBranchScoped_notCapped() {
         List<Customer> many = new ArrayList<>();
         for (long i = 1; i <= 45; i++) {

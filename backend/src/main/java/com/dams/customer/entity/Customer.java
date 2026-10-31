@@ -39,6 +39,10 @@ public class Customer {
     @Column(length = 500)
     private String address;
 
+    /** rev 84 — optional GST No (a GSTIN is 15 characters), upper-cased; kept by the Owner in Masters → Customers. */
+    @Column(name = "gst_no", length = 15)
+    private String gstNo;
+
     /** Branch whose user created the customer (rev 56) — lets branch-scoped search find one with no job card yet. */
     @Column(name = "created_branch_id")
     private Long createdBranchId;

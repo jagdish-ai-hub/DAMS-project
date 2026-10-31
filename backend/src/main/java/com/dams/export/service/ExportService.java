@@ -235,11 +235,18 @@ public class ExportService {
 
     // ============================================================ on-screen list export (rev 67)
 
+    /**
+     * rev 85 — the receipt export follows the accounts team's import layout (DAMS_Accounts_Export_Layout):
+     * coded headers, in this order. Customer Phone and Job Card Ref are no longer written; Status,
+     * Workflow Status and Claim sit at the end, followed by the customer's GST No.
+     */
     private static final String[] RECEIPT_LIST_HEADER = {
-        "Status", "Workflow Status", "Submitted On", "Document No", "Branch", "Customer", "Customer Phone",
-        "Vehicle No", "Job Card Ref", "DBM ID", "Invoice No", "Invoice Amount", "Category", "Claim",
-        "Transaction Amount", "Line ID", "Line Date", "Mode", "Bank Name", "Transaction Ref", "Line Amount",
-        "Original Amount", "Override Reason", "Line Remarks"};
+        "TRNSCDT", "TRNSCREF", "BRNCD", "CUSTNM", "VHCLNO", "DBMSID", "INVCNO", "INVCAMT", "TRNSCCTG",
+        "TRNSCAMT", "LNID", "LNDT", "LNMODE", "BNKNM", "TRNSCREF", "LMAMT", "BFROVRDAMT", "OVRDRMRK", "LNRMRK",
+        "TRNSCSTS", "WRKFLWSTS", "CLMCTG", "CUSTGST"};
+    private static final int RCPT_DOC_NO = 1;
+    private static final int RCPT_TXN_AMOUNT = 9;
+    private static final int RCPT_LINE_AMOUNT = 15;
 
     private static final String[] EXPENSE_LIST_HEADER = {
         "Status", "Workflow Status", "Submitted On", "Document No", "Branch", "Receiver / Vendor", "Category",
@@ -302,26 +309,27 @@ public class ExportService {
             JobCard jc = jobCards.get(doc.getJobCardId());
             Customer cust = jc == null || jc.getCustomerId() == null ? null : customers.get(jc.getCustomerId());
             Object[] head = {
-                screenStatus(item.workflowStatus()), item.workflowStatus(), istDate(item.submittedAt()),
-                docNo(item.documentNo(), doc.getId()), item.branchCode(), item.partyName(),
-                cust == null ? null : cust.getPhone(),
+                istDate(item.submittedAt()), docNo(item.documentNo(), doc.getId()), item.branchCode(),
+                item.partyName(),
                 jc == null || jc.getVehicleId() == null ? null : vehicles.get(jc.getVehicleId()),
-                jc == null ? null : item.branchCode() + "-JC-" + jc.getId(),
                 jc == null ? null : jc.getDbmId(),
                 jc == null ? null : jc.getInvoiceNo(),
                 jc == null ? null : jc.getInvoiceAmount(),
-                item.categoryName(), yesNo(item.isClaim())};
+                item.categoryName()};
+            // Status, Workflow Status, Claim and the customer's GST No close every row of the transaction.
+            Object[] end = {screenStatus(item.workflowStatus()), item.workflowStatus(), yesNo(item.isClaim()),
+                cust == null ? null : cust.getGstNo()};
             docTotal = docTotal.add(item.amount());
 
             List<SettlementLine> lines = linesByDoc.getOrDefault(doc.getId(), List.of());
             if (lines.isEmpty()) {
-                row(sb, withTail(head, RECEIPT_LIST_HEADER.length, item.amount()));
+                row(sb, receiptListRow(head, end, item.amount()));
             }
             for (int j = 0; j < lines.size(); j++) {
                 SettlementLine l = lines.get(j);
                 boolean overridden = l.getOverriddenBy() != null;
                 lineTotal = lineTotal.add(l.getAmount());
-                row(sb, withTail(head, RECEIPT_LIST_HEADER.length,
+                row(sb, receiptListRow(head, end,
                     j == 0 ? item.amount() : null,
                     l.getLineId() != null ? l.getLineId() : "L" + l.getLineNo(),
                     l.getTransactionDate(),
@@ -334,7 +342,7 @@ public class ExportService {
                     l.getRemark()));
             }
         }
-        totalRow(sb, RECEIPT_LIST_HEADER, docs.size(), docTotal, lineTotal);
+        totalRow(sb, RECEIPT_LIST_HEADER.length, RCPT_DOC_NO, RCPT_TXN_AMOUNT, RCPT_LINE_AMOUNT, docs.size(), docTotal, lineTotal);
         return sb.toString();
     }
 
@@ -477,6 +485,15 @@ public class ExportService {
             .collect(Collectors.toMap(Bank::getId, Bank::getName, (a, b) -> a));
     }
 
+    /** One receipt-export row: {@code head} (9 cells), the transaction amount and line cells, then {@code end}. */
+    private static Object[] receiptListRow(Object[] head, Object[] end, Object... middle) {
+        Object[] out = new Object[RECEIPT_LIST_HEADER.length];
+        System.arraycopy(head, 0, out, 0, head.length);
+        System.arraycopy(middle, 0, out, head.length, middle.length);
+        System.arraycopy(end, 0, out, RECEIPT_LIST_HEADER.length - end.length, end.length);
+        return out;
+    }
+
     /** {@code head} followed by {@code tail}, padded with empty cells to {@code width}. */
     private static Object[] withTail(Object[] head, int width, Object... tail) {
         Object[] out = Arrays.copyOf(head, width);
@@ -488,6 +505,16 @@ public class ExportService {
      * Closing row: "Total" and the transaction count, with the sums under the "Transaction Amount"
      * (or cash "Amount") and "Line Amount" columns.
      */
+    private static void totalRow(StringBuilder sb, int width, int docNoCol, int docAmountCol, int lineAmountCol,
+                                 int count, BigDecimal docTotal, BigDecimal lineTotal) {
+        Object[] cells = new Object[width];
+        cells[0] = "Total";
+        cells[docNoCol] = count + (count == 1 ? " transaction" : " transactions");
+        cells[docAmountCol] = docTotal;
+        cells[lineAmountCol] = lineTotal;
+        row(sb, cells);
+    }
+
     private static void totalRow(StringBuilder sb, String[] header, int count, BigDecimal docTotal, BigDecimal lineTotal) {
         List<String> cols = Arrays.asList(header);
         Object[] cells = new Object[header.length];

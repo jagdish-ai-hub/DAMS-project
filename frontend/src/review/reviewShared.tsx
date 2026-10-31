@@ -233,6 +233,7 @@ export function RecordCard(props: {
           {!expense && <Kv k="Customer type" v={doc.b2b ? 'B2B' : 'B2C'} />}
           {!expense && <Kv k="GST #" v={doc.b2b ? (doc.gstNo ?? '') : ''} />}
           <Kv k={expense ? 'Job ID / PO / SO' : 'Job card / DBM'} v={doc.dbmId ?? '—'} />
+          <Kv k="Invoice #" v={doc.invoiceNo || '—'} />
           <Kv k="Branch" v={doc.branchCode ?? '—'} />
           {expense ? (
             <>

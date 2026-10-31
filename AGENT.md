@@ -275,12 +275,16 @@ has `org_id = null`.
    **Vendor and customer master lists (rev 77).** In Masters, both the
    **Receivers / vendors** list and the **Customers** list have a **search
    box** that filters as you type — vendors by name or phone; customers by
-   name, mobile, vehicle number or address. The **Customers** list (Owner)
-   shows name, mobile, vehicles and address; the Owner can add a customer and
+   name, mobile, vehicle number, GST No or address. The **Customers** list (Owner)
+   shows name, mobile, vehicles, GST No and address; the Owner can add a customer and
    edit all of it, including renaming a vehicle number or adding a vehicle.
    **Address** is a new optional customer field that no form asks for yet; it
    is stored and editable here only. A cashier's later name/phone edit never
-   erases an address. A vehicle number stays unique per organisation (a clash
+   erases an address. **GST No (rev 84)** is another optional customer field,
+   shown and searchable in the Customers list: up to 15 characters, stored
+   upper-cased, not format-checked, cleared by saving it empty, and never
+   erased by a cashier's name/phone edit. It is standalone — the job card keeps
+   its own GST No and the customer's is not copied onto it. A vehicle number stays unique per organisation (a clash
    is refused), and vehicles are never deleted — their history is kept.
    **Moving a vehicle to another customer** (Owner) changes who owns it from
    then on: new job cards and expenses for that number go under the new
@@ -294,6 +298,12 @@ has `org_id = null`.
    CGW claim** (e.g. promotional activities the OEM reimburses have no job
    card). Only a REJECTED / CLOSED document, or one awaiting FM approval,
    cannot be transferred.
+   **A claim expense line may be ₹0 (rev 83).** When the expense's job card has
+   a Claim Type (anything but None), or the expense is on Transfer to Claim, the
+   Cashier can enter and submit a line at ₹0 — the OEM may cover it all and the
+   real figure is set at Close Claim. A plain expense must still be above ₹0, and
+   an expense holding a ₹0 line cannot be moved off the claim until it has an
+   amount. The Accountant's line override stays above ₹0.
    **A "Transfer to Claim" expense is closed by the Finance Manager, not the
    Accountant (rev 61).** It goes Cashier → Accountant (verify, or query back
    to the Cashier) → **Finance Manager**, who presses **Close Claim**: they
@@ -621,6 +631,13 @@ flag the conflict and ask rather than silently working around it.
    repeated, a transaction with no lines still gets one row, and the
    transaction amount is written once per transaction so the column sums to
    the window's total. It is a copy of the screen, not a ledger or Tally feed.
+   **Receipt export layout (rev 85):** the receipts file follows the accounts
+   team's import layout (DAMS_Accounts_Export_Layout) — coded headers TRNSCDT,
+   TRNSCREF, BRNCD, CUSTNM, VHCLNO, DBMSID, INVCNO, INVCAMT, TRNSCCTG, TRNSCAMT,
+   LNID, LNDT, LNMODE, BNKNM, TRNSCREF, LMAMT, BFROVRDAMT, OVRDRMRK, LNRMRK, then
+   TRNSCSTS (status), WRKFLWSTS (workflow status), CLMCTG (claim) and CUSTGST
+   (the customer's GST No from the customer master). Customer Phone and Job Card
+   Ref are no longer exported. Expense and cash exports are unchanged.
 6. **Post-approval reversal/correction: deferred beyond v1.** V1 relies on
    the maker-checker flow catching errors before approval.
 7. **Universal search for every role**, results always scoped by that
