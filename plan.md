@@ -7,6 +7,36 @@
 
 ## Revision log
 
+- **rev 89 (2026-11-03)** — **OORIBA logo on the login page, requested by the owner.** The brand panel's free space
+  under the chips shows the OORIBA logo straight on the blue panel — no white card — with white lettering. The SVGs are
+  **traced from the owner's own artwork** (colour-separated, vectorised), not redrawn: `frontend/src/assets/ooriba-logo.svg`
+  keeps the original colours (orange #DD771F, blue #0F4A9C, green #147F38, black text); `ooriba-logo-on-dark.svg` (used on
+  the login) has white text and lighter blue / green tints (#3B86E6 / #27A04F) because the original blue nearly vanishes on
+  the navy panel. "Powered by OORIBA" sits under the logo. The "Test phase · seeded demo dealership" line is removed. Hidden on phones with the rest of the panel,
+  as before. Frontend only.
+- **rev 88 (2026-11-03)** — **The demo org's lists and Owner switches become the standard for every organization,
+  decided by the owner (one-time copy, not a sync).** V46 adds `organization.master_template` (at most one, partial unique
+  index), marks the oldest organization (the V5 demo dealership, now OORIBA MOTORS DEMO) and, for every other organization
+  that has recorded nothing (no job cards, receipts, expenses, cash movements or vendors), replaces its master lists with
+  copies of the template's active items (flags, limits, sort order, receipt-status roles; retired statuses left out) and
+  copies `accountant_direct_approve_cash` / `multi_branch_cashier_access`. `MasterProvisioningService.provisionDefaults` now
+  copies from the template for a new organization; the old built-in catalogue is kept only for a database with no
+  template. Not copied: UPI IDs, vendors, users, transactions, name. Verified on a Neon branch of production: after V46 all
+  nine lists match the demo in ORGD and OORIBA MOTORS, both switches copied, the demo's own rows untouched.
+- **rev 87 (2026-11-03)** — **Receipt and expense form changes, and both exports in the accounts team's v2 layouts,
+  requested by the owner** (from `DAMS_Accounts_Reciept_Export_Layoutv2.0.xlsx` and `DAMS_Expenses_Export_Lyt.xlsx`).
+  *Receipt page:* a Claim Type other than "Not a claim" sets the status to "Awaiting Claim" (looked up by name among the
+  statuses the Cashier may pick) and going back restores the earlier status unless the Cashier chose another one since; a
+  picked customer's GST No fills the GST# box and switches the receipt to B2B (also when the customer arrives through a
+  vehicle or the `customerId` link); the settlement-line Remarks column is wider. *Expense page:* Transfer to Claim reads
+  Yes / No (the "the manufacturer will repay it" text is gone), the Remark column is wider, and "Invoice #" is now
+  "Invoice/Claim" (also on the review details for an expense). *Exports* (`ExportService`): the receipt file moves to
+  v2 codes (TXNDT … INVNO, INVAMT, TXNCTG, TXNAMT, OVDRAMT) with a new CLMAMT after TXNAMT; the expense file follows the
+  new expense layout (27 columns, Job Card Ref becomes OORID). CLMAMT = the amount claimed, using the dashboard's own
+  definition (claim expense total / claim receipt invoice amount), written once per transaction. Two extra columns,
+  chosen by the owner, close both files: CLMFNLAMT (final amount from Close Claim) and CLMOVDRMRK (override reason) —
+  these two codes are ours, not from the sheets. The totals row is placed by column position. The cash export and the
+  two older receipt exports are unchanged. No migration.
 - **rev 86 (2026-11-02)** — **Invoice # on the review details, bug report from the Accountant.** The shared review card
   (`review/reviewShared.tsx`, used by the Accountant, Finance Manager and Owner) showed the invoice *amount* but never the
   invoice *number*, although both receipt and expense responses carry `invoiceNo`. It now shows an "Invoice #" row beside
@@ -2052,6 +2082,7 @@ Flyway callback / profile guard and instead runs a masters-only seed.
 | V43 | `audit_event` CHECK += `VEHICLE_MOVED` *(rev 77)* | Owner moves a vehicle to another customer |
 | V44 | migrates primary Finance Managers and legacy extra Finance Manager grants to explicit branch assignments; `user_role_grant.branch_id` becomes NOT NULL | branch-scoped Finance Manager access *(rev 81)* |
 | V45 | `customer.gst_no` VARCHAR(15), nullable *(rev 84)* | Owner-kept customer GST No |
+| V46 | `organization.master_template`; one-time copy of the template org's active masters + Owner switches into organizations with no records *(rev 88)* | standard lists for every organization |
 | V37 | `audit_event` CHECK += `CASH_REOPENED` *(rev 60; V35 repair and V36 `STATUS_CHANGED` precede it)* | Owner reopen of a closed cash day |
 
 ---

@@ -138,6 +138,7 @@ export default function NewReceiptPage() {
           setCustomerName(data.name)
           setVehicleNo(data.vehicles[0]?.vehicleNo ?? '')
           setContactPhone(data.lastContactPhone ?? data.phone ?? '')
+          if (data.gstNo) { setB2b(true); setGstNo(data.gstNo) }
           setNotice(`New receipt for ${data.name} — customer pre-filled from their record.`)
         })
         .catch(() => {})
@@ -291,6 +292,28 @@ export default function NewReceiptPage() {
   // OEM covers it, and the real figure is only known at Close Claim time — so a claim
   // line may be entered at ₹0. A plain (non-claim) line must still be > 0.
   const isClaim = claimTypeId !== ''
+
+  // rev 87 — a customer with a GST No on file fills the GST# box and makes the receipt B2B, like their phone number.
+  function applyCustomerGst(c: { gstNo?: string | null } | null | undefined) {
+    if (jcLinked || !c?.gstNo) return
+    setB2b(true)
+    setGstNo(c.gstNo)
+  }
+
+  // rev 87 — picking a Claim Type moves the status to "Awaiting Claim"; going back to "Not a claim" puts back the
+  // status the cashier had before (only if it is still on Awaiting Claim — a status they picked themselves stays).
+  const awaitingClaimId = statuses.find((x) => x.active && x.name.trim().toLowerCase() === 'awaiting claim')?.id ?? null
+  const statusBeforeClaim = useRef<number | ''>('')
+  function changeClaimType(next: number | '') {
+    if (next !== '' && claimTypeId === '' && awaitingClaimId != null) {
+      statusBeforeClaim.current = businessStatusId
+      setBusinessStatusId(awaitingClaimId)
+    } else if (next === '' && claimTypeId !== '' && businessStatusId === awaitingClaimId && statusBeforeClaim.current !== '') {
+      setBusinessStatusId(statusBeforeClaim.current)
+      statusBeforeClaim.current = ''
+    }
+    setClaimTypeId(next)
+  }
 
   function lineHasAmount(l: LineRow) {
     if (l.amount === '') return false
@@ -745,6 +768,7 @@ export default function NewReceiptPage() {
                     if (!contactTouched && !contactLocked) {
                       setContactPhone(picked ? (picked.lastContactPhone ?? picked.phone ?? '') : '')
                     }
+                    applyCustomerGst(picked)
                   }}
                 />
               </Row>
@@ -779,6 +803,7 @@ export default function NewReceiptPage() {
                         .then(({ data }) => setContactPhone(data.lastContactPhone ?? data.phone ?? ''))
                         .catch(() => {})
                     }
+                    customersApi.get(v.customerId).then(({ data }) => applyCustomerGst(data)).catch(() => {})
                   }}
                 />
               </Row>
@@ -834,7 +859,7 @@ export default function NewReceiptPage() {
                 </span>
               </Row>
               <Row label="Claim Type">
-                <select value={claimTypeId} disabled={jcLinked} onChange={(e) => setClaimTypeId(e.target.value === '' ? '' : Number(e.target.value))} style={inputStyle}>
+                <select value={claimTypeId} disabled={jcLinked} onChange={(e) => changeClaimType(e.target.value === '' ? '' : Number(e.target.value))} style={inputStyle}>
                   <option value="">— Not a claim —</option>
                   {claimTypes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
@@ -887,7 +912,7 @@ export default function NewReceiptPage() {
           )}
 
           <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 940 }}>
               <thead>
                 <tr>
                   {['Date', 'Settlement Mode', 'Receive Amount', 'Bank Name', 'Transaction ID', 'Remarks', ''].map((h) => (
@@ -953,7 +978,7 @@ export default function NewReceiptPage() {
                       <td style={cellStyle}>
                         <input value={l.transactionRef} disabled={rowLocked || !m?.requiresRef} onChange={(e) => setLine(i, { transactionRef: e.target.value })} placeholder={m?.requiresRef ? 'UPI / bank ref' : '—'} style={cellInput} />
                       </td>
-                      <td style={cellStyle}>
+                      <td style={{ ...cellStyle, minWidth: 260, width: '28%' }}>
                         <input value={l.remark} disabled={rowLocked} title={rowLocked ? 'Already reviewed — locked' : undefined} onChange={(e) => setLine(i, { remark: e.target.value })} style={cellInput} />
                       </td>
                       <td style={cellStyle}>

@@ -38,6 +38,13 @@ public class Organization {
     @Column(name = "accountant_direct_approve_cash", nullable = false)
     private boolean accountantDirectApproveCash = false;
 
+    /**
+     * rev 88 — the one organization whose master lists and Owner switches a new organization copies
+     * (the demo dealership). At most one is marked; see MasterProvisioningService.
+     */
+    @Column(name = "master_template", nullable = false)
+    private boolean masterTemplate = false;
+
     @Column(nullable = false)
     private boolean active = true;
 

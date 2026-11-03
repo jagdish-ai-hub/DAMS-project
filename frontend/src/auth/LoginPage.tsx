@@ -2,6 +2,7 @@ import { useState, type FormEvent, type CSSProperties } from 'react'
 import { useNavigate, Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from './useAuth'
 import { authApi } from '../api/auth'
+import ooribaLogo from '../assets/ooriba-logo-on-dark.svg'
 
 /**
  * Login page — a two-panel layout in the mockups' navy visual language. Email + password,
@@ -79,8 +80,13 @@ export default function LoginPage() {
             ))}
           </div>
         </div>
-        <div style={{ position: 'relative', zIndex: 1, fontSize: '0.72rem', opacity: 0.5 }}>
-          Test phase · seeded demo dealership “JJ Motors”
+        {/* rev 89 — the dealer's logo (white lettering, traced from the owner's artwork) sits straight on the panel,
+            filling its free space; the "Test phase" line is gone. */}
+        <div style={{ position: 'relative', zIndex: 1, flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, paddingTop: 32 }}>
+          <img src={ooribaLogo} alt="OORIBA" width={240} height={240} style={{ maxWidth: '100%', height: 'auto', display: 'block' }} />
+          <span style={{ fontSize: '0.78rem', letterSpacing: '0.14em', textTransform: 'uppercase', opacity: 0.75 }}>
+            Powered by <strong style={{ fontWeight: 700, opacity: 1 }}>OORIBA</strong>
+          </span>
         </div>
         <div className="dams-login-glow" style={brandGlow} />
       </aside>

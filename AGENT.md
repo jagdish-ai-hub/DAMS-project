@@ -631,13 +631,29 @@ flag the conflict and ask rather than silently working around it.
    repeated, a transaction with no lines still gets one row, and the
    transaction amount is written once per transaction so the column sums to
    the window's total. It is a copy of the screen, not a ledger or Tally feed.
-   **Receipt export layout (rev 85):** the receipts file follows the accounts
-   team's import layout (DAMS_Accounts_Export_Layout) — coded headers TRNSCDT,
-   TRNSCREF, BRNCD, CUSTNM, VHCLNO, DBMSID, INVCNO, INVCAMT, TRNSCCTG, TRNSCAMT,
-   LNID, LNDT, LNMODE, BNKNM, TRNSCREF, LMAMT, BFROVRDAMT, OVRDRMRK, LNRMRK, then
-   TRNSCSTS (status), WRKFLWSTS (workflow status), CLMCTG (claim) and CUSTGST
-   (the customer's GST No from the customer master). Customer Phone and Job Card
-   Ref are no longer exported. Expense and cash exports are unchanged.
+   **Export layouts (rev 85, 87):** the receipts and expenses files follow the
+   accounts team's import layouts (DAMS_Accounts_Receipt_Export_Layout v2 and
+   DAMS_Expenses_Export_Lyt) — coded headers, in the order set there.
+   *Receipts:* TXNDT, TXNREF, BRNCD, CUSTNM, VHCLNO, DBMSID, INVNO, INVAMT,
+   TXNCTG, TXNAMT, CLMAMT, LNID, LNDT, LNMODE, BNKNM, TXNREF, LMAMT, OVDRAMT,
+   OVDRMRK, LNRMRK, then TXNSTS, WRKFLWSTS, CLMCTG, CUSTGST (the customer's GST
+   No). *Expenses:* TXNDT, TXNREF, BRNCD, VNDRNM, TXNCTG, CUSTNM, VHCLNO, OORID,
+   DBMSID, INVNO, OVRLMT, APRVBY, CLM, TXNAMT, CLMAMT, LNID, LNDT, TXNCTG2,
+   PYMNMODE, BKNAME, PYMNREF, LNAMT, ORGAMT, OVDRMRK, LMRMRK, then TXNSTS,
+   WRKFLWSTS. **CLMAMT is the amount claimed** — a claim expense's total, or a
+   claim receipt's invoice amount, the same as the dashboard's "Total claimed";
+   blank when it is not a claim, and written once per transaction. Both files
+   end with **CLMFNLAMT** (the final amount the Finance Manager recorded at Close
+   Claim) and **CLMOVDRMRK** (the reason it differs), blank until the claim is
+   closed. Customer Phone and Job Card Ref are no longer exported. The cash
+   export is unchanged.
+   **Receipt form helpers (rev 87):** picking a Claim Type (anything but "Not a
+   claim") sets the status to **Awaiting Claim**, and going back restores the
+   status the Cashier had before; a customer with a GST No on file fills the
+   GST# box and makes the receipt B2B. The settlement-line Remarks box, and the
+   expense form's Remark box, are wider. On the expense form the invoice box is
+   labelled **Invoice/Claim**, and the Transfer to Claim dropdown reads just
+   Yes / No.
 6. **Post-approval reversal/correction: deferred beyond v1.** V1 relies on
    the maker-checker flow catching errors before approval.
 7. **Universal search for every role**, results always scoped by that
@@ -707,6 +723,21 @@ production seed profile will omit.
 A Super Admin panel (organization list, onboard new org + first Owner) does
 not have a mockup yet — build it in the same visual language as these
 three once the core is working, or ask for a mockup first.
+
+**Standard lists for every organization (rev 88, decided by the owner).** The
+demo dealership (OORIBA MOTORS DEMO) is the **template organization**
+(`organization.master_template`). Its master lists — transaction types,
+receipt statuses (with which roles may pick each), payment modes, claim types,
+expense categories and sub-categories (with limits), expense modes, expense
+statuses (with the Transfer to Claim and Finance-approval flags) and banks —
+and its two Owner switches (Accountant direct approve, cashier all-branch
+access) are the standard. A **new organization copies the template's active
+items and switches at the moment it is created**; retired items, UPI IDs,
+vendors, users and transactions are never copied. Existing organizations that
+had recorded nothing (ORGD, OORIBA MOTORS) were given the same lists **once**
+(V46). This is a one-time copy, not a sync: afterwards each Owner may change
+their own lists, and a later change in the demo org reaches only organizations
+created after it.
 
 **Appearance — platform font (rev 50).** The UI typeface is a platform-wide
 setting owned by Super Admin (Settings → Appearance), not per-org and not

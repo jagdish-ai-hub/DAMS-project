@@ -20,6 +20,8 @@ import com.dams.masters.repository.ReceiveBusinessStatusRepository;
 import com.dams.masters.repository.ReceiveBusinessStatusRoleRepository;
 import com.dams.masters.repository.ReceiveCategoryRepository;
 import com.dams.masters.repository.SettlementModeRepository;
+import com.dams.organization.entity.Organization;
+import com.dams.organization.repository.OrganizationRepository;
 import com.dams.user.entity.Role;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,12 +31,16 @@ import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
- * Seeds a brand-new organization with the standard master catalogue — the same set the
- * demo dealership ships with (Flyway V5), flags and all: settlement / expense
- * {@code is_cash} (drives the Cash-page drawer), expense business-status
- * {@code triggers_claim}.
+ * Seeds a brand-new organization with the standard master catalogue.
+ *
+ * rev 88 — the standard is the template organization (the demo dealership, {@code master_template}):
+ * its ACTIVE list items are copied with their flags, limits, sort order and the roles allowed to pick
+ * each receipt status, and its two Owner switches are copied onto the new organization. Retired receipt
+ * statuses, UPI IDs and vendors are not copied. Only when there is no template (a fresh database) does
+ * the built-in catalogue below apply — the same set the demo dealership first shipped with (Flyway V5).
  *
  * Without this, a freshly-onboarded Owner signs in to empty dropdowns everywhere and can't
  * record a single receipt until every mode, category and status has been typed by hand.
@@ -55,6 +61,7 @@ public class MasterProvisioningService {
     private final ExpenseBusinessStatusRepository expenseBusinessStatusRepo;
     private final BankRepository bankRepo;
     private final ClaimTypeRepository claimTypeRepo;
+    private final OrganizationRepository organizationRepo;
 
     public MasterProvisioningService(ReceiveCategoryRepository receiveCategoryRepo,
                                      ReceiveBusinessStatusRepository receiveBusinessStatusRepo,
@@ -65,7 +72,8 @@ public class MasterProvisioningService {
                                      ExpenseModeRepository expenseModeRepo,
                                      ExpenseBusinessStatusRepository expenseBusinessStatusRepo,
                                      BankRepository bankRepo,
-                                     ClaimTypeRepository claimTypeRepo) {
+                                     ClaimTypeRepository claimTypeRepo,
+                                     OrganizationRepository organizationRepo) {
         this.receiveCategoryRepo = receiveCategoryRepo;
         this.receiveBusinessStatusRepo = receiveBusinessStatusRepo;
         this.receiveBusinessStatusRoleRepo = receiveBusinessStatusRoleRepo;
@@ -76,9 +84,101 @@ public class MasterProvisioningService {
         this.expenseBusinessStatusRepo = expenseBusinessStatusRepo;
         this.bankRepo = bankRepo;
         this.claimTypeRepo = claimTypeRepo;
+        this.organizationRepo = organizationRepo;
     }
 
     public void provisionDefaults(Long orgId) {
+        Optional<Organization> template = organizationRepo.findFirstByMasterTemplateTrue()
+            .filter(t -> !t.getId().equals(orgId));
+        if (template.isPresent()) {
+            copyFromTemplate(template.get(), orgId);
+        } else {
+            provisionBuiltInDefaults(orgId);
+        }
+    }
+
+    /** rev 88 — the template organization's active list items and Owner switches, onto {@code orgId}. */
+    private void copyFromTemplate(Organization template, Long orgId) {
+        Long from = template.getId();
+
+        receiveCategoryRepo.saveAll(activeOf(receiveCategoryRepo.findByOrgIdOrderBySortOrderAscIdAsc(from)).stream()
+            .map(t -> {
+                ReceiveCategory c = named(new ReceiveCategory(), orgId, t.getName(), t.getSortOrder());
+                c.setClaim(t.isClaim());
+                return c;
+            }).toList());
+
+        claimTypeRepo.saveAll(activeOf(claimTypeRepo.findByOrgIdOrderBySortOrderAscIdAsc(from)).stream()
+            .map(t -> named(new ClaimType(), orgId, t.getName(), t.getSortOrder())).toList());
+
+        // Retired statuses exist only so the template's old job cards still read — not carried over.
+        Map<Long, List<ReceiveBusinessStatusRole>> rolesByStatus = new HashMap<>();
+        for (ReceiveBusinessStatusRole g : receiveBusinessStatusRoleRepo.findByOrgId(from)) {
+            rolesByStatus.computeIfAbsent(g.getStatusId(), k -> new java.util.ArrayList<>()).add(g);
+        }
+        for (ReceiveBusinessStatus t : activeOf(receiveBusinessStatusRepo.findByOrgIdOrderBySortOrderAscIdAsc(from))) {
+            if (t.isDeprecated()) {
+                continue;
+            }
+            ReceiveBusinessStatus status =
+                receiveBusinessStatusRepo.save(named(new ReceiveBusinessStatus(), orgId, t.getName(), t.getSortOrder()));
+            for (ReceiveBusinessStatusRole g : rolesByStatus.getOrDefault(t.getId(), List.of())) {
+                ReceiveBusinessStatusRole grant = new ReceiveBusinessStatusRole();
+                grant.setOrgId(orgId);
+                grant.setStatusId(status.getId());
+                grant.setRole(g.getRole());
+                receiveBusinessStatusRoleRepo.save(grant);
+            }
+        }
+
+        settlementModeRepo.saveAll(activeOf(settlementModeRepo.findByOrgIdOrderBySortOrderAscIdAsc(from)).stream()
+            .map(t -> settlementMode(orgId, t.getName(), t.isRequiresBank(), t.isRequiresRef(), t.isCash(), t.getSortOrder()))
+            .toList());
+
+        Map<Long, Long> categoryId = new HashMap<>();   // template category id -> new category id
+        for (ExpenseCategory t : activeOf(expenseCategoryRepo.findByOrgIdOrderBySortOrderAscIdAsc(from))) {
+            categoryId.put(t.getId(),
+                expenseCategoryRepo.save(named(new ExpenseCategory(), orgId, t.getName(), t.getSortOrder())).getId());
+        }
+        expenseSubCategoryRepo.saveAll(activeOf(expenseSubCategoryRepo.findByOrgIdOrderBySortOrderAscIdAsc(from)).stream()
+            .filter(t -> categoryId.containsKey(t.getExpenseCategoryId()))
+            .map(t -> {
+                ExpenseSubCategory m = named(new ExpenseSubCategory(), orgId, t.getName(), t.getSortOrder());
+                m.setExpenseCategoryId(categoryId.get(t.getExpenseCategoryId()));
+                m.setLimitAmount(t.getLimitAmount());
+                return m;
+            }).toList());
+
+        expenseModeRepo.saveAll(activeOf(expenseModeRepo.findByOrgIdOrderBySortOrderAscIdAsc(from)).stream()
+            .map(t -> expenseMode(orgId, t.getName(), t.isRequiresBank(), t.isRequiresRef(), t.isCash(), t.getSortOrder()))
+            .toList());
+
+        expenseBusinessStatusRepo.saveAll(activeOf(expenseBusinessStatusRepo.findByOrgIdOrderBySortOrderAscIdAsc(from)).stream()
+            .map(t -> {
+                ExpenseBusinessStatus m = expenseBusinessStatus(orgId, t.getName(), t.isTriggersClaim(), t.getSortOrder());
+                m.setRequiresFmApproval(t.isRequiresFmApproval());
+                return m;
+            }).toList());
+
+        bankRepo.saveAll(activeOf(bankRepo.findByOrgIdOrderBySortOrderAscIdAsc(from)).stream()
+            .map(t -> named(new Bank(), orgId, t.getName(), t.getSortOrder())).toList());
+
+        // The Owner's Settings switches.
+        organizationRepo.findById(orgId).ifPresent(org -> {
+            org.setAccountantDirectApproveCash(template.isAccountantDirectApproveCash());
+            org.setMultiBranchCashierAccess(template.isMultiBranchCashierAccess());
+            organizationRepo.save(org);
+        });
+
+        log.info("Provisioned masters for orgId={} from template orgId={}", orgId, from);
+    }
+
+    private static <T extends com.dams.common.entity.OrgMaster> List<T> activeOf(List<T> rows) {
+        return rows.stream().filter(com.dams.common.entity.OrgMaster::isActive).toList();
+    }
+
+    /** The built-in catalogue — used only when no template organization exists (a fresh database). */
+    private void provisionBuiltInDefaults(Long orgId) {
         receiveCategoryRepo.saveAll(List.of(
             receiveCategory(orgId, "Workshop", 1),
             receiveCategory(orgId, "Breakdown", 2),
