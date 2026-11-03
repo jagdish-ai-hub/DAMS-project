@@ -724,6 +724,21 @@ A Super Admin panel (organization list, onboard new org + first Owner) does
 not have a mockup yet — build it in the same visual language as these
 three once the core is working, or ask for a mockup first.
 
+**Standard lists for every organization (rev 88, decided by the owner).** The
+demo dealership (OORIBA MOTORS DEMO) is the **template organization**
+(`organization.master_template`). Its master lists — transaction types,
+receipt statuses (with which roles may pick each), payment modes, claim types,
+expense categories and sub-categories (with limits), expense modes, expense
+statuses (with the Transfer to Claim and Finance-approval flags) and banks —
+and its two Owner switches (Accountant direct approve, cashier all-branch
+access) are the standard. A **new organization copies the template's active
+items and switches at the moment it is created**; retired items, UPI IDs,
+vendors, users and transactions are never copied. Existing organizations that
+had recorded nothing (ORGD, OORIBA MOTORS) were given the same lists **once**
+(V46). This is a one-time copy, not a sync: afterwards each Owner may change
+their own lists, and a later change in the demo org reaches only organizations
+created after it.
+
 **Appearance — platform font (rev 50).** The UI typeface is a platform-wide
 setting owned by Super Admin (Settings → Appearance), not per-org and not
 per-user. It is chosen from a fixed, code-defined list of vetted fonts —

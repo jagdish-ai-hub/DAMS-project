@@ -176,6 +176,7 @@ erDiagram
     boolean active
     timestamptz created_at
     boolean accountant_direct_approve_cash
+    boolean master_template
   }
   platform_setting {
     varchar key PK

@@ -7,6 +7,15 @@
 
 ## Revision log
 
+- **rev 88 (2026-11-03)** — **The demo org's lists and Owner switches become the standard for every organization,
+  decided by the owner (one-time copy, not a sync).** V46 adds `organization.master_template` (at most one, partial unique
+  index), marks the oldest organization (the V5 demo dealership, now OORIBA MOTORS DEMO) and, for every other organization
+  that has recorded nothing (no job cards, receipts, expenses, cash movements or vendors), replaces its master lists with
+  copies of the template's active items (flags, limits, sort order, receipt-status roles; retired statuses left out) and
+  copies `accountant_direct_approve_cash` / `multi_branch_cashier_access`. `MasterProvisioningService.provisionDefaults` now
+  copies from the template for a new organization; the old built-in catalogue is kept only for a database with no
+  template. Not copied: UPI IDs, vendors, users, transactions, name. Verified on a Neon branch of production: after V46 all
+  nine lists match the demo in ORGD and OORIBA MOTORS, both switches copied, the demo's own rows untouched.
 - **rev 87 (2026-11-03)** — **Receipt and expense form changes, and both exports in the accounts team's v2 layouts,
   requested by the owner** (from `DAMS_Accounts_Reciept_Export_Layoutv2.0.xlsx` and `DAMS_Expenses_Export_Lyt.xlsx`).
   *Receipt page:* a Claim Type other than "Not a claim" sets the status to "Awaiting Claim" (looked up by name among the
@@ -2066,6 +2075,7 @@ Flyway callback / profile guard and instead runs a masters-only seed.
 | V43 | `audit_event` CHECK += `VEHICLE_MOVED` *(rev 77)* | Owner moves a vehicle to another customer |
 | V44 | migrates primary Finance Managers and legacy extra Finance Manager grants to explicit branch assignments; `user_role_grant.branch_id` becomes NOT NULL | branch-scoped Finance Manager access *(rev 81)* |
 | V45 | `customer.gst_no` VARCHAR(15), nullable *(rev 84)* | Owner-kept customer GST No |
+| V46 | `organization.master_template`; one-time copy of the template org's active masters + Owner switches into organizations with no records *(rev 88)* | standard lists for every organization |
 | V37 | `audit_event` CHECK += `CASH_REOPENED` *(rev 60; V35 repair and V36 `STATUS_CHANGED` precede it)* | Owner reopen of a closed cash day |
 
 ---
