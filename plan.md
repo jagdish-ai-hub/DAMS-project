@@ -12,7 +12,7 @@
   **traced from the owner's own artwork** (colour-separated, vectorised), not redrawn: `frontend/src/assets/ooriba-logo.svg`
   keeps the original colours (orange #DD771F, blue #0F4A9C, green #147F38, black text); `ooriba-logo-on-dark.svg` (used on
   the login) has white text and lighter blue / green tints (#3B86E6 / #27A04F) because the original blue nearly vanishes on
-  the navy panel. The "Test phase · seeded demo dealership" line is removed. Hidden on phones with the rest of the panel,
+  the navy panel. "Powered by OORIBA" sits under the logo. The "Test phase · seeded demo dealership" line is removed. Hidden on phones with the rest of the panel,
   as before. Frontend only.
 - **rev 88 (2026-11-03)** — **The demo org's lists and Owner switches become the standard for every organization,
   decided by the owner (one-time copy, not a sync).** V46 adds `organization.master_template` (at most one, partial unique

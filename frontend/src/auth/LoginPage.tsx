@@ -82,8 +82,11 @@ export default function LoginPage() {
         </div>
         {/* rev 89 — the dealer's logo (white lettering, traced from the owner's artwork) sits straight on the panel,
             filling its free space; the "Test phase" line is gone. */}
-        <div style={{ position: 'relative', zIndex: 1, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: 32 }}>
+        <div style={{ position: 'relative', zIndex: 1, flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, paddingTop: 32 }}>
           <img src={ooribaLogo} alt="OORIBA" width={240} height={240} style={{ maxWidth: '100%', height: 'auto', display: 'block' }} />
+          <span style={{ fontSize: '0.78rem', letterSpacing: '0.14em', textTransform: 'uppercase', opacity: 0.75 }}>
+            Powered by <strong style={{ fontWeight: 700, opacity: 1 }}>OORIBA</strong>
+          </span>
         </div>
         <div className="dams-login-glow" style={brandGlow} />
       </aside>
