@@ -7,6 +7,10 @@
 
 ## Revision log
 
+- **rev 89 (2026-11-03)** — **OORIBA logo on the login page, requested by the owner.** The brand panel's free space
+  under the chips now shows the OORIBA logo (`frontend/src/assets/ooriba-logo.svg`, redrawn as vector from the owner's
+  JPG: orange, blue and green arcs, the word outlined so it renders the same everywhere) on a white card. The "Test
+  phase · seeded demo dealership" line is removed. Frontend only.
 - **rev 88 (2026-11-03)** — **The demo org's lists and Owner switches become the standard for every organization,
   decided by the owner (one-time copy, not a sync).** V46 adds `organization.master_template` (at most one, partial unique
   index), marks the oldest organization (the V5 demo dealership, now OORIBA MOTORS DEMO) and, for every other organization

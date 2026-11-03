@@ -2,6 +2,7 @@ import { useState, type FormEvent, type CSSProperties } from 'react'
 import { useNavigate, Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from './useAuth'
 import { authApi } from '../api/auth'
+import ooribaLogo from '../assets/ooriba-logo.svg'
 
 /**
  * Login page — a two-panel layout in the mockups' navy visual language. Email + password,
@@ -79,8 +80,11 @@ export default function LoginPage() {
             ))}
           </div>
         </div>
-        <div style={{ position: 'relative', zIndex: 1, fontSize: '0.72rem', opacity: 0.5 }}>
-          Test phase · seeded demo dealership “JJ Motors”
+        {/* rev 89 — the dealer's logo fills the panel's free space; the "Test phase" line is gone. */}
+        <div style={{ position: 'relative', zIndex: 1, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: 32 }}>
+          <div style={logoCard}>
+            <img src={ooribaLogo} alt="OORIBA" width={190} height={190} style={{ maxWidth: '100%', height: 'auto', display: 'block' }} />
+          </div>
         </div>
         <div className="dams-login-glow" style={brandGlow} />
       </aside>
@@ -196,6 +200,13 @@ const brandMark: CSSProperties = {
   background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.2)',
   display: 'flex', alignItems: 'center', justifyContent: 'center',
   fontWeight: 700, fontSize: '0.9rem',
+}
+
+const logoCard: CSSProperties = {
+  background: '#fff',
+  borderRadius: 22,
+  padding: 18,
+  boxShadow: '0 12px 32px rgba(8, 18, 40, 0.35)',
 }
 
 const brandChip: CSSProperties = {
