@@ -979,7 +979,7 @@ export default function NewExpensePage() {
                     style={inputStyle}
                   >
                     <option value="no">No</option>
-                    <option value="yes">Yes — the manufacturer will repay it</option>
+                    <option value="yes">Yes</option>
                   </select>
                 </Row>
               )}
@@ -999,7 +999,7 @@ export default function NewExpensePage() {
                   {plainStatuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </Row>
-              <Row label="Invoice #">
+              <Row label="Invoice/Claim">
                 <input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="7731122600388" style={inputStyle} />
               </Row>
 
@@ -1030,7 +1030,7 @@ export default function NewExpensePage() {
           )}
 
           <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 920 }}>
               <thead>
                 <tr>
                   {['Date', 'Sub-category', 'Amount', 'Payment Mode', 'Bank Name', 'Transaction ID', 'Remark', ''].map((h) => (
@@ -1086,7 +1086,7 @@ export default function NewExpensePage() {
                       <td style={cellStyle}>
                         <input value={l.transactionRef} disabled={rowLocked || !m?.requiresRef} onChange={(e) => setLine(i, { transactionRef: e.target.value })} placeholder={m?.requiresRef ? 'UPI / bank ref' : '—'} style={cellInput} />
                       </td>
-                      <td style={cellStyle}>
+                      <td style={{ ...cellStyle, minWidth: 260, width: '28%' }}>
                         <input value={l.remark} disabled={rowLocked} title={rowLocked ? 'Already reviewed — locked' : undefined} onChange={(e) => setLine(i, { remark: e.target.value })} style={cellInput} />
                       </td>
                       <td style={cellStyle}>

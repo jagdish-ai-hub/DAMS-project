@@ -7,6 +7,20 @@
 
 ## Revision log
 
+- **rev 87 (2026-11-03)** — **Receipt and expense form changes, and both exports in the accounts team's v2 layouts,
+  requested by the owner** (from `DAMS_Accounts_Reciept_Export_Layoutv2.0.xlsx` and `DAMS_Expenses_Export_Lyt.xlsx`).
+  *Receipt page:* a Claim Type other than "Not a claim" sets the status to "Awaiting Claim" (looked up by name among the
+  statuses the Cashier may pick) and going back restores the earlier status unless the Cashier chose another one since; a
+  picked customer's GST No fills the GST# box and switches the receipt to B2B (also when the customer arrives through a
+  vehicle or the `customerId` link); the settlement-line Remarks column is wider. *Expense page:* Transfer to Claim reads
+  Yes / No (the "the manufacturer will repay it" text is gone), the Remark column is wider, and "Invoice #" is now
+  "Invoice/Claim" (also on the review details for an expense). *Exports* (`ExportService`): the receipt file moves to
+  v2 codes (TXNDT … INVNO, INVAMT, TXNCTG, TXNAMT, OVDRAMT) with a new CLMAMT after TXNAMT; the expense file follows the
+  new expense layout (27 columns, Job Card Ref becomes OORID). CLMAMT = the amount claimed, using the dashboard's own
+  definition (claim expense total / claim receipt invoice amount), written once per transaction. Two extra columns,
+  chosen by the owner, close both files: CLMFNLAMT (final amount from Close Claim) and CLMOVDRMRK (override reason) —
+  these two codes are ours, not from the sheets. The totals row is placed by column position. The cash export and the
+  two older receipt exports are unchanged. No migration.
 - **rev 86 (2026-11-02)** — **Invoice # on the review details, bug report from the Accountant.** The shared review card
   (`review/reviewShared.tsx`, used by the Accountant, Finance Manager and Owner) showed the invoice *amount* but never the
   invoice *number*, although both receipt and expense responses carry `invoiceNo`. It now shows an "Invoice #" row beside

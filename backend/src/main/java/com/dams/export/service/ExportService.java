@@ -14,7 +14,9 @@ import com.dams.expense.entity.ExpenseDocument;
 import com.dams.expense.entity.ExpenseLine;
 import com.dams.expense.repository.ExpenseDocumentRepository;
 import com.dams.expense.repository.ExpenseLineRepository;
+import com.dams.jobcard.entity.ClaimClose;
 import com.dams.jobcard.entity.JobCard;
+import com.dams.jobcard.repository.ClaimCloseRepository;
 import com.dams.jobcard.repository.JobCardRepository;
 import com.dams.masters.entity.Bank;
 import com.dams.masters.entity.ExpenseCategory;
@@ -70,6 +72,7 @@ public class ExportService {
     private final CashDocumentRepository cashDocumentRepo;
     private final JobCardRepository jobCardRepo;
     private final ReviewService reviewService;
+    private final ClaimCloseRepository claimCloseRepo;
 
     public ExportService(SettlementLineRepository settlementLineRepo,
                          ExpenseLineRepository expenseLineRepo,
@@ -87,7 +90,8 @@ public class ExportService {
                          ExpenseDocumentRepository expenseDocumentRepo,
                          CashDocumentRepository cashDocumentRepo,
                          JobCardRepository jobCardRepo,
-                         ReviewService reviewService) {
+                         ReviewService reviewService,
+                         ClaimCloseRepository claimCloseRepo) {
         this.settlementLineRepo = settlementLineRepo;
         this.expenseLineRepo = expenseLineRepo;
         this.branchRepo = branchRepo;
@@ -105,6 +109,7 @@ public class ExportService {
         this.cashDocumentRepo = cashDocumentRepo;
         this.jobCardRepo = jobCardRepo;
         this.reviewService = reviewService;
+        this.claimCloseRepo = claimCloseRepo;
     }
 
     @Transactional(readOnly = true)
@@ -236,23 +241,27 @@ public class ExportService {
     // ============================================================ on-screen list export (rev 67)
 
     /**
-     * rev 85 — the receipt export follows the accounts team's import layout (DAMS_Accounts_Export_Layout):
-     * coded headers, in this order. Customer Phone and Job Card Ref are no longer written; Status,
-     * Workflow Status and Claim sit at the end, followed by the customer's GST No.
+     * rev 85/87 — the receipt export follows the accounts team's import layout (DAMS_Accounts_Receipt_Export_Layout v2):
+     * coded headers, in this order. Customer Phone and Job Card Ref are not written; CLMAMT (the amount claimed) sits
+     * after TXNAMT; Status, Workflow Status and Claim sit at the end, then the customer's GST No, then the claim's final
+     * amount and override reason once the Finance Manager has closed it (CLMFNLAMT / CLMOVDRMRK, added at the owner's request).
      */
     private static final String[] RECEIPT_LIST_HEADER = {
-        "TRNSCDT", "TRNSCREF", "BRNCD", "CUSTNM", "VHCLNO", "DBMSID", "INVCNO", "INVCAMT", "TRNSCCTG",
-        "TRNSCAMT", "LNID", "LNDT", "LNMODE", "BNKNM", "TRNSCREF", "LMAMT", "BFROVRDAMT", "OVRDRMRK", "LNRMRK",
-        "TRNSCSTS", "WRKFLWSTS", "CLMCTG", "CUSTGST"};
+        "TXNDT", "TXNREF", "BRNCD", "CUSTNM", "VHCLNO", "DBMSID", "INVNO", "INVAMT", "TXNCTG",
+        "TXNAMT", "CLMAMT", "LNID", "LNDT", "LNMODE", "BNKNM", "TXNREF", "LMAMT", "OVDRAMT", "OVDRMRK", "LNRMRK",
+        "TXNSTS", "WRKFLWSTS", "CLMCTG", "CUSTGST", "CLMFNLAMT", "CLMOVDRMRK"};
     private static final int RCPT_DOC_NO = 1;
     private static final int RCPT_TXN_AMOUNT = 9;
-    private static final int RCPT_LINE_AMOUNT = 15;
+    private static final int RCPT_LINE_AMOUNT = 16;
 
+    /** rev 87 — the expense export follows DAMS_Expenses_Export_Lyt; same trailing claim columns as the receipts. */
     private static final String[] EXPENSE_LIST_HEADER = {
-        "Status", "Workflow Status", "Submitted On", "Document No", "Branch", "Receiver / Vendor", "Category",
-        "Customer", "Vehicle No", "Job Card Ref", "DBM ID", "Invoice No", "Over Limit", "Pre-Approved", "Claim",
-        "Transaction Amount", "Line ID", "Line Date", "Sub-Category", "Mode", "Bank Name", "Transaction Ref",
-        "Line Amount", "Original Amount", "Override Reason", "Line Remarks"};
+        "TXNDT", "TXNREF", "BRNCD", "VNDRNM", "TXNCTG", "CUSTNM", "VHCLNO", "OORID", "DBMSID", "INVNO",
+        "OVRLMT", "APRVBY", "CLM", "TXNAMT", "CLMAMT", "LNID", "LNDT", "TXNCTG2", "PYMNMODE", "BKNAME", "PYMNREF",
+        "LNAMT", "ORGAMT", "OVDRMRK", "LMRMRK", "TXNSTS", "WRKFLWSTS", "CLMFNLAMT", "CLMOVDRMRK"};
+    private static final int EXP_DOC_NO = 1;
+    private static final int EXP_TXN_AMOUNT = 13;
+    private static final int EXP_LINE_AMOUNT = 21;
 
     private static final String[] CASH_LIST_HEADER = {
         "Status", "Workflow Status", "Submitted On", "Document No", "Branch", "Direction", "Transaction Date",
@@ -298,6 +307,9 @@ public class ExportService {
         Map<Long, String> modes = settlementModeRepo.findByOrgIdOrderBySortOrderAscIdAsc(orgId).stream()
             .collect(Collectors.toMap(SettlementMode::getId, SettlementMode::getName, (a, b) -> a));
         Map<Long, String> banks = bankNames(orgId);
+        Map<Long, ClaimClose> claimCloses = jobCards.isEmpty() ? Map.of() :
+            claimCloseRepo.findByOrgIdAndJobCardIdIn(orgId, new ArrayList<>(jobCards.keySet())).stream()
+                .collect(Collectors.toMap(ClaimClose::getJobCardId, c -> c, (x, y) -> x));
 
         StringBuilder sb = new StringBuilder();
         row(sb, (Object[]) RECEIPT_LIST_HEADER);
@@ -316,21 +328,29 @@ public class ExportService {
                 jc == null ? null : jc.getInvoiceNo(),
                 jc == null ? null : jc.getInvoiceAmount(),
                 item.categoryName()};
-            // Status, Workflow Status, Claim and the customer's GST No close every row of the transaction.
+            // rev 87 — the amount claimed (a claim receipt's invoice amount, as the dashboard counts it), and once the
+            // Finance Manager has closed the claim, the final amount and the reason it differs.
+            ClaimClose close = item.isClaim() && jc != null ? claimCloses.get(jc.getId()) : null;
+            BigDecimal claimAmount = !item.isClaim() ? null
+                : jc != null && jc.getInvoiceAmount() != null ? jc.getInvoiceAmount() : item.amount();
+            // Status, Workflow Status, Claim, the customer's GST No and the claim's close details end every row.
             Object[] end = {screenStatus(item.workflowStatus()), item.workflowStatus(), yesNo(item.isClaim()),
-                cust == null ? null : cust.getGstNo()};
+                cust == null ? null : cust.getGstNo(),
+                close == null ? null : close.getFinalAmount(),
+                close == null || !close.isOverridden() ? null : close.getOverrideReason()};
             docTotal = docTotal.add(item.amount());
 
             List<SettlementLine> lines = linesByDoc.getOrDefault(doc.getId(), List.of());
             if (lines.isEmpty()) {
-                row(sb, receiptListRow(head, end, item.amount()));
+                row(sb, listRow(RECEIPT_LIST_HEADER.length, head, end, item.amount(), claimAmount));
             }
             for (int j = 0; j < lines.size(); j++) {
                 SettlementLine l = lines.get(j);
                 boolean overridden = l.getOverriddenBy() != null;
                 lineTotal = lineTotal.add(l.getAmount());
-                row(sb, receiptListRow(head, end,
+                row(sb, listRow(RECEIPT_LIST_HEADER.length, head, end,
                     j == 0 ? item.amount() : null,
+                    j == 0 ? claimAmount : null,
                     l.getLineId() != null ? l.getLineId() : "L" + l.getLineNo(),
                     l.getTransactionDate(),
                     modes.getOrDefault(l.getSettlementModeId(), ""),
@@ -390,26 +410,34 @@ public class ExportService {
             Long vehId = doc.getVehicleId() != null ? doc.getVehicleId() : (jc == null ? null : jc.getVehicleId());
             Customer cust = custId == null ? null : customers.get(custId);
             Object[] head = {
-                screenStatus(item.workflowStatus()), item.workflowStatus(), istDate(item.submittedAt()),
-                docNo(item.documentNo(), doc.getId()), item.branchCode(), item.partyName(), item.categoryName(),
+                istDate(item.submittedAt()), docNo(item.documentNo(), doc.getId()), item.branchCode(),
+                item.partyName(), item.categoryName(),
                 firstNonBlank(doc.getCustomerName(), cust == null ? null : cust.getName()),
                 firstNonBlank(doc.getVehicleNo(), vehId == null ? null : vehicles.get(vehId)),
                 jc == null ? null : item.branchCode() + "-JC-" + jc.getId(),
                 firstNonBlank(doc.getDbmId(), jc == null ? null : jc.getDbmId()),
                 firstNonBlank(doc.getInvoiceNo(), jc == null ? null : jc.getInvoiceNo()),
                 yesNo(item.overLimit()), yesNo(item.preApproved()), yesNo(item.isClaim())};
+            // rev 87 — a claim expense claims its total (as the total stood when the claim was closed), and once the
+            // Finance Manager has closed it, the final amount and the reason it differs.
+            BigDecimal claimAmount = !item.isClaim() ? null
+                : doc.getClaimComputedTotal() != null ? doc.getClaimComputedTotal() : item.amount();
+            Object[] end = {screenStatus(item.workflowStatus()), item.workflowStatus(),
+                item.isClaim() ? doc.getClaimFinalAmount() : null,
+                item.isClaim() && doc.isClaimOverridden() ? doc.getClaimOverrideReason() : null};
             docTotal = docTotal.add(item.amount());
 
             List<ExpenseLine> lines = linesByDoc.getOrDefault(doc.getId(), List.of());
             if (lines.isEmpty()) {
-                row(sb, withTail(head, EXPENSE_LIST_HEADER.length, item.amount()));
+                row(sb, listRow(EXPENSE_LIST_HEADER.length, head, end, item.amount(), claimAmount));
             }
             for (int j = 0; j < lines.size(); j++) {
                 ExpenseLine l = lines.get(j);
                 boolean overridden = l.getOverriddenBy() != null;
                 lineTotal = lineTotal.add(l.getAmount());
-                row(sb, withTail(head, EXPENSE_LIST_HEADER.length,
+                row(sb, listRow(EXPENSE_LIST_HEADER.length, head, end,
                     j == 0 ? item.amount() : null,
+                    j == 0 ? claimAmount : null,
                     l.getLineId() != null ? l.getLineId() : "L" + l.getLineNo(),
                     l.getTransactionDate(),
                     l.getSubCategoryId() == null ? null : subCategories.getOrDefault(l.getSubCategoryId(), ""),
@@ -422,7 +450,7 @@ public class ExportService {
                     l.getRemark()));
             }
         }
-        totalRow(sb, EXPENSE_LIST_HEADER, docs.size(), docTotal, lineTotal);
+        totalRow(sb, EXPENSE_LIST_HEADER.length, EXP_DOC_NO, EXP_TXN_AMOUNT, EXP_LINE_AMOUNT, docs.size(), docTotal, lineTotal);
         return sb.toString();
     }
 
@@ -485,12 +513,12 @@ public class ExportService {
             .collect(Collectors.toMap(Bank::getId, Bank::getName, (a, b) -> a));
     }
 
-    /** One receipt-export row: {@code head} (9 cells), the transaction amount and line cells, then {@code end}. */
-    private static Object[] receiptListRow(Object[] head, Object[] end, Object... middle) {
-        Object[] out = new Object[RECEIPT_LIST_HEADER.length];
+    /** One export row: {@code head}, then the transaction and line cells ({@code middle}), with {@code end} closing the row. */
+    private static Object[] listRow(int width, Object[] head, Object[] end, Object... middle) {
+        Object[] out = new Object[width];
         System.arraycopy(head, 0, out, 0, head.length);
         System.arraycopy(middle, 0, out, head.length, middle.length);
-        System.arraycopy(end, 0, out, RECEIPT_LIST_HEADER.length - end.length, end.length);
+        System.arraycopy(end, 0, out, width - end.length, end.length);
         return out;
     }
 
