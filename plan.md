@@ -7,6 +7,21 @@
 
 ## Revision log
 
+- **rev 90 (2026-11-07)** — **Backend froze every ~1.5 days: the JVM's Metaspace (loaded-class storage) hit its 128 MB cap.**
+  Diagnosed read-only on the VPS from a thread dump taken during a freeze: Metaspace used 126.7 of 128 MiB (class space 16.7 MiB,
+  ~24k classes) while the heap was only 65 of 448 MiB — so it was never a heap or RAM problem. The first
+  `OutOfMemoryError: Metaspace` came ~39 h after the container started (Nov 6 06:05), then 84 failed requests; the JVM's
+  `VM Thread` sat at ~100% of a core running GC that could not free class metadata, other threads were idle, and the 10 s
+  liveness check kept answering (slowly), so Docker saw `healthy` and never restarted it. Restarts only reset the clock. The
+  128 m cap had been in `compose.prod.yml` since v1; the stack (Hibernate + ByteBuddy, AWS SDK S3 with three HTTP clients,
+  springdoc, Security, AspectJ) leaves little headroom under it. **Changes (compose only, no application code):**
+  `MaxMetaspaceSize` 128m → **256m**; container `mem_limit` 640m → **1g** (the old limit was at 98%, so raising only Metaspace
+  would have swapped a JVM freeze for a Docker OOM-kill; the VPS had ~1.9 GB available); **`-XX:+ExitOnOutOfMemoryError`** so a
+  future OOM restarts the container in ~30 s instead of hanging; **`-Xlog:gc+metaspace=info:stdout`** so Metaspace over time is in
+  `docker logs`. **Not yet proven:** whether Metaspace levels off below 256 m or keeps growing (a leak). After deploy, check
+  `docker logs dams-backend-1 | grep Metaspace` after a day or two: flat = the cap was the whole problem; a steady climb = find
+  what is generating classes (next candidates: drop springdoc/Swagger from prod, remove the unused netty/url-connection AWS
+  HTTP clients).
 - **rev 89 (2026-11-03)** — **OORIBA logo on the login page, requested by the owner.** The brand panel's free space
   under the chips shows the OORIBA logo straight on the blue panel — no white card — with white lettering. The SVGs are
   **traced from the owner's own artwork** (colour-separated, vectorised), not redrawn: `frontend/src/assets/ooriba-logo.svg`

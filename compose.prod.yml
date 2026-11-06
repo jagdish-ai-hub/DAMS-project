@@ -20,12 +20,23 @@ services:
     image: ${IMAGE_PREFIX:?set IMAGE_PREFIX in /home/server/dams/.env}-backend:${DAMS_TAG:-latest}
     restart: unless-stopped
     env_file: .env
-    mem_limit: 640m
+    mem_limit: 1g
     environment:
       SPRING_PROFILES_ACTIVE: prod
-      # Bounded JVM footprint — SerialGC + a fixed 448 MB heap suit a low-concurrency CRUD API
-      # and keep RSS predictable under the 640 MB container limit above.
-      JAVA_TOOL_OPTIONS: "-Xms128m -Xmx448m -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m"
+      # Bounded JVM footprint — SerialGC + a 448 MB max heap suit a low-concurrency CRUD API.
+      # Budget under the 1 GiB container limit: heap 448 + Metaspace up to 256 + ~150 for
+      # threads / code cache / native buffers ≈ 850 MiB.
+      #
+      # MaxMetaspaceSize was 128m, and the JVM filled it after ~1.5 days (Spring Boot + Hibernate
+      # + the AWS S3 SDK + springdoc load ~24k classes). A full Metaspace does not crash the
+      # process: the JVM spins a core at 100% in GC and fails any request that needs a new class,
+      # while the liveness check still passes — so Docker never restarted it (rev 90).
+      #  - ExitOnOutOfMemoryError: any OOM now kills the JVM, so `restart: unless-stopped`
+      #    brings it back in ~30 s instead of leaving it half-dead for days.
+      #  - -Xlog:gc+metaspace: logs Metaspace size at every GC to `docker logs`, to show
+      #    whether it levels off (cap was just too tight) or keeps climbing (a class leak):
+      #      docker logs dams-backend-1 | grep Metaspace
+      JAVA_TOOL_OPTIONS: "-Xms128m -Xmx448m -XX:+UseSerialGC -XX:MaxMetaspaceSize=256m -XX:+ExitOnOutOfMemoryError -Xlog:gc+metaspace=info:stdout:time,uptime"
     ports:
       - "127.0.0.1:8082:8080"
     healthcheck:
