@@ -51,7 +51,11 @@ import java.util.stream.Collectors;
 @Service
 public class MyEntriesService {
 
-    private static final int RECENT_LIMIT = 50;
+    /** Rows returned when the caller doesn't ask for more (rev 92: the page's "Load more" raises it). */
+    public static final int DEFAULT_LIMIT = 50;
+    private static final int MAX_LIMIT = 1000;
+    private static final java.time.Instant FAR_PAST = java.time.Instant.EPOCH;
+    private static final java.time.Instant FAR_FUTURE = java.time.Instant.parse("3000-01-01T00:00:00Z");
 
     private final ReceiveDocumentRepository receiveDocumentRepo;
     private final SettlementLineRepository settlementLineRepo;
@@ -91,6 +95,20 @@ public class MyEntriesService {
 
     @Transactional(readOnly = true)
     public List<MyEntryResponse> list() {
+        return list(DEFAULT_LIMIT, null, null);
+    }
+
+    /**
+     * @param limit newest-first row cap across receipts, expenses and cash (clamped to 1..1000)
+     * @param from  optional first day (org time, inclusive)
+     * @param to    optional last day (org time, inclusive)
+     */
+    @Transactional(readOnly = true)
+    public List<MyEntryResponse> list(int limit, LocalDate from, LocalDate to) {
+        int cap = Math.max(1, Math.min(limit, MAX_LIMIT));
+        Window w = new Window(cap,
+            from == null ? FAR_PAST : from.atStartOfDay(OrgTime.ZONE).toInstant(),
+            to == null ? FAR_FUTURE : to.plusDays(1).atStartOfDay(OrgTime.ZONE).toInstant());
         Long orgId = TenantContext.requireOrgId();
         Long userId = branchScope.currentUserId();
         LocalDate today = OrgTime.today();
@@ -99,19 +117,20 @@ public class MyEntriesService {
             .collect(Collectors.toMap(Branch::getId, Function.identity()));
 
         List<MyEntryResponse> rows = new ArrayList<>();
-        rows.addAll(receiptRows(orgId, userId, today, branches));
-        rows.addAll(expenseRows(orgId, userId, today, branches));
-        rows.addAll(cashRows(orgId, userId, today, branches));
+        rows.addAll(receiptRows(orgId, userId, today, branches, w));
+        rows.addAll(expenseRows(orgId, userId, today, branches, w));
+        rows.addAll(cashRows(orgId, userId, today, branches, w));
 
         rows.sort(Comparator.comparing(MyEntryResponse::createdAt).reversed());
-        return rows.size() > RECENT_LIMIT ? rows.subList(0, RECENT_LIMIT) : rows;
+        return rows.size() > cap ? rows.subList(0, cap) : rows;
     }
 
     // --- receipts ---
 
-    private List<MyEntryResponse> receiptRows(Long orgId, Long userId, LocalDate today, Map<Long, Branch> branches) {
+    private List<MyEntryResponse> receiptRows(Long orgId, Long userId, LocalDate today, Map<Long, Branch> branches, Window w) {
         List<ReceiveDocument> docs = receiveDocumentRepo
-            .findByOrgIdAndCreatedByOrderByCreatedAtDesc(orgId, userId, Limit.of(RECENT_LIMIT));
+            .findByOrgIdAndCreatedByAndCreatedAtGreaterThanEqualAndCreatedAtLessThanOrderByCreatedAtDesc(
+                orgId, userId, w.from(), w.to(), Limit.of(w.cap()));
         if (docs.isEmpty()) {
             return List.of();
         }
@@ -159,9 +178,10 @@ public class MyEntriesService {
 
     // --- expenses ---
 
-    private List<MyEntryResponse> expenseRows(Long orgId, Long userId, LocalDate today, Map<Long, Branch> branches) {
+    private List<MyEntryResponse> expenseRows(Long orgId, Long userId, LocalDate today, Map<Long, Branch> branches, Window w) {
         List<ExpenseDocument> docs = expenseDocumentRepo
-            .findByOrgIdAndCreatedByOrderByCreatedAtDesc(orgId, userId, Limit.of(RECENT_LIMIT));
+            .findByOrgIdAndCreatedByAndCreatedAtGreaterThanEqualAndCreatedAtLessThanOrderByCreatedAtDesc(
+                orgId, userId, w.from(), w.to(), Limit.of(w.cap()));
         if (docs.isEmpty()) {
             return List.of();
         }
@@ -208,9 +228,10 @@ public class MyEntriesService {
 
     // --- cash movements ---
 
-    private List<MyEntryResponse> cashRows(Long orgId, Long userId, LocalDate today, Map<Long, Branch> branches) {
+    private List<MyEntryResponse> cashRows(Long orgId, Long userId, LocalDate today, Map<Long, Branch> branches, Window w) {
         List<CashDocument> docs = cashDocumentRepo
-            .findByOrgIdAndCreatedByOrderByCreatedAtDesc(orgId, userId, Limit.of(RECENT_LIMIT));
+            .findByOrgIdAndCreatedByAndCreatedAtGreaterThanEqualAndCreatedAtLessThanOrderByCreatedAtDesc(
+                orgId, userId, w.from(), w.to(), Limit.of(w.cap()));
         return docs.stream().map(doc -> {
             String label = doc.getDirection().name().equals("IN") ? "Cash IN from bank" : "Cash OUT to bank";
             return new MyEntryResponse(
@@ -246,4 +267,7 @@ public class MyEntriesService {
         return jobCardRepo.findByOrgIdAndIdIn(orgId, ids).stream()
             .collect(Collectors.toMap(JobCard::getId, Function.identity()));
     }
+
+    /** The cap and created-at window shared by the three queries. */
+    private record Window(int cap, java.time.Instant from, java.time.Instant to) {}
 }

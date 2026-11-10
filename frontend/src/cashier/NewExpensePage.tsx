@@ -709,7 +709,10 @@ export default function NewExpensePage() {
     setBusy(true)
     setError('')
     try {
-      await patchHeader()
+      // The server only lets the header change while the expense is a draft or queried; once it
+      // has been reviewed (Submitted / Verified / Approved / Closed) only a new row may be
+      // added, so skip the header patch there or it fails and masks the new line (rev 92).
+      if (headerEditable) await patchHeader()
       await syncLines(loadedDoc.id)
       const { data } = await expensesApi.get(loadedDoc.id)
       setLoadedDoc(data)
@@ -727,7 +730,10 @@ export default function NewExpensePage() {
             }))
           : [freshLine()],
       )
-      setNotice(`Draft ${data.documentNo ?? `#${data.id}`} saved successfully. Continue editing, attach documents, or Submit when ready.`)
+      const ref = data.documentNo ?? `#${data.id}`
+      setNotice(headerEditable
+        ? `Draft ${ref} saved successfully. Continue editing, attach documents, or Submit when ready.`
+        : `${ref} updated — the new expense is added and it is back with the Accountant for review.`)
     } catch (e) {
       setError(apiError(e, 'Could not save draft.'))
     } finally {
@@ -755,6 +761,7 @@ export default function NewExpensePage() {
   // rev 54 — a status flagged "requires FM approval" goes through the same flow as over-limit.
   const statusNeedsApproval = statuses.find((s) => s.id === businessStatusId)?.requiresFmApproval === true
   const needsApproval = (limitWarnings.length > 0 || statusNeedsApproval) && !approvalCovers
+  const headerEditable = loadedDoc?.workflowStatus === 'DRAFT' || loadedDoc?.workflowStatus === 'QUERIED'
   const linesEditable = !awaitingApproval
     && (!loadedDoc || loadedDoc.workflowStatus === 'DRAFT' || loadedDoc.workflowStatus === 'QUERIED')
   // rev 76 — "Transfer to Claim" is a Yes / No dropdown. Yes puts the expense on the claim status behind the scenes.

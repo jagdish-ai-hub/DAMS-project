@@ -250,6 +250,9 @@ public class MastersService {
             if (req.getIsCash() != null) {
                 sm.setCash(req.getIsCash());
             }
+            if (req.getSkipsFinance() != null) {
+                sm.setSkipsFinance(req.getSkipsFinance());
+            }
         } else if (type.hasModeFlags() && entity instanceof ExpenseMode em) {
             if (req.getRequiresBank() != null) {
                 em.setRequiresBank(req.getRequiresBank());

@@ -18,6 +18,10 @@ public interface ExpenseDocumentRepository extends JpaRepository<ExpenseDocument
     /** My Entries — the caller's own documents, newest first. */
     List<ExpenseDocument> findByOrgIdAndCreatedByOrderByCreatedAtDesc(Long orgId, Long createdBy, Limit limit);
 
+    /** My Entries with a date window: created in [from, to), newest first. */
+    List<ExpenseDocument> findByOrgIdAndCreatedByAndCreatedAtGreaterThanEqualAndCreatedAtLessThanOrderByCreatedAtDesc(
+        Long orgId, Long createdBy, java.time.Instant from, java.time.Instant to, Limit limit);
+
     /** Cashier inbox (rev 57) — the caller's documents currently in one of these states. */
     List<ExpenseDocument> findByOrgIdAndCreatedByAndWorkflowStatusIn(Long orgId, Long createdBy,
         Collection<com.dams.expense.entity.ExpenseWorkflowStatus> statuses);

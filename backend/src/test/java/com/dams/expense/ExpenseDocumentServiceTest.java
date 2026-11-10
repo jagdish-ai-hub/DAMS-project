@@ -308,14 +308,42 @@ class ExpenseDocumentServiceTest {
     }
 
     @Test
-    void addLine_isRejected_onAClosedDocument() {
-        ExpenseDocument closed = draftDoc();
+    void addLine_onAClosedDocument_reopensToSubmitted_rev92() {
+        ExpenseDocument closed = submittedDoc(JC_PLAIN);
         closed.setWorkflowStatus(ExpenseWorkflowStatus.CLOSED);
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(closed));
+
+        service.addLine(DOC_ID, lineInput(new BigDecimal("100")));
+
+        assertThat(closed.getWorkflowStatus()).isEqualTo(ExpenseWorkflowStatus.SUBMITTED);
+        verify(auditService).recordUserEvent(eq("ExpenseDocument"), eq(DOC_ID), any(), eq(EventType.LINE_ADDED),
+            eq(CASHIER_ID), any());
+        verify(auditService).recordUserEvent(eq("ExpenseDocument"), eq(DOC_ID), any(), eq(EventType.SUBMITTED),
+            eq(CASHIER_ID), any());
+    }
+
+    @Test
+    void addLine_isRejected_onARejectedDocument() {
+        ExpenseDocument rejected = draftDoc();
+        rejected.setWorkflowStatus(ExpenseWorkflowStatus.REJECTED);
+        when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(rejected));
+
+        assertThatThrownBy(() -> service.addLine(DOC_ID, lineInput(new BigDecimal("100"))))
+            .isInstanceOf(DamsException.class)
+            .hasMessageContaining("was rejected");
+        verify(expenseLineRepo, never()).save(any());
+    }
+
+    @Test
+    void addLine_isRejected_onAClaimThatWasClosed() {
+        ExpenseDocument closed = submittedDoc(JC_PLAIN);
+        closed.setWorkflowStatus(ExpenseWorkflowStatus.CLOSED);
+        closed.setClaimClosedAt(java.time.Instant.now());
         when(expenseDocumentRepo.findByIdAndOrgId(DOC_ID, ORG)).thenReturn(Optional.of(closed));
 
         assertThatThrownBy(() -> service.addLine(DOC_ID, lineInput(new BigDecimal("100"))))
             .isInstanceOf(DamsException.class)
-            .hasMessageContaining("no more expense lines");
+            .hasMessageContaining("closed claim");
         verify(expenseLineRepo, never()).save(any());
     }
 

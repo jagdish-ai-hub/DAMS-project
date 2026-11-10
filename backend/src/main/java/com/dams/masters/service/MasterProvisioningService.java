@@ -132,7 +132,7 @@ public class MasterProvisioningService {
         }
 
         settlementModeRepo.saveAll(activeOf(settlementModeRepo.findByOrgIdOrderBySortOrderAscIdAsc(from)).stream()
-            .map(t -> settlementMode(orgId, t.getName(), t.isRequiresBank(), t.isRequiresRef(), t.isCash(), t.getSortOrder()))
+            .map(t -> settlementMode(orgId, t.getName(), t.isRequiresBank(), t.isRequiresRef(), t.isCash(), t.isSkipsFinance(), t.getSortOrder()))
             .toList());
 
         Map<Long, Long> categoryId = new HashMap<>();   // template category id -> new category id
@@ -199,13 +199,13 @@ public class MasterProvisioningService {
         provisionReceiveStatuses(orgId);
 
         settlementModeRepo.saveAll(List.of(
-            settlementMode(orgId, "Cash", false, false, true, 1),
-            settlementMode(orgId, "QR / UPI", false, true, false, 2),
-            settlementMode(orgId, "Bank", true, true, false, 3),
-            settlementMode(orgId, "Card", false, false, false, 4),
-            settlementMode(orgId, "Adv-QR", false, true, false, 5),
-            settlementMode(orgId, "Adv-Cash", false, false, true, 6),
-            settlementMode(orgId, "Credit (Due)", false, false, false, 7)));
+            settlementMode(orgId, "Cash", false, false, true, true, 1),
+            settlementMode(orgId, "QR / UPI", false, true, false, true, 2),
+            settlementMode(orgId, "Bank", true, true, false, true, 3),
+            settlementMode(orgId, "Card", false, false, false, false, 4),
+            settlementMode(orgId, "Adv-QR", false, true, false, false, 5),
+            settlementMode(orgId, "Adv-Cash", false, false, true, true, 6),
+            settlementMode(orgId, "Credit (Due)", false, false, false, false, 7)));
 
         Map<String, Long> categoryId = new HashMap<>();
         for (ExpenseCategory c : expenseCategoryRepo.saveAll(List.of(
@@ -273,11 +273,13 @@ public class MasterProvisioningService {
     }
 
     private static SettlementMode settlementMode(Long orgId, String name,
-                                                 boolean requiresBank, boolean requiresRef, boolean cash, int sort) {
+                                                 boolean requiresBank, boolean requiresRef, boolean cash,
+                                                 boolean skipsFinance, int sort) {
         SettlementMode m = named(new SettlementMode(), orgId, name, sort);
         m.setRequiresBank(requiresBank);
         m.setRequiresRef(requiresRef);
         m.setCash(cash);
+        m.setSkipsFinance(skipsFinance);
         return m;
     }
 

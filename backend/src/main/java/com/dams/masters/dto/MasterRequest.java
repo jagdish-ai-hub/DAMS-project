@@ -33,6 +33,7 @@ public class MasterRequest {
     private Boolean requiresBank;
     private Boolean requiresRef;
     private Boolean isCash;
+    private Boolean skipsFinance;   // settlement-modes only (rev 91) — "No Finance step needed"
 
     // expense-statuses only
     private Boolean triggersClaim;

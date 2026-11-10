@@ -76,10 +76,10 @@ import java.util.stream.Collectors;
  *    never reused.
  *  - {@code over_limit} is recomputed after every line change: true when any line exceeds
  *    its sub-category's limit. It flags, it never blocks.
- *  - Lines stay addable until the Accountant closes the document (Stage 7) — Add Expense is
- *    refused only once the document is CLOSED or REJECTED. Adding a line to a VERIFIED/
- *    APPROVED document reopens it to SUBMITTED — a line nobody has reviewed should never
- *    sit under an already-approved status.
+ *  - Add Expense is refused only for a REJECTED document, one whose claim was closed, or one
+ *    awaiting FM pre-approval (rev 92). Adding a line to a VERIFIED/APPROVED/CLOSED document
+ *    reopens it to SUBMITTED — a line nobody has reviewed should never sit under an
+ *    already-approved status. Existing lines stay locked, same as a settled receipt.
  *  - "Transfer to Claim" (business status) is allowed only when the expense sits on a job
  *    card that carries a Claim Type ({@code job_card.claim_type_id}). Enforced on the
  *    create/patch path and on the dedicated endpoint.
@@ -258,7 +258,9 @@ public class ExpenseDocumentService {
         // Same rule as the receive side: a new line on an already-reviewed document means
         // the Accountant/FM approved a smaller picture than what's now on record — reopen
         // it for re-review rather than leaving an unchecked line under an approved status.
-        if (doc.getWorkflowStatus() == ExpenseWorkflowStatus.VERIFIED || doc.getWorkflowStatus() == ExpenseWorkflowStatus.APPROVED) {
+        if (doc.getWorkflowStatus() == ExpenseWorkflowStatus.VERIFIED
+            || doc.getWorkflowStatus() == ExpenseWorkflowStatus.APPROVED
+            || doc.getWorkflowStatus() == ExpenseWorkflowStatus.CLOSED) {
             ExpenseWorkflowStatus reopenedFrom = doc.getWorkflowStatus();
             doc.setWorkflowStatus(ExpenseWorkflowStatus.SUBMITTED);
             doc.setSubmittedAt(Instant.now());
@@ -815,10 +817,12 @@ public class ExpenseDocumentService {
     }
 
     private void requireAcceptsLines(ExpenseDocument doc) {
-        if (doc.getWorkflowStatus() == ExpenseWorkflowStatus.CLOSED
-            || doc.getWorkflowStatus() == ExpenseWorkflowStatus.REJECTED) {
-            throw DamsException.conflict("Document " + describe(doc) + " is " + doc.getWorkflowStatus()
-                + " — it accepts no more expense lines");
+        if (doc.getWorkflowStatus() == ExpenseWorkflowStatus.REJECTED) {
+            throw DamsException.conflict("Document " + describe(doc) + " was rejected — add the expense to a new document");
+        }
+        // Close Claim is final (it settles the claim); a plain CLOSED expense is not.
+        if (doc.getClaimClosedAt() != null) {
+            throw DamsException.conflict("Document " + describe(doc) + " is a closed claim — it accepts no more expense lines");
         }
     }
 

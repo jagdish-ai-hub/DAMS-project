@@ -7,16 +7,29 @@ import { card, ErrorBanner, inr, Badge, ghostBtn, SkeletonRows } from '../shell/
  * My Entries (AGENT.md decision #8): today + recent, receipts and expenses together,
  * workflow badges, queried items highlighted and opened in edit mode for fix-and-resubmit.
  */
+const PAGE = 50
+
 export default function MyEntriesPage() {
   const navigate = useNavigate()
   const [entries, setEntries] = useState<MyEntry[] | null>(null)
   const [error, setError] = useState('')
+  // rev 92 — the list used to stop at the newest 50 with no way to see older ones.
+  const [limit, setLimit] = useState(PAGE)
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  const [loadingMore, setLoadingMore] = useState(false)
 
   useEffect(() => {
-    myEntriesApi.list()
-      .then(({ data }) => setEntries(data))
+    setLoadingMore(true)
+    myEntriesApi.list({ limit, from, to })
+      .then(({ data }) => { setEntries(data); setError('') })
       .catch((e) => setError((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Could not load your entries.'))
-  }, [])
+      .finally(() => setLoadingMore(false))
+  }, [limit, from, to])
+
+  const filtered = from !== '' || to !== ''
+  // A full page back means there may be more behind it.
+  const hasMore = entries != null && entries.length >= limit
 
   const today = entries?.filter((e) => e.today) ?? []
   const earlier = entries?.filter((e) => !e.today) ?? []
@@ -42,17 +55,50 @@ export default function MyEntriesPage() {
         Every receipt and expense you've entered. Queried items are highlighted — open one to fix and resubmit.
       </div>
 
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 14 }}>
+        <label style={{ fontSize: '0.74rem', color: 'var(--muted)', display: 'grid', gap: 3 }}>
+          From
+          <input type="date" aria-label="From date" value={from} max={to || undefined}
+            onChange={(e) => { setFrom(e.target.value); setLimit(PAGE) }}
+            style={{ border: '1.5px solid var(--line)', borderRadius: 6, padding: '6px 8px', fontSize: '0.82rem' }} />
+        </label>
+        <label style={{ fontSize: '0.74rem', color: 'var(--muted)', display: 'grid', gap: 3 }}>
+          To
+          <input type="date" aria-label="To date" value={to} min={from || undefined}
+            onChange={(e) => { setTo(e.target.value); setLimit(PAGE) }}
+            style={{ border: '1.5px solid var(--line)', borderRadius: 6, padding: '6px 8px', fontSize: '0.82rem' }} />
+        </label>
+        {filtered && (
+          <button type="button" onClick={() => { setFrom(''); setTo(''); setLimit(PAGE) }} style={{ ...ghostBtn, minHeight: 34 }}>
+            Clear dates
+          </button>
+        )}
+        {entries != null && (
+          <span style={{ marginLeft: 'auto', fontSize: '0.78rem', color: 'var(--muted)' }}>
+            Showing {entries.length} {entries.length === 1 ? 'entry' : 'entries'}{hasMore ? ' — more available' : ''}
+          </span>
+        )}
+      </div>
+
       <ErrorBanner message={error} />
       {entries == null && <SkeletonRows rows={6} height={56} />}
 
       {entries != null && entries.length === 0 && (
         <div style={{ ...card, color: 'var(--faint)', fontSize: '0.85rem' }}>
-          You haven't entered anything yet.
+          {filtered ? 'Nothing entered in these dates.' : "You haven't entered anything yet."}
         </div>
       )}
 
       {today.length > 0 && <Group title="Today" rows={today} onOpen={openEntry} />}
       {earlier.length > 0 && <Group title="Earlier" rows={earlier} onOpen={openEntry} />}
+
+      {hasMore && (
+        <div style={{ textAlign: 'center', margin: '4px 0 24px' }}>
+          <button type="button" onClick={() => setLimit((n) => n + PAGE)} disabled={loadingMore} style={{ ...ghostBtn, minHeight: 38 }}>
+            {loadingMore ? 'Loading…' : 'Load more'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

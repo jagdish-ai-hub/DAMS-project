@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -33,9 +34,12 @@ public class MyEntriesController {
     }
 
     @GetMapping
-    @Operation(summary = "List my documents, newest first")
-    public List<MyEntryResponse> list() {
-        return myEntriesService.list();
+    @Operation(summary = "List my documents, newest first (limit, optional from/to day — rev 92)")
+    public List<MyEntryResponse> list(
+        @RequestParam(defaultValue = "50") int limit,
+        @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate from,
+        @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate to) {
+        return myEntriesService.list(limit, from, to);
     }
 
     @GetMapping("/inbox")

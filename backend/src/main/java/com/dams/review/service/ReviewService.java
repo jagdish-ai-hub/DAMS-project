@@ -488,6 +488,7 @@ public class ReviewService {
                 receiveDocumentRepo.save(doc);
                 auditService.recordUserEvent(RECEIVE, doc.getId(), doc.getBranchId(), EventType.VERIFIED, me.getId(),
                     detail("documentNo", doc.getDocumentNo(), "bulk", true));
+                autoApproveIfNoFinanceStep(orgId, doc, me, true);
                 verifiedIds.add(doc.getId());
                 log.info("Bulk verified receipt: orgId={} docId={} by={}", orgId, doc.getId(), me.getId());
             } catch (Exception e) {
@@ -525,11 +526,11 @@ public class ReviewService {
 
         Map<Long, JobCard> jobCards = jobCardsById(orgId, docs.stream().map(ReceiveDocument::getJobCardId).toList());
         Long creditStatusId = creditStatusId(orgId);
-        Set<Long> cashModeIds = cashModeIds(orgId);
+        Set<Long> noFinanceModeIds = noFinanceModeIds(orgId);
         Map<Long, List<SettlementLine>> linesByDoc = groupSettlementLines(orgId, docs.stream().map(ReceiveDocument::getId).toList());
 
         List<ReceiveDocument> eligible = docs.stream()
-            .filter(d -> isDirectApproveEligible(jobCards.get(d.getJobCardId()), creditStatusId, cashModeIds,
+            .filter(d -> isDirectApproveEligible(jobCards.get(d.getJobCardId()), creditStatusId, noFinanceModeIds,
                 linesByDoc.getOrDefault(d.getId(), List.of())))
             .toList();
         return toReceiptItems(orgId, eligible);
@@ -545,10 +546,7 @@ public class ReviewService {
             doc.getWorkflowStatus() == WorkflowStatus.SUBMITTED, doc.getWorkflowStatus());
         requireDirectApproveEligible(orgId, doc);
 
-        doc.setWorkflowStatus(WorkflowStatus.APPROVED);
-        receiveDocumentRepo.save(doc);
-        auditService.recordUserEvent(RECEIVE, doc.getId(), doc.getBranchId(), EventType.APPROVED, me.getId(),
-            detail("directByAccountant", true));
+        approveWithoutFinance(orgId, doc, me);
         log.info("Receipt direct-approved by accountant: orgId={} docId={} by={}", orgId, doc.getId(), me.getId());
         return receiveDocumentService.get(id);
     }
@@ -575,13 +573,10 @@ public class ReviewService {
                     continue;
                 }
                 if (!isDirectApproveEligible(orgId, doc)) {
-                    skippedReasons.add(label + " is not eligible (claim, Credit status, or a non-cash line)");
+                    skippedReasons.add(label + " is not eligible (claim, Credit status, or a line in a mode that needs Finance)");
                     continue;
                 }
-                doc.setWorkflowStatus(WorkflowStatus.APPROVED);
-                receiveDocumentRepo.save(doc);
-                auditService.recordUserEvent(RECEIVE, doc.getId(), doc.getBranchId(), EventType.APPROVED, me.getId(),
-                    detail("documentNo", doc.getDocumentNo(), "directByAccountant", true, "bulk", true));
+                approveWithoutFinance(orgId, doc, me, "bulk", true);
                 approvedIds.add(doc.getId());
                 log.info("Bulk direct-approved receipt: orgId={} docId={} by={}", orgId, doc.getId(), me.getId());
             } catch (Exception e) {
@@ -589,6 +584,40 @@ public class ReviewService {
             }
         }
         return new BulkApproveResponse(approvedIds.size(), approvedIds, skippedReasons);
+    }
+
+    /** Finishes a receipt without the Finance Manager: APPROVED, files frozen like every approval, audited. */
+    private void approveWithoutFinance(Long orgId, ReceiveDocument doc, AppUser me, Object... extraDetail) {
+        doc.setWorkflowStatus(WorkflowStatus.APPROVED);
+        receiveDocumentRepo.save(doc);
+        List<Long> lineIds = settlementLineRepo.findByOrgIdAndReceiveDocumentIdOrderByLineNoAsc(orgId, doc.getId())
+            .stream().map(SettlementLine::getId).toList();
+        attachmentService.freezeReceiveDocument(orgId, doc.getId(), lineIds);
+        Object[] kv = new Object[extraDetail.length + 4];
+        kv[0] = "documentNo";
+        kv[1] = doc.getDocumentNo();
+        kv[2] = "directByAccountant";
+        kv[3] = true;
+        System.arraycopy(extraDetail, 0, kv, 4, extraDetail.length);
+        auditService.recordUserEvent(RECEIVE, doc.getId(), doc.getBranchId(), EventType.APPROVED, me.getId(), detail(kv));
+    }
+
+    /**
+     * rev 91 — a just-verified receipt that needs no Finance step (no claim, not Credit, every line in a
+     * "No Finance step needed" mode) is approved in the same step, when the organisation's Accountant
+     * direct-approve switch is on. Returns whether it did.
+     */
+    private boolean autoApproveIfNoFinanceStep(Long orgId, ReceiveDocument doc, AppUser me, boolean bulk) {
+        if (doc.getWorkflowStatus() != WorkflowStatus.VERIFIED) {
+            return false;
+        }
+        Organization org = organizationRepo.findById(orgId).orElse(null);
+        if (org == null || !org.isAccountantDirectApproveCash() || !isDirectApproveEligible(orgId, doc)) {
+            return false;
+        }
+        approveWithoutFinance(orgId, doc, me, "auto", true, "bulk", bulk ? true : null);
+        log.info("Receipt approved without Finance on verify: orgId={} docId={} by={}", orgId, doc.getId(), me.getId());
+        return true;
     }
 
     private void requireDirectApproveEnabled(Long orgId) {
@@ -603,18 +632,18 @@ public class ReviewService {
     private void requireDirectApproveEligible(Long orgId, ReceiveDocument doc) {
         if (!isDirectApproveEligible(orgId, doc)) {
             throw DamsException.conflict("Document " + describe(doc)
-                + " is not eligible for direct approval — it's a claim, marked Credit, or has a non-cash line");
+                + " doesn't qualify to skip the Finance Manager — it's a claim, marked Credit, or has a line in a mode that needs Finance");
         }
     }
 
     private boolean isDirectApproveEligible(Long orgId, ReceiveDocument doc) {
         JobCard jc = jobCardRepo.findByIdAndOrgId(doc.getJobCardId(), orgId).orElse(null);
         List<SettlementLine> lines = settlementLineRepo.findByOrgIdAndReceiveDocumentIdInOrderByLineNoAsc(orgId, List.of(doc.getId()));
-        return isDirectApproveEligible(jc, creditStatusId(orgId), cashModeIds(orgId), lines);
+        return isDirectApproveEligible(jc, creditStatusId(orgId), noFinanceModeIds(orgId), lines);
     }
 
-    /** No claim type, business status isn't "Credit", every settlement line is cash-mode. */
-    private static boolean isDirectApproveEligible(JobCard jc, Long creditStatusId, Set<Long> cashModeIds,
+    /** rev 91 — no claim type, business status isn't "Credit", every settlement line is in a "No Finance step needed" mode. */
+    private static boolean isDirectApproveEligible(JobCard jc, Long creditStatusId, Set<Long> noFinanceModeIds,
                                                     List<SettlementLine> lines) {
         if (jc == null || jc.getClaimTypeId() != null) {
             return false;
@@ -625,7 +654,7 @@ public class ReviewService {
         if (lines.isEmpty()) {
             return false;   // nothing settled yet — nothing to approve
         }
-        return lines.stream().allMatch(l -> cashModeIds.contains(l.getSettlementModeId()));
+        return lines.stream().allMatch(l -> noFinanceModeIds.contains(l.getSettlementModeId()));
     }
 
     private Long creditStatusId(Long orgId) {
@@ -633,8 +662,9 @@ public class ReviewService {
             .map(ReceiveBusinessStatus::getId).orElse(null);
     }
 
-    private Set<Long> cashModeIds(Long orgId) {
-        return settlementModeRepo.findByOrgIdAndCashTrue(orgId).stream()
+    /** rev 91 — the settlement modes the Owner ticked "No Finance step needed" (Masters → Settlement modes). */
+    private Set<Long> noFinanceModeIds(Long orgId) {
+        return settlementModeRepo.findByOrgIdAndSkipsFinanceTrue(orgId).stream()
             .map(SettlementMode::getId).collect(Collectors.toSet());
     }
 
@@ -1097,6 +1127,9 @@ public class ReviewService {
         }
         auditService.recordUserEvent(RECEIVE, doc.getId(), doc.getBranchId(), event, me.getId(),
             detail("documentNo", doc.getDocumentNo(), noteKey, noteVal));
+        if (required == WorkflowStatus.SUBMITTED && next == WorkflowStatus.VERIFIED) {
+            autoApproveIfNoFinanceStep(orgId, doc, me, false);   // rev 91 — cash / bank never waits for Finance
+        }
         if (refreshSettle) {
             receiveDocumentService.refreshSettlement(id);
         }
@@ -1186,7 +1219,7 @@ public class ReviewService {
         Map<Long, String> categoryNames = receiveCategoryNames(orgId);
         Map<Long, List<SettlementLine>> linesByDoc = groupSettlementLines(orgId, docs.stream().map(ReceiveDocument::getId).toList());
         Long creditStatusId = creditStatusId(orgId);
-        Set<Long> cashModeIds = cashModeIds(orgId);
+        Set<Long> noFinanceModeIds = noFinanceModeIds(orgId);
 
         List<ReviewQueueItem> out = new ArrayList<>(docs.size());
         for (ReceiveDocument d : docs) {
@@ -1199,7 +1232,7 @@ public class ReviewService {
                 : (jc != null && jc.getInvoiceAmount() != null ? jc.getInvoiceAmount() : BigDecimal.ZERO);
             boolean hasOverride = lines.stream().anyMatch(l -> l.getOverriddenBy() != null);
             boolean isClaim = jc != null && jc.getClaimTypeId() != null;
-            boolean isCashEligible = isDirectApproveEligible(jc, creditStatusId, cashModeIds, lines);
+            boolean isCashEligible = isDirectApproveEligible(jc, creditStatusId, noFinanceModeIds, lines);
             boolean isCredit = creditStatusId != null && jc != null && creditStatusId.equals(jc.getBusinessStatusId());
 
             out.add(new ReviewQueueItem("receipt", d.getId(), d.getDocumentNo(),

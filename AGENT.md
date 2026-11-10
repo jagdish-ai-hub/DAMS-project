@@ -39,16 +39,25 @@ accountants, plus the owner's live window into branch operations.
   submitted entries, can override amounts (provisional — still needs FM
   approval downstream) or the job card's invoice amount, queries or rejects
   with a reason. Closes Expense documents explicitly.
-  **Direct approval (org opt-in, default OFF — rev 46):** when an Owner
-  turns on `accountant_direct_approve_cash` in Settings, an Accountant may
-  approve a SUBMITTED receipt directly — one click, straight to APPROVED,
-  skipping the Finance Manager — but only when it is not a claim (no
-  `claim_type_id`), its business status isn't "Credit", and every
-  settlement line is cash-mode. Everything else still requires FM approval
-  as usual. See plan.md rev 46.
+  **Cash / bank receipts never go to the Finance Manager (rev 91).** A
+  receipt that is **not a claim** (no `claim_type_id`), whose business status
+  **isn't "Credit"**, and whose every settlement line is in a mode the Owner
+  has ticked **"No Finance step needed"** (Masters → Settlement modes; Cash,
+  QR / UPI and Bank start ticked, AMC/WRNTY and CGW unticked) is **finished
+  by the Accountant**. Pressing **Verify** — one by one or in bulk — takes it
+  straight to **APPROVED**; the audit trail still shows *Verified* then
+  *Approved (automatically — no Finance step)*. The Accountant's old
+  **direct approve** of a SUBMITTED receipt follows the same rule. Everything
+  else (a claim, Credit, a line in an unticked mode) still waits for the
+  Finance Manager as usual. The Owner's organisation switch **Accountant
+  direct approve** (`accountant_direct_approve_cash`, Settings) still
+  controls the whole rule: when it is OFF every receipt goes to Finance. It
+  is ON for every organisation today. (Before rev 91 only all-**cash**
+  receipts qualified and only through the bulk action — Verify always sent
+  them to Finance. See plan.md rev 46 and rev 91.)
   **Accountant queue buckets (rev 69):** the Receipts queue splits into
-  *Cash* (the direct-approve rule above — the only bucket with bulk
-  approve), *Credit* (business status is "Credit", not a claim) and *Claim
+  *Cash & bank* (the no-Finance-step rule above — the only bucket with bulk
+  action), *Credit* (business status is "Credit", not a claim) and *Claim
   Transaction* (has a claim type). "Credit" means exactly the Credit status
   — a Received receipt paid part cash / part bank is **not** Credit — so a
   receipt leaves Credit the moment its status is changed (by the Accountant,
@@ -248,6 +257,13 @@ has `org_id = null`.
    Close Claim ends it. The Accountant's **Close expense** button stays for
    expenses verified before this rule. (Before rev 74 the Accountant had to
    press Close expense as a separate step, and expenses sat at VERIFIED.)
+   **A closed expense reopens like a closed receipt (rev 92).** "Add Expense"
+   works on a Verified, Approved **or Closed** expense: the new line is added,
+   every existing line stays locked, and the expense drops back to Submitted for
+   re-review (audit shows the new line, then Submitted with `reopenedFrom`).
+   Refused only for a Rejected expense, one waiting for Finance Manager
+   pre-approval, or an expense whose **claim was closed** by the Finance
+   Manager (Close Claim is final).
    **Receiver Contact (rev 75).** The expense form has an optional Receiver
    Contact (mobile number). Typing one updates that receiver's saved phone,
    on create and on edit; leaving it blank never erases a saved number.
@@ -819,7 +835,7 @@ auth, like an S3 presigned URL), `/swagger-ui.html`, `/swagger-ui/**`,
 | Review | `review/controller/ReviewController` | `GET /review/receipts|expenses|cash`, `GET /review/receipts/direct-approve-eligible`, `GET /review/fm/receipts|expenses|cash`, `POST /receipts/{id}/verify|query|reject`, `POST /receipts/{id}/resubmit-to-fm`, `POST /receipts/{id}/lines/{lineNo}/override`, `POST /receipts/{id}/override-invoice-amount`, `POST /receipts/{id}/direct-approve`, `POST /receipts/direct-approve` (bulk), `POST /receipts/{id}/approve`, `POST /expenses/{id}/verify|query|reject`, `POST /expenses/{id}/resubmit-to-fm`, `POST /expenses/{id}/lines/{lineNo}/override`, `POST /expenses/{id}/close`, `POST /expenses/{id}/approve`, `GET /review/fm/expense-requests`, `POST /expenses/{id}/pre-approve`, `POST /expenses/{id}/query-approval`, `POST /cash-documents/{id}/verify|approve|query|reject`, `POST /cash-documents/{id}/resubmit-to-fm` |
 | Search | `search/controller/SearchController` | `GET /search?q=` |
 | AI assistant | `ai/controller/AiController` | `POST /ai/ask`, `GET /ai/brief`, `GET /ai/benchmark`, `GET /ai/anomalies`, `GET /ai/risk`, `GET /ai/queries/roots`, `GET /ai/claims/insights`, `GET /ai/cash/advice`, `GET /ai/close/checklist`, `GET /ai/receivers/duplicates`, `GET /ai/masters/health`, `GET /ai/limits/advice`, `GET /ai/search` (all read-only; only write is `ai_query_log` trace row) |
-| My Entries | `myentries/controller/MyEntriesController` | `GET /my-entries` |
+| My Entries | `myentries/controller/MyEntriesController` | `GET /my-entries?limit=&from=&to=` (rev 92: newest first, 50 by default, "Load more" and a date range) |
 | Dashboard | `dashboard/controller/DashboardController` | `GET /dashboard/summary`, `GET /dashboard/outstanding`, `GET /dashboard/activity` |
 | Override audit | `audit/controller/OverrideAuditController` | `GET /override-audit` (Owner+FM, filterable user/branch/date) |
 | Attachments | `attachment/controller/AttachmentController` | `GET /attachments/{id}`, `DELETE /attachments/{id}`, `GET /attachments/raw` (public w/ signature) |

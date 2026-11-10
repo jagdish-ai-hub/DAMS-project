@@ -2,6 +2,8 @@
 
 Your home screen is **Approvals & Claims**. It lists every entry the accountant has verified and passed up to you for the final decision. Nothing counts as real money in the business until you approve it here.
 
+**Cash and bank receipts don't come to you.** A receipt that isn't a claim, isn't marked Credit, and is paid only in modes the owner ticked *No Finance step needed* (Cash, QR / UPI and Bank by default) is finished by the accountant the moment they verify it. You see claims, Credit receipts and payments in other modes.
+
 ## Expense approval requests from cashiers
 
 When a cashier's expense has a line **above its sub-category limit**, or is in a status that needs your approval (such as **Requires Finance Approval**), they can't submit it — they send it to you first. You'll see a card at the top of **Approvals & Claims** saying how many requests are waiting, and the same requests at the top of the **Expenses** tab under **Approval requests from cashiers**.
