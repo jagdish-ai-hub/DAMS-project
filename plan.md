@@ -7,6 +7,14 @@
 
 ## Revision log
 
+- **rev 92 (2026-11-10)** — **A closed expense reopens when the cashier adds a line; My Entries can show everything.**
+  (1) `ExpenseDocumentService.addLine` refused CLOSED expenses since rev 74 auto-closed them, so "Add Expense" on a
+  settled expense failed. It now works on VERIFIED / APPROVED / **CLOSED** — existing lines stay locked, the expense drops
+  back to SUBMITTED with a `reopenedFrom` audit event — and is refused only for REJECTED, awaiting FM pre-approval, or a
+  claim closed by Close Claim. The form had a second bug: saving an existing expense always patched the header first,
+  which the server rejects once reviewed, so a new row on a reviewed expense never saved; the patch is now skipped
+  unless the expense is a draft or queried. (2) `GET /my-entries` takes `limit` (default 50, max 1000), `from`, `to`;
+  the page gets a date range, a *Load more* button and a count (the list used to stop at the newest 50).
 - **rev 91 (2026-11-10)** — **Cash and bank receipts never go to the Finance Manager, decided by the owner.** Bug report
   (new organisation): cash receipts "still going to finance". Cause: the Accountant's direct approval was bulk-only
   and all-cash-only, so **Verify** (the normal click) always sent them to Finance — 8 all-cash and ~25 UPI / bank

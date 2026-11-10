@@ -52,7 +52,10 @@ export const myEntriesApi = {
   inbox() {
     return api.get<CashierInbox>('/api/v1/my-entries/inbox')
   },
-  list() {
-    return api.get<MyEntry[]>('/api/v1/my-entries')
+  /** Newest first. `limit` grows with "Load more"; from/to are optional YYYY-MM-DD days. */
+  list(opts: { limit?: number; from?: string; to?: string } = {}) {
+    return api.get<MyEntry[]>('/api/v1/my-entries', {
+      params: { limit: opts.limit, from: opts.from || undefined, to: opts.to || undefined },
+    })
   },
 }

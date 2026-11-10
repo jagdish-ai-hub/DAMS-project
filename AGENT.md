@@ -257,6 +257,13 @@ has `org_id = null`.
    Close Claim ends it. The Accountant's **Close expense** button stays for
    expenses verified before this rule. (Before rev 74 the Accountant had to
    press Close expense as a separate step, and expenses sat at VERIFIED.)
+   **A closed expense reopens like a closed receipt (rev 92).** "Add Expense"
+   works on a Verified, Approved **or Closed** expense: the new line is added,
+   every existing line stays locked, and the expense drops back to Submitted for
+   re-review (audit shows the new line, then Submitted with `reopenedFrom`).
+   Refused only for a Rejected expense, one waiting for Finance Manager
+   pre-approval, or an expense whose **claim was closed** by the Finance
+   Manager (Close Claim is final).
    **Receiver Contact (rev 75).** The expense form has an optional Receiver
    Contact (mobile number). Typing one updates that receiver's saved phone,
    on create and on edit; leaving it blank never erases a saved number.
@@ -828,7 +835,7 @@ auth, like an S3 presigned URL), `/swagger-ui.html`, `/swagger-ui/**`,
 | Review | `review/controller/ReviewController` | `GET /review/receipts|expenses|cash`, `GET /review/receipts/direct-approve-eligible`, `GET /review/fm/receipts|expenses|cash`, `POST /receipts/{id}/verify|query|reject`, `POST /receipts/{id}/resubmit-to-fm`, `POST /receipts/{id}/lines/{lineNo}/override`, `POST /receipts/{id}/override-invoice-amount`, `POST /receipts/{id}/direct-approve`, `POST /receipts/direct-approve` (bulk), `POST /receipts/{id}/approve`, `POST /expenses/{id}/verify|query|reject`, `POST /expenses/{id}/resubmit-to-fm`, `POST /expenses/{id}/lines/{lineNo}/override`, `POST /expenses/{id}/close`, `POST /expenses/{id}/approve`, `GET /review/fm/expense-requests`, `POST /expenses/{id}/pre-approve`, `POST /expenses/{id}/query-approval`, `POST /cash-documents/{id}/verify|approve|query|reject`, `POST /cash-documents/{id}/resubmit-to-fm` |
 | Search | `search/controller/SearchController` | `GET /search?q=` |
 | AI assistant | `ai/controller/AiController` | `POST /ai/ask`, `GET /ai/brief`, `GET /ai/benchmark`, `GET /ai/anomalies`, `GET /ai/risk`, `GET /ai/queries/roots`, `GET /ai/claims/insights`, `GET /ai/cash/advice`, `GET /ai/close/checklist`, `GET /ai/receivers/duplicates`, `GET /ai/masters/health`, `GET /ai/limits/advice`, `GET /ai/search` (all read-only; only write is `ai_query_log` trace row) |
-| My Entries | `myentries/controller/MyEntriesController` | `GET /my-entries` |
+| My Entries | `myentries/controller/MyEntriesController` | `GET /my-entries?limit=&from=&to=` (rev 92: newest first, 50 by default, "Load more" and a date range) |
 | Dashboard | `dashboard/controller/DashboardController` | `GET /dashboard/summary`, `GET /dashboard/outstanding`, `GET /dashboard/activity` |
 | Override audit | `audit/controller/OverrideAuditController` | `GET /override-audit` (Owner+FM, filterable user/branch/date) |
 | Attachments | `attachment/controller/AttachmentController` | `GET /attachments/{id}`, `DELETE /attachments/{id}`, `GET /attachments/raw` (public w/ signature) |
