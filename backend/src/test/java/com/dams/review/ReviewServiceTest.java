@@ -296,7 +296,7 @@ class ReviewServiceTest {
     private void stubEligible() {
         when(jobCardRepo.findByIdAndOrgId(11L, ORG)).thenReturn(Optional.of(plainJobCard()));
         when(receiveBusinessStatusRepo.findByOrgIdAndNameIgnoreCase(ORG, "Credit")).thenReturn(Optional.of(creditStatus()));
-        when(settlementModeRepo.findByOrgIdAndCashTrue(ORG)).thenReturn(List.of(cashMode()));
+        when(settlementModeRepo.findByOrgIdAndSkipsFinanceTrue(ORG)).thenReturn(List.of(cashMode()));
         when(settlementLineRepo.findByOrgIdAndReceiveDocumentIdInOrderByLineNoAsc(ORG, List.of(R_ID)))
             .thenReturn(List.of(settlementLine(1, new BigDecimal("500"))));
     }
@@ -336,13 +336,13 @@ class ReviewServiceTest {
         stubDirectApproveOn();
         when(jobCardRepo.findByIdAndOrgId(11L, ORG)).thenReturn(Optional.of(claimJobCard()));
         lenient().when(receiveBusinessStatusRepo.findByOrgIdAndNameIgnoreCase(ORG, "Credit")).thenReturn(Optional.of(creditStatus()));
-        lenient().when(settlementModeRepo.findByOrgIdAndCashTrue(ORG)).thenReturn(List.of(cashMode()));
+        lenient().when(settlementModeRepo.findByOrgIdAndSkipsFinanceTrue(ORG)).thenReturn(List.of(cashMode()));
         lenient().when(settlementLineRepo.findByOrgIdAndReceiveDocumentIdInOrderByLineNoAsc(ORG, List.of(R_ID)))
             .thenReturn(List.of(settlementLine(1, new BigDecimal("500"))));
 
         assertThatThrownBy(() -> service.directApproveReceipt(R_ID))
             .isInstanceOf(DamsException.class)
-            .hasMessageContaining("not eligible");
+            .hasMessageContaining("doesn't qualify to skip the Finance Manager");
         assertThat(doc.getWorkflowStatus()).isEqualTo(WorkflowStatus.SUBMITTED);
     }
 
@@ -355,13 +355,130 @@ class ReviewServiceTest {
         stubDirectApproveOn();
         when(jobCardRepo.findByIdAndOrgId(11L, ORG)).thenReturn(Optional.of(jc));
         when(receiveBusinessStatusRepo.findByOrgIdAndNameIgnoreCase(ORG, "Credit")).thenReturn(Optional.of(creditStatus()));
-        lenient().when(settlementModeRepo.findByOrgIdAndCashTrue(ORG)).thenReturn(List.of(cashMode()));
+        lenient().when(settlementModeRepo.findByOrgIdAndSkipsFinanceTrue(ORG)).thenReturn(List.of(cashMode()));
         lenient().when(settlementLineRepo.findByOrgIdAndReceiveDocumentIdInOrderByLineNoAsc(ORG, List.of(R_ID)))
             .thenReturn(List.of(settlementLine(1, new BigDecimal("500"))));
 
         assertThatThrownBy(() -> service.directApproveReceipt(R_ID))
             .isInstanceOf(DamsException.class)
-            .hasMessageContaining("not eligible");
+            .hasMessageContaining("doesn't qualify to skip the Finance Manager");
+    }
+
+    // ---------------------------------------------------- rev 91: cash / bank never waits for Finance
+
+    @Test
+    void verifyReceipt_noClaim_notCredit_everyLineInANoFinanceMode_isApprovedInTheSameStep() {
+        ReceiveDocument doc = receiveDoc(WorkflowStatus.SUBMITTED);
+        when(receiveDocumentRepo.findByIdAndOrgId(R_ID, ORG)).thenReturn(Optional.of(doc));
+        stubDirectApproveOn();
+        stubEligible();
+
+        service.verifyReceipt(R_ID);
+
+        assertThat(doc.getWorkflowStatus()).isEqualTo(WorkflowStatus.APPROVED);
+        verify(auditService).recordUserEvent(eq("ReceiveDocument"), eq(R_ID), eq(BRANCH),
+            eq(EventType.VERIFIED), eq(ACTOR_ID), any());
+        verify(auditService).recordUserEvent(eq("ReceiveDocument"), eq(R_ID), eq(BRANCH),
+            eq(EventType.APPROVED), eq(ACTOR_ID),
+            argThat(m -> Boolean.TRUE.equals(m.get("directByAccountant")) && Boolean.TRUE.equals(m.get("auto"))));
+        verify(attachmentService).freezeReceiveDocument(eq(ORG), eq(R_ID), any());
+    }
+
+    @Test
+    void verifyReceipt_aClaim_staysVerifiedForTheFinanceManager() {
+        ReceiveDocument doc = receiveDoc(WorkflowStatus.SUBMITTED);
+        when(receiveDocumentRepo.findByIdAndOrgId(R_ID, ORG)).thenReturn(Optional.of(doc));
+        stubDirectApproveOn();
+        when(jobCardRepo.findByIdAndOrgId(11L, ORG)).thenReturn(Optional.of(claimJobCard()));
+        lenient().when(receiveBusinessStatusRepo.findByOrgIdAndNameIgnoreCase(ORG, "Credit")).thenReturn(Optional.of(creditStatus()));
+        lenient().when(settlementModeRepo.findByOrgIdAndSkipsFinanceTrue(ORG)).thenReturn(List.of(cashMode()));
+        lenient().when(settlementLineRepo.findByOrgIdAndReceiveDocumentIdInOrderByLineNoAsc(ORG, List.of(R_ID)))
+            .thenReturn(List.of(settlementLine(1, new BigDecimal("500"))));
+
+        service.verifyReceipt(R_ID);
+
+        assertThat(doc.getWorkflowStatus()).isEqualTo(WorkflowStatus.VERIFIED);
+        verify(auditService, never()).recordUserEvent(any(), any(), any(), eq(EventType.APPROVED), any(), any());
+    }
+
+    @Test
+    void verifyReceipt_statusCredit_staysVerifiedForTheFinanceManager() {
+        ReceiveDocument doc = receiveDoc(WorkflowStatus.SUBMITTED);
+        JobCard jc = plainJobCard();
+        jc.setBusinessStatusId(99L);   // the Credit status id
+        when(receiveDocumentRepo.findByIdAndOrgId(R_ID, ORG)).thenReturn(Optional.of(doc));
+        stubDirectApproveOn();
+        when(jobCardRepo.findByIdAndOrgId(11L, ORG)).thenReturn(Optional.of(jc));
+        when(receiveBusinessStatusRepo.findByOrgIdAndNameIgnoreCase(ORG, "Credit")).thenReturn(Optional.of(creditStatus()));
+        lenient().when(settlementModeRepo.findByOrgIdAndSkipsFinanceTrue(ORG)).thenReturn(List.of(cashMode()));
+        lenient().when(settlementLineRepo.findByOrgIdAndReceiveDocumentIdInOrderByLineNoAsc(ORG, List.of(R_ID)))
+            .thenReturn(List.of(settlementLine(1, new BigDecimal("500"))));
+
+        service.verifyReceipt(R_ID);
+
+        assertThat(doc.getWorkflowStatus()).isEqualTo(WorkflowStatus.VERIFIED);
+    }
+
+    @Test
+    void verifyReceipt_aLineInAModeThatNeedsFinance_staysVerified() {
+        ReceiveDocument doc = receiveDoc(WorkflowStatus.SUBMITTED);
+        SettlementLine claimModeLine = settlementLine(1, new BigDecimal("500"));
+        claimModeLine.setSettlementModeId(77L);   // a mode the Owner has NOT ticked "No Finance step needed"
+        when(receiveDocumentRepo.findByIdAndOrgId(R_ID, ORG)).thenReturn(Optional.of(doc));
+        stubDirectApproveOn();
+        when(jobCardRepo.findByIdAndOrgId(11L, ORG)).thenReturn(Optional.of(plainJobCard()));
+        when(receiveBusinessStatusRepo.findByOrgIdAndNameIgnoreCase(ORG, "Credit")).thenReturn(Optional.of(creditStatus()));
+        when(settlementModeRepo.findByOrgIdAndSkipsFinanceTrue(ORG)).thenReturn(List.of(cashMode()));
+        when(settlementLineRepo.findByOrgIdAndReceiveDocumentIdInOrderByLineNoAsc(ORG, List.of(R_ID)))
+            .thenReturn(List.of(settlementLine(1, new BigDecimal("500")), claimModeLine));
+
+        service.verifyReceipt(R_ID);
+
+        assertThat(doc.getWorkflowStatus()).isEqualTo(WorkflowStatus.VERIFIED);
+    }
+
+    @Test
+    void verifyReceipt_whenTheOrganisationSwitchIsOff_staysVerified_asBefore() {
+        ReceiveDocument doc = receiveDoc(WorkflowStatus.SUBMITTED);
+        when(receiveDocumentRepo.findByIdAndOrgId(R_ID, ORG)).thenReturn(Optional.of(doc));
+        when(organizationRepo.findById(ORG)).thenReturn(Optional.of(organization(false)));
+
+        service.verifyReceipt(R_ID);
+
+        assertThat(doc.getWorkflowStatus()).isEqualTo(WorkflowStatus.VERIFIED);
+        verify(auditService, never()).recordUserEvent(any(), any(), any(), eq(EventType.APPROVED), any(), any());
+    }
+
+    @Test
+    void bulkVerifyReceipts_approvesTheQualifyingOnes_andLeavesTheRestVerified() {
+        ReceiveDocument cashDoc = receiveDoc(WorkflowStatus.SUBMITTED);
+        ReceiveDocument claimDoc = receiveDoc(WorkflowStatus.SUBMITTED);
+        ReflectionTestUtils.setField(claimDoc, "id", 502L);
+        claimDoc.setJobCardId(12L);
+        when(receiveDocumentRepo.findByIdAndOrgId(R_ID, ORG)).thenReturn(Optional.of(cashDoc));
+        when(receiveDocumentRepo.findByIdAndOrgId(502L, ORG)).thenReturn(Optional.of(claimDoc));
+        when(organizationRepo.findById(ORG)).thenReturn(Optional.of(organization(true)));
+        when(jobCardRepo.findByIdAndOrgId(11L, ORG)).thenReturn(Optional.of(plainJobCard()));
+        when(jobCardRepo.findByIdAndOrgId(12L, ORG)).thenReturn(Optional.of(claimJobCard()));
+        when(receiveBusinessStatusRepo.findByOrgIdAndNameIgnoreCase(ORG, "Credit")).thenReturn(Optional.of(creditStatus()));
+        when(settlementModeRepo.findByOrgIdAndSkipsFinanceTrue(ORG)).thenReturn(List.of(cashMode()));
+        when(settlementLineRepo.findByOrgIdAndReceiveDocumentIdInOrderByLineNoAsc(any(), any()))
+            .thenReturn(List.of(settlementLine(1, new BigDecimal("500"))));
+
+        service.bulkVerifyReceipts(List.of(R_ID, 502L));
+
+        assertThat(cashDoc.getWorkflowStatus()).isEqualTo(WorkflowStatus.APPROVED);
+        assertThat(claimDoc.getWorkflowStatus()).isEqualTo(WorkflowStatus.VERIFIED);
+    }
+
+    @Test
+    void resubmitReceiptToFm_isNotSkipped_theFinanceManagerAskedForIt() {
+        ReceiveDocument doc = receiveDoc(WorkflowStatus.FM_QUERIED);
+        when(receiveDocumentRepo.findByIdAndOrgId(R_ID, ORG)).thenReturn(Optional.of(doc));
+
+        service.resubmitReceiptToFm(R_ID);
+
+        assertThat(doc.getWorkflowStatus()).isEqualTo(WorkflowStatus.VERIFIED);
     }
 
     @Test
@@ -373,13 +490,13 @@ class ReviewServiceTest {
         stubDirectApproveOn();
         when(jobCardRepo.findByIdAndOrgId(11L, ORG)).thenReturn(Optional.of(plainJobCard()));
         when(receiveBusinessStatusRepo.findByOrgIdAndNameIgnoreCase(ORG, "Credit")).thenReturn(Optional.of(creditStatus()));
-        when(settlementModeRepo.findByOrgIdAndCashTrue(ORG)).thenReturn(List.of(cashMode()));
+        when(settlementModeRepo.findByOrgIdAndSkipsFinanceTrue(ORG)).thenReturn(List.of(cashMode()));
         when(settlementLineRepo.findByOrgIdAndReceiveDocumentIdInOrderByLineNoAsc(ORG, List.of(R_ID)))
             .thenReturn(List.of(bankLine));
 
         assertThatThrownBy(() -> service.directApproveReceipt(R_ID))
             .isInstanceOf(DamsException.class)
-            .hasMessageContaining("not eligible");
+            .hasMessageContaining("doesn't qualify to skip the Finance Manager");
     }
 
     @Test
@@ -406,7 +523,7 @@ class ReviewServiceTest {
         when(jobCardRepo.findByOrgIdAndIdIn(ORG, List.of(11L, 12L)))
             .thenReturn(List.of(plainJobCard(), claimJc));
         when(receiveBusinessStatusRepo.findByOrgIdAndNameIgnoreCase(ORG, "Credit")).thenReturn(Optional.of(creditStatus()));
-        when(settlementModeRepo.findByOrgIdAndCashTrue(ORG)).thenReturn(List.of(cashMode()));
+        when(settlementModeRepo.findByOrgIdAndSkipsFinanceTrue(ORG)).thenReturn(List.of(cashMode()));
         SettlementLine line501 = settlementLine(1, new BigDecimal("500"));
         ReflectionTestUtils.setField(line501, "id", 9501L);
         line501.setReceiveDocumentId(501L);
@@ -437,7 +554,7 @@ class ReviewServiceTest {
         when(jobCardRepo.findByIdAndOrgId(11L, ORG)).thenReturn(Optional.of(plainJobCard()));
         when(jobCardRepo.findByIdAndOrgId(12L, ORG)).thenReturn(Optional.of(claimJobCard()));
         when(receiveBusinessStatusRepo.findByOrgIdAndNameIgnoreCase(ORG, "Credit")).thenReturn(Optional.of(creditStatus()));
-        when(settlementModeRepo.findByOrgIdAndCashTrue(ORG)).thenReturn(List.of(cashMode()));
+        when(settlementModeRepo.findByOrgIdAndSkipsFinanceTrue(ORG)).thenReturn(List.of(cashMode()));
         SettlementLine line501 = settlementLine(1, new BigDecimal("500"));
         line501.setReceiveDocumentId(501L);
         SettlementLine line502 = settlementLine(1, new BigDecimal("500"));
@@ -1218,7 +1335,7 @@ class ReviewServiceTest {
         when(jobCardRepo.findByOrgIdAndIdIn(ORG, java.util.List.of(11L))).thenReturn(java.util.List.of(plainJobCard()));
         when(settlementLineRepo.findByOrgIdAndReceiveDocumentIdInOrderByLineNoAsc(ORG, java.util.List.of(R_ID)))
             .thenReturn(java.util.List.of(settlementLine(1, new BigDecimal("500"))));
-        when(settlementModeRepo.findByOrgIdAndCashTrue(ORG)).thenReturn(java.util.List.of(cashMode()));
+        when(settlementModeRepo.findByOrgIdAndSkipsFinanceTrue(ORG)).thenReturn(java.util.List.of(cashMode()));
         when(receiveBusinessStatusRepo.findByOrgIdAndNameIgnoreCase(ORG, "Credit")).thenReturn(Optional.empty());
 
         var result = service.receiptQueue();
@@ -1238,7 +1355,7 @@ class ReviewServiceTest {
         when(jobCardRepo.findByOrgIdAndIdIn(ORG, java.util.List.of(11L))).thenReturn(java.util.List.of(claimJobCard()));
         when(settlementLineRepo.findByOrgIdAndReceiveDocumentIdInOrderByLineNoAsc(ORG, java.util.List.of(R_ID)))
             .thenReturn(java.util.List.of());
-        when(settlementModeRepo.findByOrgIdAndCashTrue(ORG)).thenReturn(java.util.List.of());
+        when(settlementModeRepo.findByOrgIdAndSkipsFinanceTrue(ORG)).thenReturn(java.util.List.of());
         when(receiveBusinessStatusRepo.findByOrgIdAndNameIgnoreCase(ORG, "Credit")).thenReturn(Optional.empty());
 
         var result = service.receiptQueue();
@@ -1264,7 +1381,7 @@ class ReviewServiceTest {
         bank.setSettlementModeId(2L);   // not a cash-mode
         when(settlementLineRepo.findByOrgIdAndReceiveDocumentIdInOrderByLineNoAsc(ORG, java.util.List.of(R_ID)))
             .thenReturn(java.util.List.of(settlementLine(1, new BigDecimal("3000")), bank));
-        when(settlementModeRepo.findByOrgIdAndCashTrue(ORG)).thenReturn(java.util.List.of(cashMode()));
+        when(settlementModeRepo.findByOrgIdAndSkipsFinanceTrue(ORG)).thenReturn(java.util.List.of(cashMode()));
         when(receiveBusinessStatusRepo.findByOrgIdAndNameIgnoreCase(ORG, "Credit")).thenReturn(Optional.of(creditStatus()));
 
         JobCard received = plainJobCard();                  // status 6, "Received"

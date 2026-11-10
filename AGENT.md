@@ -39,16 +39,25 @@ accountants, plus the owner's live window into branch operations.
   submitted entries, can override amounts (provisional — still needs FM
   approval downstream) or the job card's invoice amount, queries or rejects
   with a reason. Closes Expense documents explicitly.
-  **Direct approval (org opt-in, default OFF — rev 46):** when an Owner
-  turns on `accountant_direct_approve_cash` in Settings, an Accountant may
-  approve a SUBMITTED receipt directly — one click, straight to APPROVED,
-  skipping the Finance Manager — but only when it is not a claim (no
-  `claim_type_id`), its business status isn't "Credit", and every
-  settlement line is cash-mode. Everything else still requires FM approval
-  as usual. See plan.md rev 46.
+  **Cash / bank receipts never go to the Finance Manager (rev 91).** A
+  receipt that is **not a claim** (no `claim_type_id`), whose business status
+  **isn't "Credit"**, and whose every settlement line is in a mode the Owner
+  has ticked **"No Finance step needed"** (Masters → Settlement modes; Cash,
+  QR / UPI and Bank start ticked, AMC/WRNTY and CGW unticked) is **finished
+  by the Accountant**. Pressing **Verify** — one by one or in bulk — takes it
+  straight to **APPROVED**; the audit trail still shows *Verified* then
+  *Approved (automatically — no Finance step)*. The Accountant's old
+  **direct approve** of a SUBMITTED receipt follows the same rule. Everything
+  else (a claim, Credit, a line in an unticked mode) still waits for the
+  Finance Manager as usual. The Owner's organisation switch **Accountant
+  direct approve** (`accountant_direct_approve_cash`, Settings) still
+  controls the whole rule: when it is OFF every receipt goes to Finance. It
+  is ON for every organisation today. (Before rev 91 only all-**cash**
+  receipts qualified and only through the bulk action — Verify always sent
+  them to Finance. See plan.md rev 46 and rev 91.)
   **Accountant queue buckets (rev 69):** the Receipts queue splits into
-  *Cash* (the direct-approve rule above — the only bucket with bulk
-  approve), *Credit* (business status is "Credit", not a claim) and *Claim
+  *Cash & bank* (the no-Finance-step rule above — the only bucket with bulk
+  action), *Credit* (business status is "Credit", not a claim) and *Claim
   Transaction* (has a claim type). "Credit" means exactly the Credit status
   — a Received receipt paid part cash / part bank is **not** Credit — so a
   receipt leaves Credit the moment its status is changed (by the Accountant,

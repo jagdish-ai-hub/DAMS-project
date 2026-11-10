@@ -30,4 +30,11 @@ public class SettlementMode extends OrgMaster {
     /** True for physical-cash modes (Cash, Adv-Cash) — these feed the Cash-page drawer. */
     @Column(name = "is_cash", nullable = false)
     private boolean cash = false;
+
+    /**
+     * rev 91 — a receipt whose every line is in a mode with this ticked (and that is not a claim and not
+     * "Credit") is finished by the Accountant and never goes to the Finance Manager. Owner-editable.
+     */
+    @Column(name = "skips_finance", nullable = false)
+    private boolean skipsFinance = false;
 }

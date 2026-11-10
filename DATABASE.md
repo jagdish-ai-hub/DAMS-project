@@ -209,7 +209,7 @@ erDiagram
   branch_cash_opening }o--|| branch : "branch_id"
   cash_day_close }o--|| branch : "branch_id"
   audit_event }o--o| branch : "branch_id"
-  user_role_grant }o--o| branch : "branch_id"
+  user_role_grant }o--|| branch : "branch_id"
   customer }o--o| branch : "created_branch_id"
 ```
 
@@ -338,6 +338,7 @@ erDiagram
     int sort_order
     timestamptz created_at
     boolean is_cash
+    boolean skips_finance
   }
   upi_vpa {
     bigint id PK
@@ -398,6 +399,7 @@ erDiagram
     timestamptz created_at
     bigint created_branch_id FK
     varchar address
+    varchar gst_no
   }
   expense_document {
     bigint id PK

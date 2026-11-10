@@ -42,7 +42,7 @@ beforeEach(() => {
 async function openCreditBucket() {
   render(<MemoryRouter><ReviewQueuePage /></MemoryRouter>)
   await screen.findAllByText('Manoj')
-  await userEvent.click(screen.getByRole('button', { name: /^Cash\/Credit/ }))
+  await userEvent.click(screen.getByRole('button', { name: /^Cash & bank \/ Credit/ }))
   await userEvent.click(screen.getByTitle(/leave this list once the status is changed/))
 }
 

@@ -11,7 +11,8 @@ Money received from a customer.
 ```mermaid
 flowchart TD
   A["Draft<br/>Cashier"] -->|"Submit"| B["Submitted<br/>Accountant checks"]
-  B -->|"Verify"| C["Verified<br/>Finance Manager decides"]
+  B -->|"Verify: cash or bank,<br/>not a claim, not Credit"| D
+  B -->|"Verify: claim, Credit,<br/>or a mode needing Finance"| C["Verified<br/>Finance Manager decides"]
   C -->|"Approve"| D["Approved ✓"]
   C -->|"Warranty / AMC / CG claim:<br/>Close Claim + final amount"| D
   B -.->|"Query"| Q["Queried<br/>back to the Cashier"]
@@ -115,7 +116,7 @@ flowchart TD
 | **Waiting for FM approval** *(expense)* | Finance Manager | They **Approve** (with an optional comment) or **Query** it back. Then the cashier submits. |
 | **Submitted** | Accountant | They **Verify**, **Query** or **Reject**. |
 | **Queried** | Cashier | The cashier reads the note, fixes it and resubmits. |
-| **Verified** | Finance Manager | They **Approve**, **Query** or **Reject**. An in-limit expense never waits here — it closes when verified. A claim waits here for **Close Claim**. |
+| **Verified** | Finance Manager | They **Approve**, **Query** or **Reject**. A cash or bank receipt (not a claim, not Credit) never waits here — it is approved when the accountant verifies. An in-limit expense never waits here — it closes when verified. A claim waits here for **Close Claim**. |
 | **Queried by Finance Manager** | Accountant | The accountant fixes it and resends it straight to the Finance Manager. |
 | **Approved** | Nobody — it's done | Locked. A new payment added later reopens a receipt for review. |
 | **Closed** *(expense)* | Nobody — it's done | Locked for good. |

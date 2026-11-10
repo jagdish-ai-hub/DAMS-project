@@ -25,6 +25,7 @@ public record MasterResponse(
     Boolean requiresBank,
     Boolean requiresRef,
     Boolean isCash,
+    Boolean skipsFinance,           // settlement-modes only (rev 91)
     Boolean triggersClaim,
     Boolean requiresFmApproval,     // expense-statuses only (rev 54)
     Long expenseCategoryId,
@@ -46,6 +47,7 @@ public record MasterResponse(
         Boolean requiresBank = null;
         Boolean requiresRef = null;
         Boolean isCash = null;
+        Boolean skipsFinance = null;
         Boolean triggersClaim = null;
         Boolean requiresFmApproval = null;
         Long expenseCategoryId = null;
@@ -57,6 +59,7 @@ public record MasterResponse(
             requiresBank = sm.isRequiresBank();
             requiresRef = sm.isRequiresRef();
             isCash = sm.isCash();
+            skipsFinance = sm.isSkipsFinance();
         } else if (m instanceof ExpenseMode em) {
             requiresBank = em.isRequiresBank();
             requiresRef = em.isRequiresRef();
@@ -77,7 +80,7 @@ public record MasterResponse(
 
         return new MasterResponse(
             m.getId(), type.slug(), m.getName(), m.isActive(), m.getSortOrder(),
-            requiresBank, requiresRef, isCash, triggersClaim, requiresFmApproval, expenseCategoryId, limitAmount, vpa,
+            requiresBank, requiresRef, isCash, skipsFinance, triggersClaim, requiresFmApproval, expenseCategoryId, limitAmount, vpa,
             deprecated, allowedRoles);
     }
 }

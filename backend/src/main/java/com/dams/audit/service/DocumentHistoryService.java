@@ -84,7 +84,9 @@ public class DocumentHistoryService {
             }
             case LINE_ADDED -> "Line added";
             case VERIFIED -> "Verified";
-            case APPROVED -> "Approved";
+            case APPROVED -> Boolean.TRUE.equals(d.get("directByAccountant"))
+                ? "Approved by the Accountant — no Finance step needed"
+                : "Approved";
             case QUERIED -> Boolean.TRUE.equals(d.get("preApproval")) ? "Approval request queried" : "Queried";
             case REJECTED -> "Rejected";
             case OVERRIDE -> "Overrode a line amount";

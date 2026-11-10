@@ -7,6 +7,15 @@
 
 ## Revision log
 
+- **rev 91 (2026-11-10)** — **Cash and bank receipts never go to the Finance Manager, decided by the owner.** Bug report
+  (new organisation): cash receipts "still going to finance". Cause: the Accountant's direct approval was bulk-only
+  and all-cash-only, so **Verify** (the normal click) always sent them to Finance — 8 all-cash and ~25 UPI / bank
+  receipts were waiting there. Now a receipt with no claim, a status other than Credit, and every line in a settlement
+  mode ticked **"No Finance step needed"** (`settlement_mode.skips_finance`, V47; Cash, QR / UPI, Bank ticked by
+  default, copied from the template org to new organisations) goes **VERIFIED → APPROVED in the same step** when the
+  Accountant verifies it (single and bulk); direct approve of a SUBMITTED receipt uses the same eligibility. The org
+  switch `accountant_direct_approve_cash` still gates it. Masters gets the tick box; the Accountant's bucket is renamed
+  *Cash & bank*.
 - **rev 90 (2026-11-07)** — **Backend froze every ~1.5 days: the JVM's Metaspace (loaded-class storage) hit its 128 MB cap.**
   Diagnosed read-only on the VPS from a thread dump taken during a freeze: Metaspace used 126.7 of 128 MiB (class space 16.7 MiB,
   ~24k classes) while the heap was only 65 of 448 MiB — so it was never a heap or RAM problem. The first

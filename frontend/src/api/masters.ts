@@ -24,6 +24,8 @@ export interface MasterRow {
   sortOrder: number
   requiresBank?: boolean
   requiresRef?: boolean
+  /** settlement-modes only (rev 91): a receipt paid only in modes with this ticked never goes to the Finance Manager. */
+  skipsFinance?: boolean
   triggersClaim?: boolean
   /** expense-statuses only (rev 54): an expense in this status needs FM approval before submit. */
   requiresFmApproval?: boolean
@@ -42,6 +44,7 @@ export interface MasterRequest {
   sortOrder?: number
   requiresBank?: boolean
   requiresRef?: boolean
+  skipsFinance?: boolean
   triggersClaim?: boolean
   requiresFmApproval?: boolean
   expenseCategoryId?: number

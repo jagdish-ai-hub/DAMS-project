@@ -40,7 +40,7 @@ function fmtGroupDate(key: string): string {
  * Receipts only. 'awaiting' is the flat, unfiltered list (no bulk actions — just click in and
  * Verify/Query one at a time). The other three are views over the same `items`, split by the
  * rule the org's direct-approve toggle already uses: no claim + status isn't "Credit" + every
- * line cash-mode = 'cash' (the only bucket with bulk select/approve). 'credit' is simply a
+ * line in a "No Finance step needed" mode (rev 91; Cash, QR / UPI, Bank by default) = 'cash' (the only bucket with bulk select/approve). 'credit' is simply a
  * non-claim receipt whose business status is "Credit" (rev 69) — it leaves the bucket when the
  * status is changed. A receipt that is neither (e.g. Received, part cash / part bank) shows
  * under All only. Anything with a claim type is 'claim'.
@@ -374,7 +374,7 @@ function QueuePane(props: {
   const showBulkCheckboxes = props.type === 'expense'
     || (props.type === 'receipt' && props.receiptBucket === 'cash')
   const bucketLabel = props.type !== 'receipt' ? 'Awaiting your review'
-    : props.receiptBucket === 'cash' ? 'Cash — eligible for direct approval'
+    : props.receiptBucket === 'cash' ? 'Cash & bank — approved when you verify, no Finance step'
       : props.receiptBucket === 'credit' ? 'Credit — status marked Credit'
         : props.receiptBucket === 'claim' ? 'Claim transactions'
           : 'Awaiting your review'
@@ -397,7 +397,7 @@ function QueuePane(props: {
         <div style={{ padding: '0 12px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ display: 'flex', gap: 6 }}>
             <BucketButton
-              label="Cash/Credit" count={props.cashCount + props.creditCount}
+              label="Cash & bank / Credit" count={props.cashCount + props.creditCount}
               active={props.receiptBucket === 'cash' || props.receiptBucket === 'credit'}
               onClick={props.onToggleCashCreditGroup}
             />
@@ -410,7 +410,7 @@ function QueuePane(props: {
           {props.cashCreditOpen && (
             <div style={{ display: 'flex', gap: 6, paddingLeft: 12 }}>
               <BucketButton
-                label="Cash" count={props.cashCount} small
+                label="Cash & bank" count={props.cashCount} small
                 active={props.receiptBucket === 'cash'}
                 onClick={() => props.onSelectCashCreditSub('cash')}
                 title="No claim, status isn't Credit, every line cash-mode — approve without Finance Manager review"
@@ -702,7 +702,7 @@ export function QueueRow({
 
 const BUCKET_CHIPS: { v: ReceiptBucket; label: string }[] = [
   { v: 'awaiting', label: 'All' },
-  { v: 'cash', label: 'Cash' },
+  { v: 'cash', label: 'Cash & bank' },
   { v: 'credit', label: 'Credit' },
   { v: 'claim', label: 'Claim' },
 ]

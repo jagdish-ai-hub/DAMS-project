@@ -310,12 +310,13 @@ function OrgSettingsForm() {
           style={{ marginTop: 3 }}
         />
         <span>
-          <strong>Accountant direct-approve (cash receipts)</strong>
+          <strong>Accountant approves cash and bank receipts</strong>
           <div style={{ color: 'var(--muted)', fontSize: '0.8rem', marginTop: 2 }}>
-            When on, an Accountant can approve a submitted receipt directly — skipping the
-            Finance Manager — as long as it's not a claim, its status isn't "Credit", and every
-            line is cash-mode. Everything else still needs Finance Manager approval as usual.
-            Default off.
+            When on, a receipt that is not a claim, whose status isn't "Credit", and whose every line
+            is in a payment mode ticked "No Finance step needed" (Masters → Settlement modes) is
+            finished by the Accountant when they verify it — it never goes to the Finance Manager.
+            Everything else still needs Finance Manager approval as usual. When off, every receipt
+            goes to the Finance Manager.
           </div>
         </span>
       </label>

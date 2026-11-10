@@ -142,6 +142,7 @@ export default function MastersPage() {
                 <tr>
                   <th style={th}>Name</th>
                   {tab.extra === 'mode' && <th style={th}>Requires</th>}
+                  {tab.extra === 'mode' && <th style={th}>No Finance step</th>}
                   {tab.extra === 'sub' && <th style={th}>Limit</th>}
                   {tab.extra === 'estatus' && <th style={th}>Needs FM approval</th>}
                   {tab.extra === 'upi' && <th style={th}>UPI ID</th>}
@@ -165,6 +166,7 @@ export default function MastersPage() {
                         {[r.requiresBank && 'bank', r.requiresRef && 'ref'].filter(Boolean).join(' + ') || '—'}
                       </td>
                     )}
+                    {tab.extra === 'mode' && <td style={td}>{r.skipsFinance ? 'Yes' : '—'}</td>}
                     {tab.extra === 'sub' && <td style={td}>{r.limitAmount != null ? inr(r.limitAmount) : '—'}</td>}
                     {tab.extra === 'estatus' && <td style={td}>{r.requiresFmApproval ? 'Yes' : '—'}</td>}
                     {tab.extra === 'upi' && <td style={{ ...td, fontFamily: 'Consolas, monospace', fontSize: '0.78rem' }}>{r.vpa}</td>}
@@ -234,6 +236,7 @@ function MasterModal(props: {
   const [active, setActive] = useState(editing?.active ?? true)
   const [requiresBank, setRequiresBank] = useState(editing?.requiresBank ?? false)
   const [requiresRef, setRequiresRef] = useState(editing?.requiresRef ?? false)
+  const [skipsFinance, setSkipsFinance] = useState(editing?.skipsFinance ?? false)
   const [limitAmount, setLimitAmount] = useState(editing?.limitAmount != null ? String(editing.limitAmount) : '')
   const [vpa, setVpa] = useState(editing?.vpa ?? '')
   const [requiresFmApproval, setRequiresFmApproval] = useState(editing?.requiresFmApproval ?? false)
@@ -257,7 +260,7 @@ function MasterModal(props: {
       const body: MasterRequest = { name }
       if (sortOrder !== '') body.sortOrder = Number(sortOrder)
       if (editing) body.active = active
-      if (tab.extra === 'mode') { body.requiresBank = requiresBank; body.requiresRef = requiresRef }
+      if (tab.extra === 'mode') { body.requiresBank = requiresBank; body.requiresRef = requiresRef; body.skipsFinance = skipsFinance }
       if (tab.extra === 'sub') {
         body.expenseCategoryId = editing?.expenseCategoryId ?? props.parentId ?? undefined
         body.limitAmount = limitAmount === '' ? null : Number(limitAmount)
@@ -308,6 +311,13 @@ function MasterModal(props: {
             <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.85rem' }}>
               <input type="checkbox" checked={requiresRef} onChange={(e) => setRequiresRef(e.target.checked)} />
               Requires a transaction reference
+            </label>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: '0.85rem' }}>
+              <input type="checkbox" checked={skipsFinance} onChange={(e) => setSkipsFinance(e.target.checked)} style={{ marginTop: 3 }} />
+              <span>
+                <strong>No Finance step needed</strong> — a receipt paid only in modes like this (not a claim, not
+                Credit) is finished by the Accountant and never goes to the Finance Manager.
+              </span>
             </label>
           </div>
         )}
