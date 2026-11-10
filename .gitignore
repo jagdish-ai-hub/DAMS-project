@@ -36,3 +36,4 @@ GEMINI.md
 
 # Logs
 *.log
+*.tsbuildinfo
