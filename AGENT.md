@@ -624,6 +624,15 @@ flag the conflict and ask rather than silently working around it.
    sub-categories, settlement/payment modes, expense limits, business
    status lists, bank list, receivers/vendors. Every dropdown the app
    shows comes from these tables, never from hard-coded lists.
+   **A QR payment is tagged to the bank it was paid into (rev 93).** Each
+   payment mode has two Owner ticks — *requires a bank name* and *requires a
+   transaction reference* — and when a mode requires a bank the line cannot be
+   saved without one ("QR / UPI needs a bank"). **QR / UPI** (receipt
+   settlement lines and expense lines) and **Adv-QR** now start with the bank
+   tick **on** in every organisation, next to its reference tick; Bank already
+   had both. Entries saved earlier without a bank are left alone; picking the
+   bank is only asked when such a line is edited or the document is
+   resubmitted. The Owner can untick it per organisation in Masters.
    **Job-card business statuses are additionally role-mapped**: each status
    records which roles may set it, so a role's dropdown shows only its own
    statuses. The mapping is Owner-editable data, not code — see plan.md

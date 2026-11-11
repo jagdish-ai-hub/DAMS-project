@@ -7,6 +7,14 @@
 
 ## Revision log
 
+- **rev 93 (2026-11-11)** — **QR payments are tagged to a bank.** Owner request: "Enable bank selection even for QR pay —
+  the transaction needs to be tagged to which bank payment was done." The bank requirement was already a per-mode tick
+  (`requires_bank`, enforced in `ReceiveDocumentService` / `ExpenseDocumentService`, and the bank dropdown on both forms
+  and the Add Payment dialog follows it); QR / UPI just shipped with it off. V48 turns it on for settlement modes
+  **QR / UPI** and **Adv-QR** and the expense mode **QR / UPI** in every org; new orgs get the same defaults from
+  `MasterProvisioningService` (and copy the template org). Existing lines without a bank are untouched; the bank is
+  only demanded when such a line is edited or its document resubmitted. No new endpoint, field or screen — Masters'
+  tick lets the Owner switch it off per org.
 - **rev 92 (2026-11-10)** — **A closed expense reopens when the cashier adds a line; My Entries can show everything.**
   (1) `ExpenseDocumentService.addLine` refused CLOSED expenses since rev 74 auto-closed them, so "Add Expense" on a
   settled expense failed. It now works on VERIFIED / APPROVED / **CLOSED** — existing lines stay locked, the expense drops

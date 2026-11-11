@@ -200,10 +200,10 @@ public class MasterProvisioningService {
 
         settlementModeRepo.saveAll(List.of(
             settlementMode(orgId, "Cash", false, false, true, true, 1),
-            settlementMode(orgId, "QR / UPI", false, true, false, true, 2),
+            settlementMode(orgId, "QR / UPI", true, true, false, true, 2),
             settlementMode(orgId, "Bank", true, true, false, true, 3),
             settlementMode(orgId, "Card", false, false, false, false, 4),
-            settlementMode(orgId, "Adv-QR", false, true, false, false, 5),
+            settlementMode(orgId, "Adv-QR", true, true, false, false, 5),
             settlementMode(orgId, "Adv-Cash", false, false, true, true, 6),
             settlementMode(orgId, "Credit (Due)", false, false, false, false, 7)));
 
@@ -236,7 +236,7 @@ public class MasterProvisioningService {
 
         expenseModeRepo.saveAll(List.of(
             expenseMode(orgId, "Cash", false, false, true, 1),
-            expenseMode(orgId, "QR / UPI", false, true, false, 2),
+            expenseMode(orgId, "QR / UPI", true, true, false, 2),
             expenseMode(orgId, "Bank", true, true, false, 3)));
 
         expenseBusinessStatusRepo.saveAll(List.of(
