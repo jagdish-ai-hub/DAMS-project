@@ -114,6 +114,8 @@ public class DocumentHistoryService {
             case VEHICLE_MOVED -> "Vehicle moved"
                 + (d.get("fromCustomerName") != null && d.get("toCustomerName") != null
                     ? ": " + d.get("fromCustomerName") + " → " + d.get("toCustomerName") : "");
+            // Organization / module-level events (rev 94), never on a document — keep the switch exhaustive
+            case SPARE_PERMISSIONS_CHANGED -> "Spare Parts permissions changed";
         };
     }
 

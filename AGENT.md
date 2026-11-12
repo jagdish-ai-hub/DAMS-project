@@ -113,6 +113,40 @@ One person can hold more than one job. Each user has a **primary role**
 - A revoked grant takes effect on the next request (the acting role is
   re-checked against the DB); the user is sent back to login.
 
+## Modules and module roles (rev 94)
+
+DAMS grows by **modules** that live inside this one app and this one database (not
+separate services). The finance core described in this file is unchanged by any
+module. Every new module follows the same recipe:
+
+1. **Own code package** (`com.dams.<module>`), own frontend folder, own short spec in
+   `docs/modules/<module>.md`. A module's rules live in its spec, not in this file.
+2. **Own table prefix** (`inv_` for Spare Parts) so the owner of a table is obvious from
+   its name. One database, no separate schemas. Every table carries `org_id`.
+3. **Per-organization on/off switch**, set by Super Admin in Organizations, **off by
+   default**. With the switch off the server refuses every module endpoint (not just
+   hides the menu) and the module adds nothing to any screen.
+4. **Read others, write only your own.** A module may *read* shared data (branch, user,
+   customer, vehicle, job card) but never writes another module's tables. The Finance
+   core never reads a module's tables.
+5. **Add-only database changes.** A module's migration creates its own tables and adds
+   nullable columns/flags; it never alters or removes existing data or meaning.
+
+**Spare Parts** (`inv_*`, `docs/modules/spare-parts.md`) is the first module: local spare
+stock per branch, billing a part against a job card, and branch-to-branch requests. It
+adds two **primary roles**, assigned to branches exactly like an Accountant (one or more
+branches via `user_branch_access`) and also usable as Owner-granted extra roles:
+
+- **INVENTORY_MANAGER** and **STORE_KEEPER** — both see stock in *every* branch (the
+  point of the module is "search here first") but may act only on their own assigned
+  branches. What each may do is an **Owner-editable permission grid** (Masters → Spare
+  Parts), enforced by the server on every action. The Owner (and nobody else) assigns
+  these roles and edits the grid; the Owner sees the module's dashboard read-only and
+  acts through **Switch role**, like any other role.
+- Stock is never overwritten: every change is an append-only row in the stock ledger
+  (`inv_movement`) and the branch quantity is the running total. A mistake is fixed by a
+  correcting row, never an edit or delete.
+
 ## Multi-tenancy
 
 **Approach: shared database, shared schema, `org_id` on every tenant-scoped
@@ -624,6 +658,15 @@ flag the conflict and ask rather than silently working around it.
    sub-categories, settlement/payment modes, expense limits, business
    status lists, bank list, receivers/vendors. Every dropdown the app
    shows comes from these tables, never from hard-coded lists.
+   **A QR payment is tagged to the bank it was paid into (rev 93).** Each
+   payment mode has two Owner ticks — *requires a bank name* and *requires a
+   transaction reference* — and when a mode requires a bank the line cannot be
+   saved without one ("QR / UPI needs a bank"). **QR / UPI** (receipt
+   settlement lines and expense lines) and **Adv-QR** now start with the bank
+   tick **on** in every organisation, next to its reference tick; Bank already
+   had both. Entries saved earlier without a bank are left alone; picking the
+   bank is only asked when such a line is edited or the document is
+   resubmitted. The Owner can untick it per organisation in Masters.
    **Job-card business statuses are additionally role-mapped**: each status
    records which roles may set it, so a role's dropdown shows only its own
    statuses. The mapping is Owner-editable data, not code — see plan.md
@@ -734,7 +777,11 @@ user per role (Owner, Finance Manager, Accountant, Cashier) with known
 passwords — so anyone can log in and exercise every role immediately. The
 email/invite onboarding flow below is still built and is still the only
 path for real organizations; the seed is a testing convenience that a
-production seed profile will omit.
+production seed profile will omit. **Spare Parts demo logins (rev 95):**
+`inventory@jjmotors.demo` (Inventory Manager, all three branches) and
+`storekeeper@jjmotors.demo` (Store Keeper, Rayagada only), passwords
+`inventory123` / `storekeeper123`; the Spare Parts module is switched **on**
+for the demo organization (migration V50).
 
 A Super Admin panel (organization list, onboard new org + first Owner) does
 not have a mockup yet — build it in the same visual language as these

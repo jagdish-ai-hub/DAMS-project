@@ -15,6 +15,8 @@ import com.dams.common.exception.DamsException;
 import com.dams.common.security.ActingDetails;
 import com.dams.config.TenantContext;
 import com.dams.user.entity.AppUser;
+import com.dams.organization.entity.Organization;
+import com.dams.organization.repository.OrganizationRepository;
 import com.dams.user.entity.Role;
 import com.dams.user.entity.UserRoleGrant;
 import com.dams.user.repository.AppUserRepository;
@@ -46,12 +48,14 @@ public class AuthService {
 
     /** The roles a user can ever switch into — never Owner or Super Admin. */
     private static final Set<Role> SWITCHABLE_ROLES =
-        EnumSet.of(Role.FINANCE_MANAGER, Role.ACCOUNTANT, Role.CASHIER);
+        EnumSet.of(Role.FINANCE_MANAGER, Role.ACCOUNTANT, Role.CASHIER,
+            Role.INVENTORY_MANAGER, Role.STORE_KEEPER);
 
     private final AppUserRepository userRepo;
     private final UserBranchAccessRepository branchAccessRepo;
     private final UserRoleGrantRepository grantRepo;
     private final BranchRepository branchRepo;
+    private final OrganizationRepository orgRepo;
     private final AuditService auditService;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
@@ -60,6 +64,7 @@ public class AuthService {
                        UserBranchAccessRepository branchAccessRepo,
                        UserRoleGrantRepository grantRepo,
                        BranchRepository branchRepo,
+                       OrganizationRepository orgRepo,
                        AuditService auditService,
                        PasswordEncoder passwordEncoder,
                        JwtUtil jwtUtil) {
@@ -67,6 +72,7 @@ public class AuthService {
         this.branchAccessRepo = branchAccessRepo;
         this.grantRepo = grantRepo;
         this.branchRepo = branchRepo;
+        this.orgRepo = orgRepo;
         this.auditService = auditService;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
@@ -168,11 +174,17 @@ public class AuthService {
         Map<Long, Set<Role>> rolesByBranch = new LinkedHashMap<>();
         branches.forEach(b -> rolesByBranch.put(b.getId(), EnumSet.noneOf(Role.class)));
 
+        // The Spare Parts roles are only offered while the module is on for this organization (rev 94).
+        Set<Role> offered = EnumSet.copyOf(SWITCHABLE_ROLES);
+        if (!sparePartsOn(orgId)) {
+            offered.removeIf(Role::isSparePartsRole);
+        }
+
         if (user.getRole() == Role.OWNER) {
-            rolesByBranch.values().forEach(r -> r.addAll(SWITCHABLE_ROLES));
+            rolesByBranch.values().forEach(r -> r.addAll(offered));
         } else {
             for (UserRoleGrant grant : grantRepo.findByUserId(userId)) {
-                if (rolesByBranch.containsKey(grant.getBranchId())) {
+                if (rolesByBranch.containsKey(grant.getBranchId()) && offered.contains(grant.getRole())) {
                     rolesByBranch.get(grant.getBranchId()).add(grant.getRole());
                 }
             }
@@ -221,7 +233,7 @@ public class AuthService {
         if (!branch.isActive()) {
             throw DamsException.badRequest("Branch '" + branch.getCode() + "' is inactive");
         }
-        if (!mayAct(user, target, branchId)) {
+        if (!mayAct(user, target, branchId, orgId)) {
             throw DamsException.forbidden("You have not been given the " + target
                 + " role at branch '" + branch.getCode() + "'");
         }
@@ -231,9 +243,12 @@ public class AuthService {
         return buildResponse(user, target, branchId);
     }
 
-    private boolean mayAct(AppUser user, Role target, Long branchId) {
+    private boolean mayAct(AppUser user, Role target, Long branchId, Long orgId) {
         if (!SWITCHABLE_ROLES.contains(target)) {
             return false;
+        }
+        if (target.isSparePartsRole() && !sparePartsOn(orgId)) {
+            return false; // module switched off for this organization (rev 94)
         }
         if (user.getRole() == Role.OWNER) {
             return true; // the Owner may act as any role at any branch of their org
@@ -248,6 +263,10 @@ public class AuthService {
         detail.put("branchId", branchId);
         auditService.recordUserEvent("AppUser", user.getId(), branchId, EventType.ROLE_SWITCHED,
             user.getId(), detail);
+    }
+
+    private boolean sparePartsOn(Long orgId) {
+        return orgId != null && orgRepo.findById(orgId).map(Organization::isSparePartsEnabled).orElse(false);
     }
 
     private AppUser requireOrgUser(Long userId, Long orgId) {
@@ -272,8 +291,7 @@ public class AuthService {
         // While switched, the token's branch claims describe the ACTING role at the picked branch,
         // so the frontend's existing branchIds / homeBranchId reads stay correct.
         List<Long> branchIds = switched
-            ? (actingRole == Role.ACCOUNTANT || actingRole == Role.FINANCE_MANAGER
-                ? List.of(actingBranchId) : List.of())
+            ? (actingRole.usesBranchAccessRows() ? List.of(actingBranchId) : List.of())
             : loadBranchIds(user);
         Long homeBranchId = switched
             ? (actingRole == Role.CASHIER ? actingBranchId : null)
@@ -290,7 +308,7 @@ public class AuthService {
     }
 
     private List<Long> loadBranchIds(AppUser user) {
-        if (user.getRole() != Role.ACCOUNTANT && user.getRole() != Role.FINANCE_MANAGER) {
+        if (!user.getRole().usesBranchAccessRows()) {
             return List.of();
         }
         return branchAccessRepo.findByUserId(user.getId()).stream()

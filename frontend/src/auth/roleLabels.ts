@@ -7,6 +7,8 @@ export const ROLE_LABEL: Record<Role, string> = {
   FINANCE_MANAGER: 'Finance Manager',
   ACCOUNTANT: 'Accountant',
   CASHIER: 'Cashier',
+  INVENTORY_MANAGER: 'Inventory Manager',
+  STORE_KEEPER: 'Store Keeper',
 }
 
 /**

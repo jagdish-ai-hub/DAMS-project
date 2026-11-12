@@ -4,6 +4,7 @@ import AcceptInvitePage from './auth/AcceptInvitePage'
 import AppShell from './shell/AppShell'
 import ProtectedRoute from './auth/ProtectedRoute'
 import MaintenancePage from './maintenance/MaintenancePage'
+import { SpareAccessProvider } from './spareparts/SpareAccessContext'
 import { MAINTENANCE_MODE, isMaintenanceBlocked, maintenanceBypassed } from './maintenance/maintenance'
 
 export default function App() {
@@ -25,7 +26,9 @@ export default function App() {
         path="/app/*"
         element={
           <ProtectedRoute>
-            <AppShell />
+            <SpareAccessProvider>
+              <AppShell />
+            </SpareAccessProvider>
           </ProtectedRoute>
         }
       />

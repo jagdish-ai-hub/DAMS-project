@@ -11,6 +11,8 @@ import com.dams.branch.entity.Branch;
 import com.dams.branch.repository.BranchRepository;
 import com.dams.common.exception.DamsException;
 import com.dams.config.TenantContext;
+import com.dams.organization.entity.Organization;
+import com.dams.organization.repository.OrganizationRepository;
 import com.dams.user.entity.AppUser;
 import com.dams.user.entity.Role;
 import com.dams.user.entity.UserRoleGrant;
@@ -54,6 +56,7 @@ class AuthServiceSwitchTest {
     @Mock private UserBranchAccessRepository branchAccessRepo;
     @Mock private UserRoleGrantRepository grantRepo;
     @Mock private BranchRepository branchRepo;
+    @Mock private OrganizationRepository orgRepo;
     @Mock private AuditService auditService;
     @Mock private PasswordEncoder passwordEncoder;
 
@@ -62,9 +65,10 @@ class AuthServiceSwitchTest {
 
     @BeforeEach
     void setUp() {
-        service = new AuthService(userRepo, branchAccessRepo, grantRepo, branchRepo, auditService,
+        service = new AuthService(userRepo, branchAccessRepo, grantRepo, branchRepo, orgRepo, auditService,
             passwordEncoder, jwtUtil);
         TenantContext.setOrgId(ORG);
+        sparePartsModule(false); // the module is OFF unless a test turns it on
         lenient().when(branchRepo.findByIdAndOrgId(OOB, ORG)).thenReturn(Optional.of(branch(OOB, "OOB", true)));
         lenient().when(branchRepo.findByIdAndOrgId(OOR, ORG)).thenReturn(Optional.of(branch(OOR, "OOR", true)));
         lenient().when(branchRepo.findByOrgIdOrderByCodeAsc(ORG))
@@ -223,7 +227,58 @@ class AuthServiceSwitchTest {
         });
     }
 
+    // --- Spare Parts roles (rev 94): offered only while the module is on for the organization ---
+
+    @Test
+    void switchOptions_forAnOwner_offersSparePartsRolesOnlyWhenTheModuleIsOn() {
+        user(Role.OWNER);
+        sparePartsModule(true);
+
+        SwitchOptionsResponse options = service.switchOptions(USER);
+
+        assertThat(options.branches()).allSatisfy(b -> assertThat(b.roles()).containsExactlyInAnyOrder(
+            Role.FINANCE_MANAGER, Role.ACCOUNTANT, Role.CASHIER, Role.INVENTORY_MANAGER, Role.STORE_KEEPER));
+    }
+
+    @Test
+    void switchOptions_grantedStoreKeeper_isHiddenWhileTheModuleIsOff() {
+        user(Role.CASHIER);
+        lenient().when(grantRepo.findByUserId(USER)).thenReturn(List.of(grant(Role.STORE_KEEPER, OOR)));
+
+        SwitchOptionsResponse options = service.switchOptions(USER);
+
+        assertThat(options.branches()).isEmpty();
+    }
+
+    @Test
+    void switchRole_toStoreKeeper_isRefusedWhileTheModuleIsOff_evenWithAGrant() {
+        user(Role.CASHIER);
+        lenient().when(grantRepo.existsByUserIdAndRoleAndBranchId(USER, Role.STORE_KEEPER, OOR)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.switchRole(USER, req(Role.STORE_KEEPER, OOR)))
+            .isInstanceOf(DamsException.class);
+    }
+
+    @Test
+    void switchRole_toStoreKeeper_worksOnceTheModuleIsOn_andCarriesThePickedBranch() {
+        user(Role.CASHIER);
+        sparePartsModule(true);
+        lenient().when(grantRepo.existsByUserIdAndRoleAndBranchId(USER, Role.STORE_KEEPER, OOR)).thenReturn(true);
+
+        LoginResponse resp = service.switchRole(USER, req(Role.STORE_KEEPER, OOR));
+
+        Claims claims = jwtUtil.parseToken(resp.getAccessToken());
+        assertThat(jwtUtil.getRole(claims)).isEqualTo(Role.STORE_KEEPER);
+        assertThat(jwtUtil.getBranchIds(claims)).containsExactly(OOR);
+    }
+
     // --- fixtures ---
+
+    private void sparePartsModule(boolean on) {
+        Organization org = new Organization("Test dealership");
+        org.setSparePartsEnabled(on);
+        lenient().when(orgRepo.findById(ORG)).thenReturn(Optional.of(org));
+    }
 
     private void user(Role role) {
         AppUser u = new AppUser();

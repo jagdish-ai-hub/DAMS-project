@@ -32,5 +32,7 @@ public enum EventType {
     /** The Owner reopened a closed cash day — the original close is kept in the detail — rev 60. */
     CASH_REOPENED,
     /** rev 77 — the Owner moved a vehicle to another customer. */
-    VEHICLE_MOVED
+    VEHICLE_MOVED,
+    /** rev 94 — the Owner changed what Inventory Manager / Store Keeper may do. */
+    SPARE_PERMISSIONS_CHANGED
 }

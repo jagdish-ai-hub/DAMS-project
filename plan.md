@@ -7,6 +7,38 @@
 
 ## Revision log
 
+- **rev 95 (2026-11-12)** — **Spare Parts demo logins, module on for the demo org.** Owner request. V50 (idempotent) switches
+  `organization.spare_parts_enabled` on for the organization that owns `owner@jjmotors.demo` and adds
+  `inventory@jjmotors.demo` (INVENTORY_MANAGER; Jeypore, Berhampur, Rayagada) and `storekeeper@jjmotors.demo` (STORE_KEEPER;
+  Rayagada), passwords `inventory123` / `storekeeper123`, same convenience as the V5 logins. README and AGENT.md list them.
+  Other organizations stay off — Super Admin still switches them individually.
+- **rev 94 (2026-11-12)** — **Spare Parts module (local spare stock per branch), requested by the owner; BUILT, NOT YET
+  DEPLOYED.** First module under the new "modules" rules (AGENT.md "Modules and module roles"; spec in
+  `docs/modules/spare-parts.md`). *Why now:* the dealership wants to use godown stock across branches (Excel `Spare parts.xlsx`,
+  BRD v1.3). *What:* upload their Excel (asked every time: Add to stock / Set stock to the file) or add a part by hand; search every
+  branch; bill a part to a **non-claim** job card (typed Eicher number; refused if DAMS already has it as a claim job card);
+  branch requests REQUESTED -> SENT (supplier's stock goes down, "on the road") -> RECEIVED (requester's goes up); Owner dashboard.
+  **Two new roles** `INVENTORY_MANAGER`, `STORE_KEEPER` (branches like an Accountant; also Owner-grantable extra roles), their
+  powers an **Owner-editable grid** in Masters -> Spare Parts (server-enforced). **Switch:** `organization.spare_parts_enabled`,
+  OFF by default, set per organization by Super Admin (Organizations page, with a confirm). *How:* migration **V49** (renumbered from V49 when merged with revs 91–93, which already own V49–V48), add-only
+  (`inv_part`, `inv_stock`, `inv_movement` = append-only ledger, `inv_import`, `inv_transfer`, `inv_role_permission`, the switch column,
+  two widened CHECK lists); package `com.dams.spareparts`; `StockLedgerService` is the only code that changes a quantity;
+  `.xlsx` read with the JDK only (no POI: Metaspace, rev 90). *Existing code touched (small):* `Role` (+2, `usesBranchAccessRows()`),
+  `BranchScope` (new roles see no finance data), `UserService`/`AuthService` (new roles like Accountant; role switch offers them
+  only while the module is on), `OrganizationPurgeService` (+ module data, history blocks deletion), `AdminOrgController/Service`
+  (switch), `DocumentHistoryService`/`EventType` (+1 event), frontend shell/Team/Masters/Organizations. *Tests:* backend 512 pass
+  (+63 new; 11 skipped = Docker-only), frontend 129 pass; the Docker-only `MigrationV49Test` (real Postgres: entity/migration match,
+  `ON CONFLICT`, constraints) has NOT been run locally and must pass in CI / on a machine with Docker before deploy. *Not done:* Neon
+  practice run of V49, deploy, switching on for the demo organization, `scripts/generate-db-diagram.py` (DATABASE.md), and the open
+  client questions listed in the spec. Handover: `docs/modules/spare-parts-handover.md`.
+- **rev 93 (2026-11-11)** — **QR payments are tagged to a bank.** Owner request: "Enable bank selection even for QR pay —
+  the transaction needs to be tagged to which bank payment was done." The bank requirement was already a per-mode tick
+  (`requires_bank`, enforced in `ReceiveDocumentService` / `ExpenseDocumentService`, and the bank dropdown on both forms
+  and the Add Payment dialog follows it); QR / UPI just shipped with it off. V48 turns it on for settlement modes
+  **QR / UPI** and **Adv-QR** and the expense mode **QR / UPI** in every org; new orgs get the same defaults from
+  `MasterProvisioningService` (and copy the template org). Existing lines without a bank are untouched; the bank is
+  only demanded when such a line is edited or its document resubmitted. No new endpoint, field or screen — Masters'
+  tick lets the Owner switch it off per org.
 - **rev 92 (2026-11-10)** — **A closed expense reopens when the cashier adds a line; My Entries can show everything.**
   (1) `ExpenseDocumentService.addLine` refused CLOSED expenses since rev 74 auto-closed them, so "Add Expense" on a
   settled expense failed. It now works on VERIFIED / APPROVED / **CLOSED** — existing lines stay locked, the expense drops
