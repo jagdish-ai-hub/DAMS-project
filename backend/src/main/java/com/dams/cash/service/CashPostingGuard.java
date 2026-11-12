@@ -59,6 +59,11 @@ public class CashPostingGuard {
         return me;
     }
 
+    /** Whether the caller's branch scope includes this branch (an Accountant: their assigned branches). */
+    public boolean canSeeBranch(Long branchId) {
+        return branchScope.canSeeBranch(branchId);
+    }
+
     /** Assert the caller is acting as the Owner — the only role that may reopen a closed day (rev 60). Returns them. */
     public AppUser requireOwner(Long orgId) {
         AppUser me = me(orgId);

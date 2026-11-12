@@ -247,7 +247,7 @@ function DrawerCard({ drawer, onLineClick }: { drawer: CashDrawer; onLineClick: 
         </span>
       </div>
       <div style={{ padding: '8px 18px 14px' }}>
-        <Line k="Opening" v={inr(drawer.opening)} note={!drawer.openingSet ? 'not set — ask your Accountant to set the branch opening' : undefined} />
+        <Line k="Opening" v={inr(drawer.opening)} note={!drawer.openingSet ? 'not set — ask your Accountant to set it (menu: Branch opening)' : undefined} />
         <Line k="＋ Cash receipts (cash mode)" v={inr(drawer.cashReceipts)} tone="green"
           onClick={() => onLineClick('Cash receipts (cash mode)', moneyMovementsToRows(drawer.cashReceiptLines))} />
         <Line k="＋ Cash In from bank" v={inr(drawer.cashIn)} tone="green"
@@ -521,7 +521,7 @@ function CloseDayModal(props: { drawer: CashDrawer; onClose: () => void; onDone:
   const needRemark = variance !== 0
 
   async function confirm() {
-    if (!props.drawer.openingSet) { setError('Cannot close the day: the branch opening balance must be set by an Accountant first'); return }
+    if (!props.drawer.openingSet) { setError('Cannot close the day: the branch opening balance must be set by an Accountant first (menu: Branch opening)'); return }
     if (counted === '' || Number(counted) < 0) { setError('Enter the counted cash amount'); return }
     if (needRemark && !remark.trim()) { setError('A variance remark is required when the counted amount differs'); return }
     setBusy(true)

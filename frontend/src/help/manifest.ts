@@ -28,6 +28,7 @@ export const HELP_MANIFEST: Record<HelpRole, HelpEntry[]> = {
     { slug: 'where-is-it', title: 'Where is it — and what’s next?' },
     { slug: 'reviewing-the-queue', title: 'Reviewing the queue' },
     { slug: 'reviewing-cash', title: 'Reviewing cash movements' },
+    { slug: 'setting-the-branch-opening', title: 'Setting a branch’s opening cash' },
     { slug: 'overriding-an-amount', title: 'Overriding an amount' },
     { slug: 'closing-an-expense', title: 'Closing an expense' },
   ],
