@@ -781,7 +781,11 @@ production seed profile will omit. **Spare Parts demo logins (rev 95):**
 `inventory@jjmotors.demo` (Inventory Manager, all three branches) and
 `storekeeper@jjmotors.demo` (Store Keeper, Rayagada only), passwords
 `inventory123` / `storekeeper123`; the Spare Parts module is switched **on**
-for the demo organization (migration V50).
+for the demo organization (migration V50). **Demo stock (rev 96, V51):** six
+sample parts (brake shoes, clutch plate, oil and air filters, headlamp bulb,
+gear oil) held at Jeypore, Berhampur and Rayagada — Berhampur holds no clutch
+plate, so the Store Keeper can try a request. Added only if the demo
+organization has no parts yet.
 
 A Super Admin panel (organization list, onboard new org + first Owner) does
 not have a mockup yet — build it in the same visual language as these
