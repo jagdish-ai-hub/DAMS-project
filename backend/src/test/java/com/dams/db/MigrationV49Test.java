@@ -43,10 +43,38 @@ class MigrationV49Test {
     }
 
     @Test
-    void everyOrganization_startsWithTheModuleOff_soNothingChangesUntilSuperAdminTurnsItOn() {
-        Integer on = jdbc.queryForObject("select count(*) from organization where spare_parts_enabled", Integer.class);
+    void theModuleIsOffForEveryOrganization_exceptTheDemoOneV50TurnsOn() {
+        // V49 adds the switch OFF everywhere; V50 (rev 95) then turns it on for the demo organization only,
+        // the one that owns owner@jjmotors.demo. Any other organization stays off until Super Admin turns it on.
+        Integer otherOn = jdbc.queryForObject("select count(*) from organization where spare_parts_enabled"
+            + " and id not in (select org_id from app_user where email = 'owner@jjmotors.demo')", Integer.class);
+        Boolean demoOn = jdbc.queryForObject("select spare_parts_enabled from organization"
+            + " where id = (select org_id from app_user where email = 'owner@jjmotors.demo')", Boolean.class);
 
-        assertThat(on).isZero();
+        assertThat(otherOn).isZero();
+        assertThat(demoOn).isTrue();
+    }
+
+    @Test
+    void aNewOrganization_startsWithTheModuleOff() {
+        jdbc.update("insert into organization (name, active) values ('Switch default probe', true)");
+
+        Boolean on = jdbc.queryForObject("select spare_parts_enabled from organization where name = 'Switch default probe'", Boolean.class);
+
+        assertThat(on).isFalse();
+    }
+
+    @Test
+    void theDemoSpareLogins_exist_withTheirBranches() {
+        // V50: Inventory Manager at all three branches, Store Keeper at Rayagada only.
+        Integer managerBranches = jdbc.queryForObject("select count(*) from user_branch_access a join app_user u on u.id = a.user_id"
+            + " where u.email = 'inventory@jjmotors.demo' and u.role = 'INVENTORY_MANAGER'", Integer.class);
+        Integer keeperBranches = jdbc.queryForObject("select count(*) from user_branch_access a join app_user u on u.id = a.user_id"
+            + " join branch b on b.id = a.branch_id where u.email = 'storekeeper@jjmotors.demo' and u.role = 'STORE_KEEPER'"
+            + " and b.code = 'OOR'", Integer.class);
+
+        assertThat(managerBranches).isEqualTo(3);
+        assertThat(keeperBranches).isEqualTo(1);
     }
 
     @Test
@@ -68,13 +96,22 @@ class MigrationV49Test {
             .isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    // Each test below expects ONE database error: Postgres aborts the transaction after an error, so a second
+    // statement in the same (rolled-back) test transaction would fail with "current transaction is aborted".
+
     @Test
-    void aBranchHoldsAPartOnce_andAPartCodeIsUniquePerOrganization() {
+    void aBranchHoldsAPartOnce() {
         long part = part("MF450155");
         jdbc.update("insert into inv_stock (org_id, branch_id, part_id, quantity) values (1, ?, ?, 1)", branch(), part);
 
         assertThatThrownBy(() -> jdbc.update("insert into inv_stock (org_id, branch_id, part_id, quantity) values (1, ?, ?, 1)", branch(), part))
             .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void aPartCodeIsUniquePerOrganization() {
+        part("MF450155");
+
         assertThatThrownBy(() -> part("MF450155")).isInstanceOf(DataIntegrityViolationException.class);
     }
 
@@ -87,11 +124,17 @@ class MigrationV49Test {
     }
 
     @Test
-    void aLedgerRowMustMoveStock_andCannotLeaveAnythingBelowZero() {
+    void aLedgerRowMustMoveStock() {
         long part = part("MF450155");
 
         assertThatThrownBy(() -> jdbc.update("insert into inv_movement (org_id, branch_id, part_id, movement_type, qty_change, qty_after)"
             + " values (1, ?, ?, 'BILLED', 0, 5)", branch(), part)).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void aLedgerRowCannotLeaveAnythingBelowZero() {
+        long part = part("MF450155");
+
         assertThatThrownBy(() -> jdbc.update("insert into inv_movement (org_id, branch_id, part_id, movement_type, qty_change, qty_after)"
             + " values (1, ?, ?, 'BILLED', -1, -1)", branch(), part)).isInstanceOf(DataIntegrityViolationException.class);
     }
@@ -101,12 +144,18 @@ class MigrationV49Test {
         long user = jdbc.queryForObject("select min(id) from app_user where org_id = 1", Long.class);
         jdbc.update("insert into user_role_grant (org_id, user_id, role, branch_id) values (1, ?, 'STORE_KEEPER', ?)", user, branch());
         jdbc.update("insert into user_role_grant (org_id, user_id, role, branch_id) values (1, ?, 'INVENTORY_MANAGER', ?)", user, branch());
-        assertThatThrownBy(() -> jdbc.update("insert into user_role_grant (org_id, user_id, role, branch_id) values (1, ?, 'OWNER', ?)", user, branch()))
-            .isInstanceOf(DataIntegrityViolationException.class);   // the old rule still holds: nobody is granted Owner
         jdbc.update("insert into audit_event (org_id, entity_type, entity_id, event_type, actor_type, detail) values (1, 'X', 1, 'SPARE_PERMISSIONS_CHANGED', 'USER', '{}')");
         jdbc.update("insert into audit_event (org_id, entity_type, entity_id, event_type, actor_type, detail) values (1, 'X', 1, 'VEHICLE_MOVED', 'USER', '{}')");
 
         Integer rows = jdbc.queryForObject("select count(*) from audit_event where entity_type = 'X'", Integer.class);
         assertThat(rows).isEqualTo(2);
+    }
+
+    @Test
+    void nobodyCanBeGrantedOwnerAsAnExtraRole_theOldRuleStillHolds() {
+        long user = jdbc.queryForObject("select min(id) from app_user where org_id = 1", Long.class);
+
+        assertThatThrownBy(() -> jdbc.update("insert into user_role_grant (org_id, user_id, role, branch_id) values (1, ?, 'OWNER', ?)", user, branch()))
+            .isInstanceOf(DataIntegrityViolationException.class);
     }
 }
