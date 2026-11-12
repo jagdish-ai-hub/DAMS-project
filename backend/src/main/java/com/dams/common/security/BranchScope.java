@@ -82,6 +82,8 @@ public class BranchScope {
                 Long home = ActingDetails.effectiveHomeBranch(user);
                 yield Optional.of(home == null ? Set.of() : Set.of(home));
             }
+            // Spare Parts roles (rev 94) have no customer / job-card / receipt access: restricted to nothing.
+            case INVENTORY_MANAGER, STORE_KEEPER -> Optional.of(Set.of());
             case SUPER_ADMIN -> Optional.of(Set.of()); // no org context — should never reach here
         };
     }

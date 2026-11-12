@@ -7,7 +7,7 @@ import type { Role } from '../auth/AuthContext'
  * the signed-in role to its article set.
  */
 
-export type HelpRole = 'cashier' | 'accountant' | 'finance-manager' | 'owner' | 'super-admin'
+export type HelpRole = 'cashier' | 'accountant' | 'finance-manager' | 'owner' | 'super-admin' | 'spare-parts'
 
 export type HelpEntry = { slug: string; title: string }
 
@@ -46,10 +46,19 @@ export const HELP_MANIFEST: Record<HelpRole, HelpEntry[]> = {
     { slug: 'team-and-branches', title: 'Team & branches' },
     { slug: 'reopening-a-closed-day', title: 'Reopening a closed day' },
     { slug: 'masters', title: 'Masters' },
+    { slug: 'spare-parts', title: 'Spare Parts' },
   ],
   'super-admin': [
     { slug: 'your-role-in-dams', title: 'Your role in DAMS' },
     { slug: 'onboarding-an-organization', title: 'Onboarding an organization' },
+    { slug: 'spare-parts-switch', title: 'Turning Spare Parts on' },
+  ],
+  // Inventory Manager and Store Keeper share one set: the screens are the same, the buttons differ by what the Owner allows.
+  'spare-parts': [
+    { slug: 'your-role-in-spare-parts', title: 'Your role in Spare Parts' },
+    { slug: 'finding-and-billing-a-part', title: 'Finding and billing a part' },
+    { slug: 'asking-another-branch', title: 'Asking another branch for a part' },
+    { slug: 'uploading-your-stock-sheet', title: 'Uploading your stock sheet' },
   ],
 }
 
@@ -59,6 +68,8 @@ export const ROLE_TO_HELP: Record<Role, HelpRole> = {
   FINANCE_MANAGER: 'finance-manager',
   OWNER: 'owner',
   SUPER_ADMIN: 'super-admin',
+  INVENTORY_MANAGER: 'spare-parts',
+  STORE_KEEPER: 'spare-parts',
 }
 
 // Every article body, bundled as a raw string at build time.

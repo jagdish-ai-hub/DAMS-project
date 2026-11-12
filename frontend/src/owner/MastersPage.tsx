@@ -7,6 +7,7 @@ import {
 import AiMastersStrip from './AiMastersStrip'
 import ReceiversSection from './ReceiversSection'
 import CustomersSection from './CustomersSection'
+import SparePartsPermissionsSection from '../spareparts/PermissionsSection'
 
 type Extra = 'mode' | 'sub' | 'upi' | 'roles' | 'estatus' | undefined
 
@@ -209,6 +210,8 @@ export default function MastersPage() {
 
       <ReceiversSection />
       <CustomersSection />
+      {/* rev 94: renders only for the Owner while the Spare Parts module is on */}
+      <SparePartsPermissionsSection />
 
       {modal && (
         <MasterModal

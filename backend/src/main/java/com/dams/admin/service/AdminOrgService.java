@@ -142,6 +142,21 @@ public class AdminOrgService {
     }
 
     /**
+     * Turn the Spare Parts module on or off for one organization (rev 94). With it off the server refuses every
+     * /spare-parts call and the Spare Parts roles cannot be switched into; nothing is deleted when it is turned off.
+     * Logged rather than audited: audit rows need an organization context and Super Admin has none.
+     */
+    @Transactional
+    public Organization setSparePartsEnabled(Long id, boolean enabled) {
+        Organization org = orgRepo.findById(id)
+            .orElseThrow(() -> DamsException.notFound("Organization", id));
+        org.setSparePartsEnabled(enabled);
+        orgRepo.save(org);
+        log.info("Org Spare Parts module switched: orgId={} orgName='{}' enabled={}", id, org.getName(), enabled);
+        return org;
+    }
+
+    /**
      * Permanently delete an organization and everything under it (branches, users, masters,
      * receivers). Super Admin only — for removing a dealership onboarded by mistake.
      *

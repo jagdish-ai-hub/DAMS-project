@@ -62,15 +62,23 @@ public class AdminOrgController {
     }
 
     @PatchMapping("/{id}")
-    @Operation(summary = "Toggle organization active status")
+    @Operation(summary = "Toggle organization active status and/or the Spare Parts module switch")
     public ResponseEntity<Organization> patch(
             @PathVariable Long id,
             @RequestBody Map<String, Boolean> body) {
         Boolean active = body.get("active");
-        if (active == null) {
+        Boolean sparePartsEnabled = body.get("sparePartsEnabled");
+        if (active == null && sparePartsEnabled == null) {
             return ResponseEntity.badRequest().build();
         }
-        return ResponseEntity.ok(adminOrgService.toggleActive(id, active));
+        Organization org = null;
+        if (active != null) {
+            org = adminOrgService.toggleActive(id, active);
+        }
+        if (sparePartsEnabled != null) {
+            org = adminOrgService.setSparePartsEnabled(id, sparePartsEnabled);
+        }
+        return ResponseEntity.ok(org);
     }
 
     @DeleteMapping("/{id}")

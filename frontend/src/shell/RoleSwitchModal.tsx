@@ -10,6 +10,8 @@ const ROLE_BLURB: Partial<Record<Role, string>> = {
   FINANCE_MANAGER: 'Give final approval and close claims at assigned branches.',
   ACCOUNTANT: 'Review, verify and close entries at this branch.',
   CASHIER: 'Record receipts, expenses and cash at this branch.',
+  INVENTORY_MANAGER: 'Upload and correct spare-part stock, bill parts and send them between branches.',
+  STORE_KEEPER: 'Bill spare parts to job cards and send or receive parts for this branch.',
 }
 
 /**
