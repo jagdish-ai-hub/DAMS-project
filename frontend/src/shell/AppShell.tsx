@@ -9,6 +9,8 @@ import HelpDrawer from '../help/HelpDrawer'
 import { ROLE_TO_HELP } from '../help/manifest'
 import RoleLanding from './RoleLanding'
 import OrganizationsPage from '../superadmin/OrganizationsPage'
+import SparePartsPage from '../spareparts/SparePartsPage'
+import { useSpareAccess } from '../spareparts/SpareAccessContext'
 import TeamAndBranchesPage from '../owner/TeamAndBranchesPage'
 import MastersPage from '../owner/MastersPage'
 import OwnerExpensesPage from '../owner/ExpensesPage'
@@ -59,6 +61,13 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { to: '/app/my-entries', label: 'My Entries' },
     { to: '/app/settings', label: 'Settings' },
   ],
+  // The Spare Parts roles (rev 91): "Spare Parts" is added to every module user's menu below, once the module is on.
+  INVENTORY_MANAGER: [
+    { to: '/app/settings', label: 'Settings' },
+  ],
+  STORE_KEEPER: [
+    { to: '/app/settings', label: 'Settings' },
+  ],
 }
 
 const DASHBOARD_LABEL: Record<Role, string> = {
@@ -67,6 +76,8 @@ const DASHBOARD_LABEL: Record<Role, string> = {
   FINANCE_MANAGER: 'Finance Dashboard',
   ACCOUNTANT: 'Accountant Dashboard',
   CASHIER: 'Cashier Dashboard',
+  INVENTORY_MANAGER: 'Inventory Manager',
+  STORE_KEEPER: 'Store Keeper',
 }
 
 /**
@@ -84,6 +95,8 @@ export default function AppShell() {
   const [scrolled, setScrolled] = useState(false)
   const navGhostRef = useExitGhost<HTMLDivElement>()
   const location = useLocation()
+  // Spare Parts (rev 91): the menu entry exists only while the module is on for this organization and the role may look at stock.
+  const spare = useSpareAccess()
 
   // The topbar gains depth once content scrolls beneath it.
   useEffect(() => {
@@ -122,7 +135,12 @@ export default function AppShell() {
   const isCashier = user.role === 'CASHIER'
   const isAccountant = user.role === 'ACCOUNTANT'
   const isFinanceManager = user.role === 'FINANCE_MANAGER'
-  const navItems = NAV_BY_ROLE[user.role]
+  const isSpareRole = user.role === 'INVENTORY_MANAGER' || user.role === 'STORE_KEEPER'
+  const baseNav = NAV_BY_ROLE[user.role]
+  // "Spare Parts" goes just before Settings (always last), so existing roles' menus are unchanged while the module is off.
+  const navItems: NavItem[] = spare.visible
+    ? [...baseNav.slice(0, -1), { to: '/app/spare-parts', label: 'Spare Parts' }, ...baseNav.slice(-1)]
+    : baseNav
 
   const homeElement = isSuperAdmin
     ? <Navigate to="/app/organizations" replace />
@@ -134,7 +152,9 @@ export default function AppShell() {
           ? <FmQueuePage />
           : isOwner
             ? <DashboardPage />
-            : <RoleLanding />
+            : isSpareRole
+              ? <Navigate to="/app/spare-parts" replace />
+              : <RoleLanding />
 
   return (
     <div className="dams-app" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
@@ -323,6 +343,9 @@ export default function AppShell() {
             {(isCashier || isOwner || isFinanceManager) && <Route path="cash" element={<CashPage />} />}
             {isCashier && <Route path="my-entries" element={<MyEntriesPage />} />}
             {(isOwner || isFinanceManager) && <Route path="override-audit" element={<OverrideAuditPage />} />}
+            {/* Registered even before /access answers, so a refresh on a Spare Parts URL keeps its place;
+                the page itself shows "not turned on" when the module is off. */}
+            {(isOwner || isSpareRole) && <Route path="spare-parts/*" element={<SparePartsPage />} />}
             <Route path="settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/app" replace />} />
           </Routes>

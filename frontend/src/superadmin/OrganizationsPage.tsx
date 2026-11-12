@@ -25,6 +25,8 @@ export default function OrganizationsPage() {
 
   const [busyId, setBusyId] = useState<number | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<Organization | null>(null)
+  // rev 91: Spare Parts on/off needs a deliberate confirm, because turning it on in a live organization is visible to its people.
+  const [confirmSwitch, setConfirmSwitch] = useState<Organization | null>(null)
 
   async function loadOrgs() {
     setLoading(true)
@@ -63,6 +65,20 @@ export default function OrganizationsPage() {
       )
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function doSwitch(org: Organization) {
+    setBusyId(org.id)
+    try {
+      await adminApi.setSparePartsEnabled(org.id, !org.sparePartsEnabled)
+      setConfirmSwitch(null)
+      await loadOrgs()
+    } catch {
+      setError(`Could not change Spare Parts for "${org.name}".`)
+      setConfirmSwitch(null)
+    } finally {
+      setBusyId(null)
     }
   }
 
@@ -160,6 +176,7 @@ export default function OrganizationsPage() {
                   <th style={th}>Name</th>
                   <th style={th}>Created</th>
                   <th style={th}>Cashier access</th>
+                  <th style={th}>Spare Parts</th>
                   <th style={th}>Status</th>
                   <th style={th}></th>
                 </tr>
@@ -171,6 +188,32 @@ export default function OrganizationsPage() {
                     <td style={{ ...td, fontWeight: 600 }}>{org.name}</td>
                     <td style={td}>{fmtDate(org.createdAt)}</td>
                     <td style={td}>{org.multiBranchCashierAccess ? 'All branches' : 'Home branch'}</td>
+                    <td style={td}>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={org.sparePartsEnabled}
+                        aria-label={`Spare Parts for ${org.name}`}
+                        onClick={() => setConfirmSwitch(org)}
+                        disabled={busyId === org.id}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 8, border: 'none', background: 'none', cursor: 'pointer',
+                          minHeight: 36, padding: 0, fontSize: '0.8rem', fontWeight: 700,
+                          color: org.sparePartsEnabled ? 'var(--green)' : 'var(--muted)',
+                        }}
+                      >
+                        <span aria-hidden="true" style={{
+                          width: 34, height: 20, borderRadius: 999, position: 'relative', flexShrink: 0,
+                          background: org.sparePartsEnabled ? 'var(--green)' : '#C5CBD6', transition: 'background var(--dur) var(--ease)',
+                        }}>
+                          <span style={{
+                            position: 'absolute', top: 2, left: org.sparePartsEnabled ? 16 : 2, width: 16, height: 16, borderRadius: '50%',
+                            background: '#fff', boxShadow: '0 1px 2px rgba(16,24,40,.3)', transition: 'left var(--dur) var(--ease)',
+                          }} />
+                        </span>
+                        {org.sparePartsEnabled ? 'On' : 'Off'}
+                      </button>
+                    </td>
                     <td style={td}>
                       <Badge tone={org.active ? 'green' : 'gray'}>{org.active ? 'Active' : 'Inactive'}</Badge>
                     </td>
@@ -199,6 +242,29 @@ export default function OrganizationsPage() {
           </div>
         )}
       </section>
+
+      {confirmSwitch && (
+        <Modal
+          title={confirmSwitch.sparePartsEnabled ? 'Turn Spare Parts off?' : 'Turn Spare Parts on?'}
+          subtitle={confirmSwitch.name}
+          onClose={() => setConfirmSwitch(null)}
+          footer={(
+            <>
+              <button type="button" style={{ ...ghostBtn, minHeight: 38 }} onClick={() => setConfirmSwitch(null)}>Cancel</button>
+              <button type="button" style={{ ...primaryBtn(busyId === confirmSwitch.id), minHeight: 38 }} disabled={busyId === confirmSwitch.id}
+                onClick={() => doSwitch(confirmSwitch)}>
+                {confirmSwitch.sparePartsEnabled ? 'Turn off' : 'Turn on'}
+              </button>
+            </>
+          )}
+        >
+          <p style={{ fontSize: '0.86rem', color: 'var(--ink)', lineHeight: 1.55, margin: 0 }}>
+            {confirmSwitch.sparePartsEnabled
+              ? 'The Spare Parts menu disappears for everyone in this organization and its screens stop working. Nothing is deleted: all stock and history are kept, and it all comes back if you turn it on again.'
+              : 'The Owner and anyone given the Inventory Manager or Store Keeper role will see a Spare Parts menu. Nobody else sees any change.'}
+          </p>
+        </Modal>
+      )}
 
       {confirmDelete && (
         <DeleteOrgModal

@@ -4,6 +4,8 @@ export interface Organization {
   id: number
   name: string
   multiBranchCashierAccess: boolean
+  /** rev 91 — the Spare Parts module switch, off by default. */
+  sparePartsEnabled: boolean
   active: boolean
   createdAt: string
 }
@@ -36,6 +38,10 @@ export const adminApi = {
 
   toggleActive(id: number, active: boolean) {
     return api.patch<Organization>(`/api/v1/admin/organizations/${id}`, { active })
+  },
+
+  setSparePartsEnabled(id: number, sparePartsEnabled: boolean) {
+    return api.patch<Organization>(`/api/v1/admin/organizations/${id}`, { sparePartsEnabled })
   },
 
   deleteOrganization(id: number) {

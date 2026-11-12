@@ -45,6 +45,13 @@ public class Organization {
     @Column(name = "master_template", nullable = false)
     private boolean masterTemplate = false;
 
+    /**
+     * rev 91 — Spare Parts module switch, set by Super Admin. Default OFF: with it off the server
+     * refuses every /spare-parts endpoint and no screen shows anything. See docs/modules/spare-parts.md.
+     */
+    @Column(name = "spare_parts_enabled", nullable = false)
+    private boolean sparePartsEnabled = false;
+
     @Column(nullable = false)
     private boolean active = true;
 

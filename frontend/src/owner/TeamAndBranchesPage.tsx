@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { branchesApi, type Branch, type BranchRequest } from '../api/branches'
 import { usersApi, type RoleGrant, type TeamUser, type UserRequest } from '../api/users'
 import type { Role } from '../auth/AuthContext'
+import { useSpareAccess } from '../spareparts/SpareAccessContext'
 import {
   Badge, ErrorBanner, Field, Modal, TextInput,
   card, cardTitle, ghostBtn, inputStyle, primaryBtn, td, th,
@@ -12,10 +13,13 @@ const ROLE_OPTS: { value: Role; label: string; branchMode: 'none' | 'single' | '
   { value: 'FINANCE_MANAGER', label: 'Finance Manager', branchMode: 'multi' },
   { value: 'ACCOUNTANT', label: 'Accountant', branchMode: 'multi' },
   { value: 'CASHIER', label: 'Cashier', branchMode: 'single' },
+  // Spare Parts module roles (rev 91): offered only while the module is on for this organization.
+  { value: 'INVENTORY_MANAGER', label: 'Inventory Manager', branchMode: 'multi' },
+  { value: 'STORE_KEEPER', label: 'Store Keeper', branchMode: 'multi' },
 ]
 
-/** Roles that can be granted as an extra "switch into" role — never Owner. */
-const SWITCH_ROLES = ROLE_OPTS.filter((r) => r.value !== 'OWNER')
+const SPARE_PARTS_ROLES: Role[] = ['INVENTORY_MANAGER', 'STORE_KEEPER']
+
 
 function apiError(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback
@@ -236,6 +240,13 @@ function UserModal(props: { editing: TeamUser | null; branches: Branch[]; onClos
 
   const branchMode = ROLE_OPTS.find((r) => r.value === role)?.branchMode ?? 'none'
 
+  // The Spare Parts roles show up only while the module is on, or when this person already has one (so it never vanishes from view).
+  const spareOn = useSpareAccess().access.enabled
+  const hasSpareRole = (r: Role) => props.editing?.role === r || (props.editing?.roleGrants ?? []).some((g) => g.role === r)
+  const roleOpts = ROLE_OPTS.filter((r) => !SPARE_PARTS_ROLES.includes(r.value) || spareOn || hasSpareRole(r.value))
+  /** Roles that can be granted as an extra "switch into" role: never Owner. */
+  const SWITCH_ROLES = roleOpts.filter((r) => r.value !== 'OWNER')
+
   async function submit(e: FormEvent) {
     e.preventDefault()
     setError('')
@@ -312,7 +323,7 @@ function UserModal(props: { editing: TeamUser | null; branches: Branch[]; onClos
         </Field>
         <Field label="Role">
           <select value={role} onChange={(e) => setRole(e.target.value as Role)} style={inputStyle}>
-            {ROLE_OPTS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+            {roleOpts.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
           </select>
         </Field>
 

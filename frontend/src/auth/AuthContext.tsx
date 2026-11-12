@@ -8,6 +8,8 @@ export type Role =
   | 'FINANCE_MANAGER'
   | 'ACCOUNTANT'
   | 'CASHIER'
+  | 'INVENTORY_MANAGER'
+  | 'STORE_KEEPER'
 
 export interface AuthUser {
   userId: number

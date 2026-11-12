@@ -16,6 +16,7 @@ import com.dams.masters.service.MastersService;
 import com.dams.receive.repository.ReceiveDocumentRepository;
 import com.dams.receive.repository.SettlementLineRepository;
 import com.dams.receiver.repository.ReceiverRepository;
+import com.dams.spareparts.service.SparePartsPurgeService;
 import com.dams.user.repository.AppUserRepository;
 import com.dams.vehicle.repository.VehicleRepository;
 import org.slf4j.Logger;
@@ -56,6 +57,7 @@ public class OrganizationPurgeService {
     private final CashDocumentRepository cashDocumentRepo;
     private final CashDayCloseRepository cashDayCloseRepo;
     private final BranchCashOpeningRepository branchCashOpeningRepo;
+    private final SparePartsPurgeService sparePartsPurge;
 
     public OrganizationPurgeService(AppUserRepository userRepo,
                                     DocumentSequenceRepository documentSequenceRepo,
@@ -74,7 +76,8 @@ public class OrganizationPurgeService {
                                     ExpenseDocumentRepository expenseDocumentRepo,
                                     CashDocumentRepository cashDocumentRepo,
                                     CashDayCloseRepository cashDayCloseRepo,
-                                    BranchCashOpeningRepository branchCashOpeningRepo) {
+                                    BranchCashOpeningRepository branchCashOpeningRepo,
+                                    SparePartsPurgeService sparePartsPurge) {
         this.userRepo = userRepo;
         this.documentSequenceRepo = documentSequenceRepo;
         this.mastersService = mastersService;
@@ -93,6 +96,7 @@ public class OrganizationPurgeService {
         this.cashDocumentRepo = cashDocumentRepo;
         this.cashDayCloseRepo = cashDayCloseRepo;
         this.branchCashOpeningRepo = branchCashOpeningRepo;
+        this.sparePartsPurge = sparePartsPurge;
     }
 
     /**
@@ -106,7 +110,8 @@ public class OrganizationPurgeService {
             || expenseDocumentRepo.existsByOrgId(orgId)
             || cashDocumentRepo.existsByOrgId(orgId)
             || jobCardRepo.existsByOrgId(orgId)
-            || claimCloseRepo.existsByOrgId(orgId);
+            || claimCloseRepo.existsByOrgId(orgId)
+            || sparePartsPurge.hasData(orgId);   // stock history is live data too (rev 91)
     }
 
     /**
@@ -133,6 +138,9 @@ public class OrganizationPurgeService {
         long cashDocuments = cashDocumentRepo.deleteByOrgId(orgId);
         long cashDayCloses = cashDayCloseRepo.deleteByOrgId(orgId);
         long cashOpenings = branchCashOpeningRepo.deleteByOrgId(orgId);
+
+        // Spare Parts rows reference branches and the org, so they go before both (rev 91).
+        sparePartsPurge.purge(orgId);
 
         long jobCards = jobCardRepo.deleteByOrgId(orgId);
         long auditEvents = auditEventRepo.deleteByOrgId(orgId);
