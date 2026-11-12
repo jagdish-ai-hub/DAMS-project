@@ -7,6 +7,11 @@
 
 ## Revision log
 
+- **rev 95 (2026-11-12)** — **Spare Parts demo logins, module on for the demo org.** Owner request. V50 (idempotent) switches
+  `organization.spare_parts_enabled` on for the organization that owns `owner@jjmotors.demo` and adds
+  `inventory@jjmotors.demo` (INVENTORY_MANAGER; Jeypore, Berhampur, Rayagada) and `storekeeper@jjmotors.demo` (STORE_KEEPER;
+  Rayagada), passwords `inventory123` / `storekeeper123`, same convenience as the V5 logins. README and AGENT.md list them.
+  Other organizations stay off — Super Admin still switches them individually.
 - **rev 94 (2026-11-12)** — **Spare Parts module (local spare stock per branch), requested by the owner; BUILT, NOT YET
   DEPLOYED.** First module under the new "modules" rules (AGENT.md "Modules and module roles"; spec in
   `docs/modules/spare-parts.md`). *Why now:* the dealership wants to use godown stock across branches (Excel `Spare parts.xlsx`,

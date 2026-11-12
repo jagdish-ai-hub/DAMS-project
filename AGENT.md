@@ -777,7 +777,11 @@ user per role (Owner, Finance Manager, Accountant, Cashier) with known
 passwords — so anyone can log in and exercise every role immediately. The
 email/invite onboarding flow below is still built and is still the only
 path for real organizations; the seed is a testing convenience that a
-production seed profile will omit.
+production seed profile will omit. **Spare Parts demo logins (rev 95):**
+`inventory@jjmotors.demo` (Inventory Manager, all three branches) and
+`storekeeper@jjmotors.demo` (Store Keeper, Rayagada only), passwords
+`inventory123` / `storekeeper123`; the Spare Parts module is switched **on**
+for the demo organization (migration V50).
 
 A Super Admin panel (organization list, onboard new org + first Owner) does
 not have a mockup yet — build it in the same visual language as these

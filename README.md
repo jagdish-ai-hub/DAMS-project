@@ -781,6 +781,8 @@ curl -s http://localhost:8080/api/v1/auth/login \
 | `finance@jjmotors.demo`      | `finance123`     | FINANCE_MANAGER | all demo branches     |
 | `accountant@jjmotors.demo`   | `accountant123`  | ACCOUNTANT      | Berhampur, Rayagada  |
 | `cashier@jjmotors.demo`      | `cashier123`     | CASHIER         | home branch: Rayagada|
+| `inventory@jjmotors.demo`    | `inventory123`   | INVENTORY_MANAGER | all three branches (V50) |
+| `storekeeper@jjmotors.demo`  | `storekeeper123` | STORE_KEEPER    | Rayagada only (V50)  |
 
 Branches: `OOJ` Jeypore · `OOB` Berhampur · `OOR` Rayagada.
 
