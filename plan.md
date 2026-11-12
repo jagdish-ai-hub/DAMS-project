@@ -7,6 +7,10 @@
 
 ## Revision log
 
+- **rev 96 (2026-11-12)** — **Short demo stock for Spare Parts.** Owner: "add some for each branch, not a long list". V51
+  (demo organization only, idempotent, skipped if the org already has any part) adds six parts across the three branches
+  (17 stock rows), each written as a stock row plus one `MANUAL_ADD` ledger row so Stock, History and Overview agree.
+  Berhampur holds no clutch plate on purpose, so a branch request can be tried.
 - **rev 95 (2026-11-12)** — **Spare Parts demo logins, module on for the demo org.** Owner request. V50 (idempotent) switches
   `organization.spare_parts_enabled` on for the organization that owns `owner@jjmotors.demo` and adds
   `inventory@jjmotors.demo` (INVENTORY_MANAGER; Jeypore, Berhampur, Rayagada) and `storekeeper@jjmotors.demo` (STORE_KEEPER;

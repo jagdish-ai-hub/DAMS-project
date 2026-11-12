@@ -56,6 +56,23 @@ class MigrationV49Test {
     }
 
     @Test
+    void theDemoStock_isAShortList_andEveryQuantityMatchesItsLedger() {
+        // V51 (rev 96): six parts, 17 stock rows, one MANUAL_ADD ledger row per stock row, summing to the stock.
+        Integer parts = jdbc.queryForObject("select count(*) from inv_part where part_code like 'EI-%'", Integer.class);
+        Integer rows = jdbc.queryForObject("select count(*) from inv_stock s join inv_part p on p.id = s.part_id where p.part_code like 'EI-%'", Integer.class);
+        Integer mismatched = jdbc.queryForObject("select count(*) from inv_stock s join inv_part p on p.id = s.part_id"
+            + " where p.part_code like 'EI-%' and s.quantity <> (select coalesce(sum(m.qty_change), 0) from inv_movement m"
+            + " where m.branch_id = s.branch_id and m.part_id = s.part_id)", Integer.class);
+        Integer branchesWithStock = jdbc.queryForObject("select count(distinct s.branch_id) from inv_stock s"
+            + " join inv_part p on p.id = s.part_id where p.part_code like 'EI-%'", Integer.class);
+
+        assertThat(parts).isEqualTo(6);
+        assertThat(rows).isEqualTo(17);
+        assertThat(mismatched).isZero();
+        assertThat(branchesWithStock).isEqualTo(3);
+    }
+
+    @Test
     void aNewOrganization_startsWithTheModuleOff() {
         jdbc.update("insert into organization (name, active) values ('Switch default probe', true)");
 
