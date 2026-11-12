@@ -4,6 +4,9 @@ import { apiMessage, sparePartsApi, type SpareDashboard } from '../api/sparePart
 import { ErrorBanner, Skeleton, card, cardTitle, fmtDateTime, inr, td, th } from '../shell/ui'
 import { Hint, MOVEMENT_LABEL, SignedQty, mono } from './spareUi'
 
+/** How many of the latest stock changes the overview lists; the rest are one click away in History. */
+const LATEST_SHOWN = 6
+
 /**
  * The Owner's picture of Spare Parts across every branch: what the stock is worth and where it sits, what was billed this
  * month, where requests stand, and the latest changes. Read-only; every number links to the screen that explains it.
@@ -82,47 +85,48 @@ export default function OverviewPage() {
         </div>
       </section>
 
-      {/* A grid, not flex + width classes: an inline `width` would beat any responsive class (the trap that squeezed
-          "Latest changes" into a sliver). Two columns when there is room, one when there is not. */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 14, alignItems: 'start' }}>
-        <section style={card}>
-          <h2 style={cardTitle}>Branch requests</h2>
-          <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: '1fr auto', rowGap: 8, fontSize: '0.84rem' }}>
-            {([
-              ['REQUESTED', 'Waiting to be sent'], ['SENT', 'On the road'], ['RECEIVED', 'Received'],
-              ['DECLINED', 'Declined'], ['CANCELLED', 'Cancelled'],
-            ] as const).map(([k, label]) => (
-              <div key={k} style={{ display: 'contents' }}>
-                <dt style={{ color: 'var(--muted)' }}>{label}</dt>
-                <dd style={{ margin: 0, fontWeight: 700, textAlign: 'right' }}>{data.requestCounts[k]}</dd>
-              </div>
-            ))}
-          </dl>
-        </section>
+      <section style={card}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+          <h2 style={{ ...cardTitle, margin: 0 }}>Branch requests</h2>
+          <Link to="/app/spare-parts/requests" style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--navy2)', textDecoration: 'none' }}>Open the requests →</Link>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
+          {([
+            ['REQUESTED', 'Waiting to be sent'], ['SENT', 'On the road'], ['RECEIVED', 'Received'],
+            ['DECLINED', 'Declined'], ['CANCELLED', 'Cancelled'],
+          ] as const).map(([k, label]) => (
+            <div key={k} style={{ background: 'var(--bg)', borderRadius: 9, padding: '10px 12px' }}>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--ink)', lineHeight: 1.2 }}>{data.requestCounts[k]}</div>
+              <div style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>{label}</div>
+            </div>
+          ))}
+        </div>
+      </section>
 
-        <section style={{ ...card, minWidth: 0 }}>
-          <h2 style={cardTitle}>Latest changes</h2>
-          {data.recent.length === 0 ? (
-            <Hint>No stock has moved yet.</Hint>
-          ) : (
-            <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column' }}>
-              {data.recent.map((m) => (
-                <li key={m.id} style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '8px 0', borderTop: '1px solid var(--line)', fontSize: '0.82rem' }}>
-                  <span style={{ width: 34, textAlign: 'right', flexShrink: 0 }}><SignedQty value={m.qtyChange} /></span>
-                  <span style={{ minWidth: 0, flex: 1 }}>
-                    <span style={{ ...mono, fontWeight: 700 }}>{m.partCode}</span>{' '}
-                    <span style={{ color: 'var(--muted)' }}>at {m.branchCode} · {MOVEMENT_LABEL[m.type].toLowerCase()}{m.reference ? ` · ${m.reference}` : ''}</span>
-                    <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--faint)' }}>{m.userName} · {fmtDateTime(m.createdAt)}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div style={{ marginTop: 10 }}>
-            <Link to="/app/spare-parts/history" style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--navy2)', textDecoration: 'none' }}>Open the full history →</Link>
-          </div>
-        </section>
-      </div>
+      {/* Full width, two columns when there is room (one on a phone): the list reads left to right instead of leaving
+          an empty card beside a long one. A grid, not an inline width, so the responsive rule can still apply. */}
+      <section style={{ ...card, minWidth: 0 }}>
+        <h2 style={cardTitle}>Latest changes</h2>
+        {data.recent.length === 0 ? (
+          <Hint>No stock has moved yet.</Hint>
+        ) : (
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 380px), 1fr))', columnGap: 28 }}>
+            {data.recent.slice(0, LATEST_SHOWN).map((m) => (
+              <li key={m.id} style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '8px 0', borderTop: '1px solid var(--line)', fontSize: '0.82rem' }}>
+                <span style={{ width: 34, textAlign: 'right', flexShrink: 0 }}><SignedQty value={m.qtyChange} /></span>
+                <span style={{ minWidth: 0, flex: 1 }}>
+                  <span style={{ ...mono, fontWeight: 700 }}>{m.partCode}</span>{' '}
+                  <span style={{ color: 'var(--muted)' }}>at {m.branchCode} · {MOVEMENT_LABEL[m.type].toLowerCase()}{m.reference ? ` · ${m.reference}` : ''}</span>
+                  <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--faint)' }}>{m.userName} · {fmtDateTime(m.createdAt)}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div style={{ marginTop: 10 }}>
+          <Link to="/app/spare-parts/history" style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--navy2)', textDecoration: 'none' }}>{data.recent.length > LATEST_SHOWN ? 'See all changes in the history →' : 'Open the full history →'}</Link>
+        </div>
+      </section>
     </div>
   )
 }
