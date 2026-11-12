@@ -106,6 +106,18 @@ export interface CashOpeningRequest {
   amount: number
 }
 
+/** One branch's one-time opening cash balance (rev 97) — the Accountant's "Branch opening" screen. */
+export interface BranchOpening {
+  branchId: number
+  branchCode: string
+  branchName: string
+  set: boolean
+  amount: number | null
+  openingDate: string | null
+  /** Set already, or the branch has closed a day: the opening can no longer be recorded. */
+  locked: boolean
+}
+
 export interface ReopenDayRequest {
   branchId: number
   closeDate: string
@@ -140,6 +152,9 @@ export const cashApi = {
   /** Owner only (rev 60) — reopen a branch's latest closed day; the reason is kept in the audit trail. */
   reopenDay(data: ReopenDayRequest) {
     return api.post<CashDrawer>('/api/v1/cash/reopen-day', data)
+  },
+  openings() {
+    return api.get<BranchOpening[]>('/api/v1/cash/openings')
   },
   setOpening(data: CashOpeningRequest) {
     return api.post<CashDrawer>('/api/v1/cash/opening', data)

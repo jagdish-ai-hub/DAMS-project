@@ -5,6 +5,7 @@ import com.dams.audit.entity.EventType;
 import com.dams.audit.service.AuditService;
 import com.dams.branch.entity.Branch;
 import com.dams.branch.repository.BranchRepository;
+import com.dams.cash.dto.BranchOpeningResponse;
 import com.dams.cash.dto.CashDayCloseResponse;
 import com.dams.cash.dto.CashDocumentResponse;
 import com.dams.cash.dto.CashDrawerResponse;
@@ -112,10 +113,36 @@ public class CashCloseService {
 
     // ------------------------------------------------------------------ opening
 
+    /**
+     * Every branch the caller can see with its one-time opening balance, for the Accountant's
+     * "Branch opening" screen (rev 97). Read-only; {@code locked} once the opening is set or the
+     * branch has closed a day.
+     */
+    @Transactional(readOnly = true)
+    public List<BranchOpeningResponse> openings() {
+        Long orgId = TenantContext.requireOrgId();
+        Map<Long, BranchCashOpening> configured = new LinkedHashMap<>();
+        branchCashOpeningRepo.findByOrgId(orgId).forEach(o -> configured.put(o.getBranchId(), o));
+        return branchRepo.findByOrgIdOrderByCodeAsc(orgId).stream()
+            .filter(Branch::isActive)
+            .filter(b -> guard.canSeeBranch(b.getId()))
+            .map(b -> {
+                BranchCashOpening o = configured.get(b.getId());
+                boolean locked = o != null || cashDayCloseRepo.existsByOrgIdAndBranchId(orgId, b.getId());
+                return new BranchOpeningResponse(b.getId(), b.getCode(), b.getName(), o != null,
+                    o != null ? o.getAmount() : null, o != null ? o.getOpeningDate() : null, locked);
+            })
+            .toList();
+    }
+
     @Transactional
     public CashDrawerResponse setOpening(CashOpeningRequest request) {
         Long orgId = TenantContext.requireOrgId();
         AppUser me = guard.requireAccountantForBranch(orgId, request.getBranchId());
+
+        if (request.getOpeningDate().isAfter(OrgTime.today())) {
+            throw DamsException.badRequest("The opening date cannot be in the future");
+        }
 
         if (branchCashOpeningRepo.existsByOrgIdAndBranchId(orgId, request.getBranchId())
             || cashDayCloseRepo.existsByOrgIdAndBranchId(orgId, request.getBranchId())) {

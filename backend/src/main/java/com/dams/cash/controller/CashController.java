@@ -43,6 +43,13 @@ public class CashController {
         return cashCloseService.drawer(branchId, date);
     }
 
+    @GetMapping("/openings")
+    @Operation(summary = "Each visible branch's one-time opening cash balance (set or not) — the Accountant's Branch opening screen")
+    @PreAuthorize("hasAnyAuthority('ACCOUNTANT','OWNER','FINANCE_MANAGER')")
+    public java.util.List<com.dams.cash.dto.BranchOpeningResponse> openings() {
+        return cashCloseService.openings();
+    }
+
     @PostMapping("/opening")
     @Operation(summary = "ACCOUNTANT — set a branch's first-ever opening cash balance")
     @PreAuthorize("hasAuthority('ACCOUNTANT')")

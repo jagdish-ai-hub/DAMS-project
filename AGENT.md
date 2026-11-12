@@ -630,6 +630,17 @@ flag the conflict and ask rather than silently working around it.
      `Opening + cash-mode receipts + Cash In − cash-mode expenses − Cash
      Out`. Opening = previous day's approved closing; the first-ever
      opening for a branch is set by the Accountant.
+   - **The Accountant sets it on a "Branch opening" screen (rev 97).** The
+     rule above existed since the start but only as a back-end call: no
+     screen offered it, so a new branch's cashier saw "ask your Accountant to
+     set the branch opening" and the Accountant had nowhere to do it. The
+     Accountant's menu now has **Branch opening**: it lists their branches,
+     each as *Set* (amount and date, read-only) or *Not set* with a form —
+     the date the drawer started and the cash counted in it. It can be done
+     **once per branch, before its first close**; the date can't be in the
+     future, and cash movements before that date are not counted. Cashiers
+     and the Owner see the same list read-only (the Owner acts through Switch
+     role). The cashier's message now says where it is.
    - End-of-day **Close Cash** on the same page: cashier enters physically
      counted cash, variance auto-computed, remark mandatory if variance
      ≠ 0, closing locks that date against new cash entries.

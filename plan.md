@@ -7,6 +7,17 @@
 
 ## Revision log
 
+- **rev 97 (2026-11-12)** — **The Accountant can set a branch's opening cash on a screen.** Bug report: Jeypore's (org 4) day
+  close fails with "not set — ask your Accountant to set the branch opening". Cause: the rule (AGENT.md, since the first
+  cash stage) says the Accountant sets each branch's one-time opening, but `POST /cash/opening` had **no screen anywhere**
+  (nothing in `frontend/src` called `cashApi.setOpening`), so a new organisation's branches could never close a day; the
+  demo branches only worked because their openings were seeded / set by hand (plan rev 17). Jeypore and Berhampur of org 4
+  have no opening row and no closes. Fix: Accountant menu **Branch opening** (`accountant/BranchOpeningPage`) listing the
+  Accountant's branches — *Set* (amount + date, read-only) or *Not set* with date + amount form ("0 if empty"), once per
+  branch, before its first close; new `GET /cash/openings` (Accountant / Owner / FM; scoped to visible branches);
+  `setOpening` now refuses a future date; cashier messages say "menu: Branch opening"; Help article
+  `setting-the-branch-opening`. No migration. The live Jeypore opening is entered by that branch's Accountant (the amount
+  is theirs to know), not guessed.
 - **rev 96 (2026-11-12)** — **Short demo stock for Spare Parts.** Owner: "add some for each branch, not a long list". V51
   (demo organization only, idempotent, skipped if the org already has any part) adds six parts across the three branches
   (17 stock rows), each written as a stock row plus one `MANUAL_ADD` ledger row so Stock, History and Overview agree.
