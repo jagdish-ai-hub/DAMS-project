@@ -4,7 +4,7 @@ import { ErrorBanner, Field, TextInput, ghostBtn, inputStyle, primaryBtn, Spinne
 import { Hint, PartPicker, mono } from './spareUi'
 
 /**
- * Bill a part to a job card: the branch quantity goes down. The job card number is typed (Eicher's own number). The server
+ * Use a spare on a job card: the branch quantity goes down. The job card number is typed (Eicher's own number). The server
  * refuses a claim job card and anything above what the branch holds; this form only helps the person see those numbers first.
  */
 export default function BillForm(props: {
@@ -34,16 +34,16 @@ export default function BillForm(props: {
     setError('')
     if (!part) { setError('Pick the part first.'); return }
     if (!Number.isInteger(qty) || qty < 1) { setError('Quantity must be a whole number, 1 or more.'); return }
-    if (qty > held) { setError(`${branchCode} holds ${held} of ${part.partCode}, so ${qty} cannot be billed.`); return }
+    if (qty > held) { setError(`${branchCode} holds ${held} of ${part.partCode}, so ${qty} cannot be used.`); return }
     setSaving(true)
     try {
       const { data } = await sparePartsApi.bill({
         branchId, partId: part.partId, quantity: qty, jobCardNo: jobCard.trim(),
         vehicleNo: vehicle.trim() || undefined, note: note.trim() || undefined,
       })
-      props.onDone(`Billed ${qty} × ${part.partCode} to job card ${jobCard.trim()}. ${branchCode} now holds ${data.quantityAfter}.`)
+      props.onDone(`Used ${qty} × ${part.partCode} on job card ${jobCard.trim()}. ${branchCode} now holds ${data.quantityAfter}.`)
     } catch (err) {
-      setError(apiMessage(err, 'Could not bill this part.'))
+      setError(apiMessage(err, 'Could not use this spare.'))
     } finally {
       setSaving(false)
     }
@@ -52,7 +52,7 @@ export default function BillForm(props: {
   return (
     <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {props.myBranches.length > 1 && (
-        <Field label="Billing from branch">
+        <Field label="Use from branch">
           <select value={branchId} onChange={(e) => setBranchId(Number(e.target.value))} style={inputStyle}>
             {props.myBranches.map((b) => <option key={b.id} value={b.id}>{b.name} ({b.code})</option>)}
           </select>
@@ -90,7 +90,7 @@ export default function BillForm(props: {
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 9 }}>
         {props.onCancel && <button type="button" style={{ ...ghostBtn, minHeight: 38 }} onClick={props.onCancel}>Cancel</button>}
         <button type="submit" disabled={saving} style={{ ...primaryBtn(saving), minHeight: 38, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          {saving && <Spinner />} Bill this part
+          {saving && <Spinner />} Use this spare
         </button>
       </div>
     </form>

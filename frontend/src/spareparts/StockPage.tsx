@@ -174,7 +174,7 @@ export default function StockPage() {
                       <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'inline-flex', gap: 6 }}>
                           {heldAtMine && myIds.some((id) => can('BILL_PART', id) && qtyAt(r, id) > 0) && (
-                            <button style={{ ...ghostBtn, minHeight: 34 }} onClick={() => setModal({ kind: 'bill', row: r })}>Bill</button>
+                            <button style={{ ...ghostBtn, minHeight: 34 }} onClick={() => setModal({ kind: 'bill', row: r })}>Use</button>
                           )}
                           {heldElsewhere && can('RAISE_REQUEST') && myBranches.length > 0 && (
                             <button style={{ ...ghostBtn, minHeight: 34 }} onClick={() => setModal({ kind: 'ask', row: r })}>Ask a branch</button>
@@ -208,7 +208,7 @@ export default function StockPage() {
       </section>
 
       {modal?.kind === 'bill' && (
-        <Modal title="Bill a part" subtitle={`${modal.row.partCode} · ${modal.row.description}`} onClose={() => setModal(null)} maxWidth={560}>
+        <Modal title="Use a spare" subtitle={`${modal.row.partCode} · ${modal.row.description}`} onClose={() => setModal(null)} maxWidth={560}>
           <BillForm myBranches={myBranches} allBranches={branches} initialPart={modal.row}
             initialBranchId={myIds.find((id) => qtyAt(modal.row, id) > 0 && can('BILL_PART', id)) ?? null}
             onDone={done} onCancel={() => setModal(null)} />

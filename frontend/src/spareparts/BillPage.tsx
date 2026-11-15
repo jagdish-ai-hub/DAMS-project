@@ -5,7 +5,7 @@ import BillForm from './BillForm'
 import { useSpareAccess } from './SpareAccessContext'
 import { FlashBanner, Notice, SignedQty, mono, useFlash } from './spareUi'
 
-/** Bill a part to a job card, with the latest bills underneath so the person sees it landed. */
+/** Use a spare on a job card, with the latest uses underneath so the person sees it landed. */
 export default function BillPage() {
   const { access, can } = useSpareAccess()
   const myBranches = access.branches.filter((b) => access.actBranchIds.includes(b.id))
@@ -20,7 +20,7 @@ export default function BillPage() {
       const { data } = await sparePartsApi.movements({ type: 'BILLED', limit: 12 })
       setRecent(data)
     } catch (e) {
-      setError(apiMessage(e, 'Could not load recent bills.'))
+      setError(apiMessage(e, 'Could not load recent uses.'))
     }
   }, [])
 
@@ -30,7 +30,7 @@ export default function BillPage() {
     return (
       <section style={card}>
         <Notice tone="warn">
-          Your role is not allowed to bill parts. {access.owner
+          Your role is not allowed to use spares. {access.owner
             ? 'The Owner has view-only access; use Switch role to act as Inventory Manager at a branch.'
             : 'The Owner can allow this in Masters, under Spare Parts.'}
         </Notice>
@@ -42,7 +42,7 @@ export default function BillPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <FlashBanner message={flash.message} />
       <section style={card}>
-        <h2 style={cardTitle}>Bill a part to a job card</h2>
+        <h2 style={cardTitle}>Use a spare on a job card</h2>
         <BillForm
           key={formKey}
           myBranches={myBranches}
@@ -53,7 +53,7 @@ export default function BillPage() {
 
       <ErrorBanner message={error} />
       <section style={{ ...card, padding: 0, overflow: 'hidden' }}>
-        <h2 style={{ ...cardTitle, padding: '16px 18px 0', margin: '0 0 10px' }}>Latest bills</h2>
+        <h2 style={{ ...cardTitle, padding: '16px 18px 0', margin: '0 0 10px' }}>Latest uses</h2>
         {recent == null ? (
           <div style={{ padding: 16 }}><SkeletonRows rows={3} height={36} /></div>
         ) : (
@@ -77,7 +77,7 @@ export default function BillPage() {
                     <td style={td}>{m.userName}</td>
                   </tr>
                 ))}
-                {recent.length === 0 && <tr><td style={{ ...td, padding: '24px 16px', color: 'var(--muted)' }} colSpan={7}>Nothing has been billed yet.</td></tr>}
+                {recent.length === 0 && <tr><td style={{ ...td, padding: '24px 16px', color: 'var(--muted)' }} colSpan={7}>No spare has been used yet.</td></tr>}
               </tbody>
             </table>
           </div>

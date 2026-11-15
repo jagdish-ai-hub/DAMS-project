@@ -185,7 +185,7 @@ export function PartPicker(props: {
   )
 }
 
-/** A green confirmation that fades itself after a few seconds ("Billed 2 × MF450155 …"). */
+/** A green confirmation that fades itself after a few seconds ("Used 2 × MF450155 …"). */
 export function useFlash(ms = 7000): { message: string; show: (m: string) => void } {
   const [message, setMessage] = useState('')
   const timer = useRef<ReturnType<typeof setTimeout>>()
