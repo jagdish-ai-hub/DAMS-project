@@ -22,6 +22,7 @@ import CashPage from '../cashier/CashPage'
 import MyEntriesPage from '../cashier/MyEntriesPage'
 import ReviewQueuePage from '../accountant/ReviewQueuePage'
 import BranchOpeningPage from '../accountant/BranchOpeningPage'
+import InvoiceExtractPage from '../finance/InvoiceExtractPage'
 import FmQueuePage from '../finance/FmQueuePage'
 import OverrideAuditPage from '../overrideaudit/OverrideAuditPage'
 import DashboardPage from '../owner/DashboardPage'
@@ -345,6 +346,7 @@ export default function AppShell() {
             {(isCashier || isOwner || isFinanceManager) && <Route path="cash" element={<CashPage />} />}
             {isCashier && <Route path="my-entries" element={<MyEntriesPage />} />}
             {isAccountant && <Route path="branch-opening" element={<BranchOpeningPage />} />}
+            {isFinanceManager && <Route path="invoice-extract" element={<InvoiceExtractPage />} />}
             {(isOwner || isFinanceManager) && <Route path="override-audit" element={<OverrideAuditPage />} />}
             {/* Registered even before /access answers, so a refresh on a Spare Parts URL keeps its place;
                 the page itself shows "not turned on" when the module is off. */}

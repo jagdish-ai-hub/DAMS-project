@@ -37,6 +37,7 @@ export const HELP_MANIFEST: Record<HelpRole, HelpEntry[]> = {
     { slug: 'where-is-it', title: 'Where is it — and what’s next?' },
     { slug: 'approving-entries', title: 'Approving entries' },
     { slug: 'closing-a-claim', title: 'Closing a claim' },
+    { slug: 'extracting-an-invoice', title: 'Extract invoice (test tool)' },
     { slug: 'override-audit', title: 'Override audit' },
   ],
   owner: [
