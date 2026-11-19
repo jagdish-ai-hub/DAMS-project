@@ -7,6 +7,20 @@
 
 ## Revision log
 
+- **rev 98 (2026-11-18)** — **Extract invoice — a test tool on the Finance Manager's dashboard.** Owner request: upload an Eicher
+  dealer PDF, show the extracted Spares / Lube / Labour table, export CSV; where to integrate it into DAMS is decided later.
+  Prototype first (Python on `pdftotext -bbox`, 4 real documents: two customer tax invoices — CGST+SGST and IGST layouts —, a
+  ₹0 warranty invoice and a Warranty Claim-Invoice): rows are rebuilt from word positions (descriptions, part numbers and even
+  amounts wrap over lines), and **every document is checked against the totals it prints** — line arithmetic, section totals,
+  invoice total, HSN summary. Result: 132 / 132 checks pass, row counts match a by-eye reading. The self-checks found four real
+  parsing gaps while building (a table row on a page with no repeated header, a lube table headed "Part Description", the
+  claim labour header, and a CGST+SGST rate that is per component). Ported to Java in the backend
+  (`com.dams.invoiceextract`: `PdfTextReader` runs `pdftotext` on a temp file and deletes it; `InvoiceExtractor`;
+  `POST /api/v1/invoice-extract`, **Finance Manager only**, PDF only, ≤ 5 MB, ≤ 30 pages) — **no new Java library and nothing
+  stored**; the backend image gets `poppler-utils` (`apk add`). Screen: **Extract invoice (test)** button on Approvals & Claims →
+  `/app/invoice-extract` (details, Spares / Lube / Labour, free-under-warranty items, printed totals, HSN summary, checks with
+  failures first, Download CSV). Tests use sanitised fixtures (names, phones, PAN, GSTIN, addresses, vehicle / chassis replaced;
+  amounts real). Not decided yet: where the read feeds DAMS (e.g. pre-fill a receipt, save lines on the job card).
 - **rev 97 (2026-11-12)** — **The Accountant can set a branch's opening cash on a screen.** Bug report: Jeypore's (org 4) day
   close fails with "not set — ask your Accountant to set the branch opening". Cause: the rule (AGENT.md, since the first
   cash stage) says the Accountant sets each branch's one-time opening, but `POST /cash/opening` had **no screen anywhere**

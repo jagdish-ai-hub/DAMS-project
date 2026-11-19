@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { receiptsApi, type ReceiveDocument } from '../api/receipts'
 import { expensesApi, type ExpenseDocument } from '../api/expenses'
 import { cashApi, type CashDocument } from '../api/cash'
@@ -64,6 +65,7 @@ export function AgingBadge({ days }: { days: number }) {
 }
 
 export default function FmQueuePage() {
+  const navigate = useNavigate()
   const [type, setType] = useState<ReviewType>('receipt')
   const [queue, setQueue] = useState<FmQueue>(EMPTY)
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -159,6 +161,10 @@ export default function FmQueuePage() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <button type="button" onClick={() => navigate('/app/invoice-extract')} style={{ ...ghostBtn, minHeight: 36, padding: '6px 12px' }}
+            title="Test tool: read an Eicher invoice or warranty-claim PDF and see its spares, lube and labour. Saves nothing.">
+            Extract invoice (test)
+          </button>
           <SortModeControl value={sortMode} onChange={setSortMode} />
           <GlobalSearch />
         </div>

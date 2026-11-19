@@ -8,6 +8,8 @@ RUN mvn package -DskipTests -q
 
 # Stage 2: runtime — never ship the build toolchain in the runtime image
 FROM eclipse-temurin:21-jre-alpine
+# pdftotext (poppler): the Finance Manager's "Extract invoice" test tool (rev 98) reads dealer PDFs with it.
+RUN apk add --no-cache poppler-utils
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
 EXPOSE 8080

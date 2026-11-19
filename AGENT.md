@@ -35,6 +35,20 @@ accountants, plus the owner's live window into branch operations.
   VERIFIED, the FM sees only Query and Close Claim; Close Claim approves
   every VERIFIED receive document on the job card and closes the claim in
   one transaction. See plan.md rev 49.
+  **Extract invoice — a test tool (rev 98).** The Finance Manager's
+  dashboard has an **Extract invoice (test)** button. They upload an Eicher
+  dealer PDF — a customer **Tax Invoice** (CGST+SGST or IGST layout) or a
+  **Warranty Claim-Invoice** — and the screen shows what was read: the header
+  (invoice / claim no., job card no., vehicle, chassis, customer, GST), the
+  **Spares, Lube and Labour** tables, items replaced free under warranty, the
+  printed totals and HSN summary, and a **Download CSV**. It is read on the
+  server with the PDF text and positions only (no OCR, no outside service),
+  and **every document is checked against the totals printed on it** (line
+  arithmetic, section totals, invoice total, HSN summary); a PDF that does not
+  add up says which check failed instead of being trusted. **It saves nothing**
+  — no job card, receipt or expense is created or changed, and the file is
+  deleted after reading. It exists to see how reliably the format reads before
+  deciding where it feeds into DAMS. Needs `poppler-utils` on the server.
 - **ACCOUNTANT** — one or more assigned branches within their org. Verifies
   submitted entries, can override amounts (provisional — still needs FM
   approval downstream) or the job card's invoice amount, queries or rejects

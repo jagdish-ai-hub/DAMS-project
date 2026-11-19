@@ -23,7 +23,7 @@ Attachments ─▶ Cloudflare R2
 | Piece | Detail |
 |---|---|
 | Frontend image | built from `frontend/` — Vite build served by `nginx:alpine`. `VITE_API_URL` is baked in at build time. |
-| Backend image | built from `backend/` — Maven build, `eclipse-temurin:21-jre-alpine` runtime. |
+| Backend image | built from `backend/` — Maven build, `eclipse-temurin:21-jre-alpine` runtime, plus `poppler-utils` (`pdftotext`, used by the Finance Manager's Extract invoice test tool — rev 98). For local runs outside Docker install `poppler-utils` too, or that screen answers "PDF reader is not available". |
 | Backend port | `127.0.0.1:8082` → `8080` in container |
 | Frontend port | `127.0.0.1:8083` → `80` in container |
 | Database | Neon Postgres — Flyway migrations run automatically on backend startup |
