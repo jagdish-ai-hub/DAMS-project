@@ -7,6 +7,14 @@
 
 ## Revision log
 
+- **rev 99 (2026-11-20)** — **Database connections give up after 3 s and retry, instead of hanging 10–15 s.** Intermittent
+  `Connect timed out` / `UnknownHostException` / "Connection is not available" errors (Nov 10–11) and failing GitHub SSH pulls
+  (Nov 20) trace to packet loss on the VPS→Neon and VPS→GitHub routes in third-party carrier networks (provider's own first hops
+  clean; `dams-netmon` shows ~20% of Neon TCP connects failing since Nov 19, none Nov 15–18). Not a Neon, DAMS or VPS fault.
+  *Change:* `hikari.data-source-properties.connectTimeout: 3` in `application.yml` (pgjdbc default 10 s). Hikari's 15 s
+  `connection-timeout` now fits ~4 attempts. No schema change, no compute cost (a dropped connect never reaches Neon; the setting
+  covers the TCP connect only, not login, so Neon wake-ups are unaffected).
+
 - **rev 98 (2026-11-18)** — **Extract invoice — a test tool on the Finance Manager's dashboard.** Owner request: upload an Eicher
   dealer PDF, show the extracted Spares / Lube / Labour table, export CSV; where to integrate it into DAMS is decided later.
   Prototype first (Python on `pdftotext -bbox`, 4 real documents: two customer tax invoices — CGST+SGST and IGST layouts —, a

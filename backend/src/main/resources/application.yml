@@ -31,6 +31,14 @@ spring:
       idle-timeout: 300000
       keepalive-time: 60000
       max-lifetime: 1500000
+      data-source-properties:
+        # Give up opening the TCP connection to Neon after 3 s (pgjdbc's default is 10 s) so Hikari
+        # retries inside its 15 s connection-timeout. The VPS->Neon route (via carrier transit)
+        # started dropping ~20% of new connections on 2026-11-19; a dropped first packet used to
+        # cost 10-15 s of a hung page, now it costs 3 s plus a retry that normally succeeds.
+        # Covers only the TCP connect — not the login — so a Neon wake-up (<1 s at login) is
+        # unaffected. A connect that never reaches Neon costs no compute.
+        connectTimeout: 3
   jpa:
     hibernate:
       ddl-auto: validate
