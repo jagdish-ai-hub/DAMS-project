@@ -33,7 +33,7 @@ export default function SparePartsPage() {
     access.canSeeDashboard ? { to: 'overview', label: 'Overview' } : null,
     { to: 'stock', label: 'Stock' },
     access.permissions.includes('UPLOAD_ADD') && !access.owner ? { to: 'upload', label: 'Upload & add' } : null,
-    access.permissions.includes('BILL_PART') && !access.owner ? { to: 'bill', label: 'Bill a part' } : null,
+    access.permissions.includes('BILL_PART') && !access.owner ? { to: 'bill', label: 'Use a spare' } : null,
     { to: 'requests', label: 'Requests' },
     { to: 'history', label: 'History' },
   ].filter((s): s is { to: string; label: string } => s !== null)

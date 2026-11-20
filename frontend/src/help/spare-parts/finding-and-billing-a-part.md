@@ -1,4 +1,4 @@
-# Finding and billing a part
+# Finding and using a spare
 
 ## Find a part
 
@@ -9,21 +9,21 @@
 
 Your own branch columns are shaded, so you can find them quickly.
 
-## Bill a part to a job card
+## Use a spare on a job card
 
 Use this when a part from your godown goes onto a customer's job.
 
-1. On the part's row click **Bill**, or open **Bill a part** and search for it.
+1. On the part's row click **Use**, or open **Use a spare** and search for it.
 2. Enter the **quantity** and the **job card number** — Eicher's own number, as printed on the job card.
 3. Add the **vehicle number** if you have it.
-4. Click **Bill this part**.
+4. Click **Use this spare**.
 
 > **Example.** Berhampur (OOB) holds 10 plain washers (MF450155). A job comes in on job card 4010615068 and uses 4. You bill 4. OOB now shows 6, and the History shows `−4 · job card 4010615068`.
 
 ## When it says no
 
-- **"… holds 1, so 2 cannot be billed"** — your branch has fewer than you typed. Check the count, or ask another branch.
+- **"… holds 1, so 2 cannot be used"** — your branch has fewer than you typed. Check the count, or ask another branch.
 - **"… is a claim job card"** — local spare parts are only for jobs the customer pays for. For a claim job, use the normal claim process.
-- **"Your role may not bill a part"** — ask your Owner to allow it in **Masters → Spare Parts**.
+- **"Your role is not allowed to use spares"** — ask your Owner to allow it in **Masters → Spare Parts**.
 
 Billed the wrong part? Do not delete it. Ask your Inventory Manager to **Correct** the quantity with a reason; both numbers stay in the History.

@@ -58,7 +58,7 @@ export const HELP_MANIFEST: Record<HelpRole, HelpEntry[]> = {
   // Inventory Manager and Store Keeper share one set: the screens are the same, the buttons differ by what the Owner allows.
   'spare-parts': [
     { slug: 'your-role-in-spare-parts', title: 'Your role in Spare Parts' },
-    { slug: 'finding-and-billing-a-part', title: 'Finding and billing a part' },
+    { slug: 'finding-and-billing-a-part', title: 'Finding and using a spare' },
     { slug: 'asking-another-branch', title: 'Asking another branch for a part' },
     { slug: 'uploading-your-stock-sheet', title: 'Uploading your stock sheet' },
   ],

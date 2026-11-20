@@ -75,15 +75,15 @@ describe('Stock screen', () => {
     expect(screen.getByRole('columnheader', { name: 'OOR' })).toBeInTheDocument()
   })
 
-  it('offers Bill only where the branch holds the part, and Ask a branch only where another branch does', async () => {
+  it('offers Use only where the branch holds the part, and Ask a branch only where another branch does', async () => {
     renderPage(<StockPage />)
 
     const fenderRow = (await screen.findByText('IA309072')).closest('tr')!   // held by OOJ only; this keeper is at OOR
-    expect(within(fenderRow).queryByRole('button', { name: 'Bill' })).not.toBeInTheDocument()
+    expect(within(fenderRow).queryByRole('button', { name: 'Use' })).not.toBeInTheDocument()
     expect(within(fenderRow).getByRole('button', { name: 'Ask a branch' })).toBeInTheDocument()
 
     const washerRow = screen.getByText('MF450155').closest('tr')!             // held by OOR itself
-    expect(within(washerRow).getByRole('button', { name: 'Bill' })).toBeInTheDocument()
+    expect(within(washerRow).getByRole('button', { name: 'Use' })).toBeInTheDocument()
     expect(within(washerRow).queryByRole('button', { name: 'Ask a branch' })).not.toBeInTheDocument()
     expect(within(washerRow).queryByRole('button', { name: 'Correct' })).not.toBeInTheDocument()   // not ticked for a Store Keeper
   })
@@ -93,7 +93,7 @@ describe('Stock screen', () => {
     renderPage(<StockPage />)
 
     await screen.findByText('IA309072')
-    expect(screen.queryByRole('button', { name: 'Bill' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Use' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Ask a branch' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /export excel/i })).toBeInTheDocument()   // the Owner may export
   })
